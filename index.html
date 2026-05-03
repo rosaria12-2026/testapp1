@@ -76,7 +76,7 @@ c）气滞。
 d）阳虚。
 e）血虚。
 答案：A"></textarea>
-      <div class="hint"><b>格式：</b>题号用 34. 或 34、；选项用 A. / A) / a）都可以。答案可写“答案：A”。题号不是从1开始也能核对。</div>
+      <div class="hint"><b>格式：</b>题号用 34. 或 34、；选项用 A. / A) / a）都可以。答案可写"答案：A"。题号不是从1开始也能核对。</div>
       <div class="row mt">
         <button class="btn primary" onclick="importQuestions(true)">导入并开始</button>
         <button class="btn" onclick="importQuestions(false)">仅导入</button>
@@ -92,7 +92,7 @@ e）血虚。
     <div class="card">
       <div class="qtop">
         <div><div class="qcount">题 <strong id="q-num">--</strong> / <span id="q-total">--</span></div><div class="sub" id="q-batch"></div></div>
-        <div class="timer spacer" id="timer">--</div>
+        <div class="timer spacer" id="timer" title="点击暂停/继续">--</div>
       </div>
       <div class="progress"><div class="bar" id="qbar"></div></div>
       <div class="case" id="casebox"></div>
@@ -121,7 +121,7 @@ e）血虚。
     </div>
     <div class="card">
       <div class="title">补充/更正答案</div>
-      <div class="sub">支持：43.A 每行一个，或 ACBDE 字母串。若题号不是从1开始，请用“题号.答案”。</div>
+      <div class="sub">支持：43.A 每行一个，或 ACBDE 字母串。若题号不是从1开始，请用"题号.答案"。</div>
       <textarea id="answer-key" class="short" placeholder="43.A&#10;44.C&#10;45.B"></textarea>
       <div class="row mt">
         <button class="btn blue" onclick="compareKey()">按答案核对</button>
@@ -130,13 +130,21 @@ e）血虚。
       </div>
       <div id="key-msg" class="sub mt"></div>
     </div>
-    <div class="card"><div class="title">明细</div><div class="tablewrap"><table><thead><tr><th>题号</th><th>题目</th><th>我选</th><th>答案</th><th>结果</th><th>解析</th></tr></thead><tbody id="result-table"></tbody></table></div></div>
+    <div class="card">
+      <div class="title">明细</div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>题号</th><th>题目</th><th>我选</th><th>答案</th><th>结果</th><th>解析</th></tr></thead>
+          <tbody id="result-table"></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
   <section id="review" class="page">
     <div class="card">
       <div class="row">
-        <div><div class="title">复习库</div><div class="sub">错题和“不会”的题都在这里。点题目可看详情。</div></div>
+        <div><div class="title">复习库</div><div class="sub">错题和"不会"的题都在这里。点题目可看详情。</div></div>
         <button class="btn purple spacer" onclick="printReport()">打印 / 存 PDF</button>
         <button class="btn red" onclick="clearReview()">清空复习库</button>
       </div>
@@ -176,14 +184,23 @@ e）血虚。
         <button class="btn primary" onclick="saveFirebaseConfig()">保存 Firebase 配置</button>
         <button class="btn" onclick="loadFirebaseConfigToBox()">读取已保存配置</button>
       </div>
-<div class="hint mt">
-  <b>Claude AI 解析功能：</b><br>
-  去 <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> 注册拿 API Key，粘贴到下面保存。
-</div>
-<div class="row mt">
-  <input id="api-key-input" type="password" placeholder="sk-ant-api03-..." style="flex:1" />
-  <button class="btn primary" onclick="saveApiKey()">保存 API Key</button>
-</div>
+
+      <hr class="sep">
+
+      <div class="hint">
+        <b>🤖 Claude AI 解析功能：</b><br>
+        需要 Anthropic API Key 才能使用 AI解析、生成同类题等功能。<br>
+        1. 去 <a href="https://console.anthropic.com" target="_blank" style="color:#1a4fa0">console.anthropic.com</a> 注册<br>
+        2. 左边菜单 API Keys → Create Key<br>
+        3. 复制 sk-ant-... 开头的 Key 粘贴到下面保存<br>
+        4. Key 只存在你自己的浏览器里，别人无法使用
+      </div>
+      <div class="row mt">
+        <input id="api-key-input" type="password" placeholder="sk-ant-api03-..." style="flex:1" />
+        <button class="btn primary" onclick="saveApiKey()">保存 API Key</button>
+      </div>
+      <div id="api-key-status" class="sub mt"></div>
+
       <hr class="sep">
 
       <div class="row">
@@ -201,7 +218,7 @@ e）血虚。
         <button class="btn orange" onclick="cloudDownload()">从云端下载覆盖本地</button>
       </div>
 
-      <div class="hint mt"><b>注意：</b>下载会覆盖当前本地数据。第一次同步建议先点“上传本地数据到云端”。</div>
+      <div class="hint mt"><b>注意：</b>下载会覆盖当前本地数据。第一次同步建议先点"上传本地数据到云端"。</div>
     </div>
   </section>
 </main>
