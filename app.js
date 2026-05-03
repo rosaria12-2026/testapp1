@@ -508,7 +508,7 @@ async function callClaude(prompt){
       'x-api-key':key
     },
     body:JSON.stringify({
-      model:'claude-sonnet-4-20250514',
+      model:'claude-opus-4-5',
       max_tokens:1024,
       system:'你是PCE（Pan-Canada针灸考试）辅导专家，回答简洁精准，用中文。',
       messages:[{role:'user',content:prompt}]
