@@ -442,11 +442,13 @@ function reviewItemHTML(entry,type){
   var tagHTML=type==='dk'
     ?'<span class="dk-tag">❓不会</span>'
     :'<span class="wrong-tag">✗ 我选'+myAns+'</span>';
-  return '<div class="review-item" id="ri-'+q.id+'" onclick="toggleReviewItem(\''+q.id+'\')">'
-    +'<div class="ri-head">'
+  return '<div class="review-item" id="ri-'+q.id+'">'
+    +'<div class="ri-head" onclick="toggleReviewItem(\''+q.id+'\')">'
     +'<span class="ri-num">#'+(q.num||'?')+'</span>'
     +'<span class="ri-prev">'+esc(preview)+'</span>'
-    +tagHTML+'</div>'
+    +tagHTML
+    +'<button class="btn small blue" onclick="event.stopPropagation();document.getElementById(\'rib-'+q.id+'\').style.display=\'block\';revAnalyze(\''+q.id+'\')" style="flex-shrink:0;margin-left:auto">🔍 解析</button>'
+    +'</div>'
     +'<div class="ri-body" id="rib-'+q.id+'" style="display:none">'
     +(q.caseText?'<div class="case-mini">📋 '+esc(q.caseText)+'</div>':'')
     +'<div class="ri-qtext">'+esc(q.body)+'</div>'
@@ -457,8 +459,8 @@ function reviewItemHTML(entry,type){
         +(o.letter===myAns&&o.letter!==q.answer?' ← 我选':'')+'</div>';
     }).join('')+'</div>'
     +'<div class="ri-actions">'
-    +'<button class="btn small blue" onclick="event.stopPropagation();revAnalyze(\''+q.id+'\')">🔍 AI解析</button>'
-    +'<button class="btn small" onclick="event.stopPropagation();revSimilar(\''+q.id+'\')">✨ 同类题</button>'
+    +'<button class="btn small blue" onclick="revAnalyze(\''+q.id+'\')" >🔍 AI解析</button>'
+    +'<button class="btn small" onclick="revSimilar(\''+q.id+'\')" >✨ 同类题</button>'
     +'</div>'
     +'<div id="ai-'+q.id+'"></div>'
     +'</div></div>';
