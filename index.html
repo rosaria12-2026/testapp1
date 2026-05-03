@@ -176,7 +176,14 @@ e）血虚。
         <button class="btn primary" onclick="saveFirebaseConfig()">保存 Firebase 配置</button>
         <button class="btn" onclick="loadFirebaseConfigToBox()">读取已保存配置</button>
       </div>
-
+<div class="hint mt">
+  <b>Claude AI 解析功能：</b><br>
+  去 <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> 注册拿 API Key，粘贴到下面保存。
+</div>
+<div class="row mt">
+  <input id="api-key-input" type="password" placeholder="sk-ant-api03-..." style="flex:1" />
+  <button class="btn primary" onclick="saveApiKey()">保存 API Key</button>
+</div>
       <hr class="sep">
 
       <div class="row">
