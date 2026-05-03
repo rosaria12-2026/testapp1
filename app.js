@@ -341,7 +341,8 @@ function showResultPage(){
       +'<td>'+esc(preview)+(dk?'<span class="dk-tag">❓</span>':'')+'</td>'
       +'<td>'+(my&&my!=='skip'?my:'—')+'</td>'
       +'<td>'+(hasAns?'<b>'+q.answer+'</b>':'—')+'</td>'
-      +'<td>'+(hasAns&&my&&my!=='skip'?(ok?'<span class="greentext">✓</span>':'<span class="redtext">✗</span>'):'—')+'</td>';
+      +'<td>'+(hasAns&&my&&my!=='skip'?(ok?'<span class="greentext">✓</span>':'<span class="redtext">✗</span>'):'—')+'</td>'
+      +'<td><button class="btn small blue" onclick="event.stopPropagation();openDetailModal(\''+q.id+'\','+i+')" style="padding:3px 10px;font-size:12px">解析</button></td>';
     tbody.appendChild(tr);
   });
 
@@ -494,23 +495,28 @@ function clearReview(){
 
 // ── AI ────────────────────────────────────────────────────
 async function callClaude(prompt){
+  var key=getApiKey();
+  if(!key){
+    throw new Error('请先在云同步页面设置 Claude API Key');
+  }
   var resp=await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
       'anthropic-version':'2023-06-01',
-      'anthropic-dangerous-direct-browser-access':'true'
+      'anthropic-dangerous-direct-browser-access':'true',
+      'x-api-key':key
     },
     body:JSON.stringify({
       model:'claude-sonnet-4-20250514',
       max_tokens:1024,
-      system:'\u4f60\u662fPCE\uff08Pan-Canada\u9488\u7078\u8003\u8bd5\uff09\u8f85\u5bfc\u4e13\u5bb6\uff0c\u56de\u7b54\u7b80\u6d01\u7cbe\u51c6\uff0c\u7528\u4e2d\u6587\u3002',
+      system:'你是PCE（Pan-Canada针灸考试）辅导专家，回答简洁精准，用中文。',
       messages:[{role:'user',content:prompt}]
     })
   });
-  if(!resp.ok) throw new Error('API\u9519\u8bef '+resp.status);
+  if(!resp.ok) throw new Error('API错误 '+resp.status);
   var d=await resp.json();
-  return (d.content&&d.content[0]&&d.content[0].text)||'(\u65e0\u54cd\u5e94)';
+  return (d.content&&d.content[0]&&d.content[0].text)||'(无响应)';
 }
 
 function renderAI(el,txt){
@@ -1027,6 +1033,12 @@ function doDeleteSel(batchId){
 
 // ── FIREBASE CLOUD SYNC ───────────────────────────────────
 // (保留原有逻辑框架，具体Firebase调用由用户配置)
+function saveApiKey(){
+  var key=document.getElementById('api-key-input').value.trim();
+  if(!key){showToast('请输入 API Key');return;}
+  localStorage.setItem('claude_api_key',key);
+  showToast('✓ Claude API Key 已保存');
+}
 function saveFirebaseConfig(){
   var raw=document.getElementById('firebase-config').value.trim();
   if(!raw){showToast('请粘贴 Firebase 配置');return;}
@@ -1112,6 +1124,11 @@ function cloudDownload(){
 
 // ── UTILS ─────────────────────────────────────────────────
 function shuffle(a){ return a.slice().sort(function(){return Math.random()-.5;}); }
+
+// ── API KEY ──────────────────────────────────────────────
+function getApiKey(){
+  return localStorage.getItem('claude_api_key')||'';
+}
 
 // ── INIT ──────────────────────────────────────────────────
 renderHome();
