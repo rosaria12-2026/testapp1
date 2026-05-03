@@ -144,3 +144,165 @@ input,textarea,select{font-family:inherit;border:1px solid #c9c0ad;background:#f
   opacity: 0; transition: opacity .3s; pointer-events: none; white-space: nowrap;
 }
 #toast.show { opacity: 1; }
+/* ══════════════════════════════════════
+   手机 & 平板适配 — 追加到 style.css 末尾
+   ══════════════════════════════════════ */
+
+/* ── 基础触摸优化 ── */
+* { -webkit-tap-highlight-color: transparent; }
+button, .opt, .tab { touch-action: manipulation; }
+
+/* ── 计时器颜色 ── */
+.timer.green  { color: #2e7d52; }
+.timer.orange { color: #c47a1a; }
+.timer.red    { color: #b83232; font-weight: 700; }
+.timer.paused { color: #888; font-style: italic; }
+
+/* ── 选项按钮 ── */
+.opt {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 16px; border: 1.5px solid #dddbd3;
+  border-radius: 8px; background: #fff; cursor: pointer;
+  text-align: left; font-size: 14px; line-height: 1.65;
+  color: #18180f; transition: all .12s; width: 100%;
+  margin-bottom: 8px; font-family: inherit;
+}
+.opt:hover, .opt:active { background: #f0efe9; border-color: #c8c5bb; }
+.opt.sel { border-color: #18180f; background: #f0efe9; }
+.opt.sel .opt-letter { background: #18180f; color: #fff; }
+.opt-letter {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+  background: #f0efe9; border: 1.5px solid #c8c5bb;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #6b6860;
+}
+
+/* ── 不会按钮激活 ── */
+.btn.orange.on { background: #c47a1a !important; color: #fff !important; }
+
+/* ── 病例资料 ── */
+#casebox {
+  background: #fffbe6; border: 1.5px solid #f0d060;
+  border-radius: 8px; padding: 12px 16px; margin-bottom: 1rem;
+  display: none;
+}
+.case-title { font-size: 11px; font-weight: 700; color: #8a6000; margin-bottom: 6px; }
+.case-text  { font-size: 14px; line-height: 1.8; white-space: pre-wrap; }
+
+/* ── AI框 ── */
+.ai-box {
+  margin-top: 10px; padding: 14px;
+  background: #f8f6ff; border: 1px solid #d4c9f5; border-radius: 8px;
+}
+.core-box {
+  margin-top: 8px; padding: 12px 14px;
+  background: #fffbe6; border: 1px solid #f0d060; border-radius: 8px;
+}
+
+/* ── 批次列表 ── */
+.batch-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; background: #f0efe9;
+  border: 1px solid #dddbd3; border-radius: 8px;
+  margin-bottom: 6px; flex-wrap: wrap;
+}
+.batch-name { font-size: 14px; font-weight: 600; flex: 1; min-width: 100px; }
+.batch-meta { font-size: 12px; color: #6b6860; }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+  background: #18180f; color: #fff; padding: 10px 22px;
+  border-radius: 30px; font-size: 14px; z-index: 9999;
+  opacity: 0; transition: opacity .3s; pointer-events: none;
+  white-space: nowrap; max-width: 90vw; text-align: center;
+}
+#toast.show { opacity: 1; }
+
+/* ── 结果表解析列 ── */
+.tablewrap table th:last-child,
+.tablewrap table td:last-child { width: 56px; text-align: center; }
+
+/* ══════════════════════════════════════
+   평板 (768px+)
+   ══════════════════════════════════════ */
+@media (min-width: 768px) {
+  header .nav { gap: 4px; }
+  .tab { padding: 8px 14px; font-size: 14px; }
+  main { padding: 1.5rem; }
+  .card { padding: 1.5rem; }
+  .grid { grid-template-columns: repeat(5, 1fr); }
+  .opts { gap: 10px; }
+  .opt { font-size: 15px; padding: 13px 18px; }
+  .qbody { font-size: 16px; }
+  .modal { max-width: 680px; }
+}
+
+/* ══════════════════════════════════════
+   手机 (max 640px)
+   ══════════════════════════════════════ */
+@media (max-width: 640px) {
+  /* Nav: 横向滚动 */
+  header .nav {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; gap: 2px; padding: 0 8px;
+  }
+  header .nav::-webkit-scrollbar { display: none; }
+  .brand span { display: none; } /* 只显示logo图标 */
+  .tab { padding: 6px 10px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+
+  /* 主体 */
+  main { padding: 0.75rem 0.75rem 5rem; }
+  .card { padding: 1rem; border-radius: 10px; }
+  .title { font-size: 17px; }
+
+  /* 统计格 */
+  .grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat .v { font-size: 22px; }
+  .stat .k { font-size: 11px; }
+
+  /* 答题区 */
+  .qtop { gap: 8px; }
+  .qcount { font-size: 14px; }
+  .qcount strong { font-size: 18px; }
+  .timer { font-size: 20px; min-width: 44px; text-align: center; }
+  .qbody { font-size: 14px; padding: 1rem; }
+  .opt { font-size: 13.5px; padding: 11px 12px; gap: 10px; }
+  .opt-letter { width: 26px; height: 26px; font-size: 12px; }
+
+  /* 操作按钮行 */
+  .actions { gap: 6px; }
+  .actions .btn { flex: 1; justify-content: center; font-size: 12px; padding: 8px 4px; }
+
+  /* 结果统计 */
+  .rs-grid { grid-template-columns: repeat(3, 1fr); }
+
+  /* 结果表格 */
+  .tablewrap { font-size: 12px; }
+  .tablewrap th, .tablewrap td { padding: 7px 6px; }
+  /* 手机隐藏题目列，只显示题号+我选+答案+结果+解析 */
+  .tablewrap th:nth-child(2), .tablewrap td:nth-child(2) { display: none; }
+
+  /* 弹窗 */
+  .modal-bg { padding: 0.5rem; align-items: flex-end; }
+  .modal {
+    border-radius: 16px 16px 0 0; max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* 批次列表 */
+  .batch-row { gap: 6px; }
+  .batch-row .btn { padding: 5px 10px; font-size: 12px; }
+
+  /* 复习库 */
+  .row.actions { gap: 6px; }
+}
+
+/* ══════════════════════════════════════
+   小手机 (max 390px)
+   ══════════════════════════════════════ */
+@media (max-width: 390px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+  .actions .btn { font-size: 11px; padding: 7px 2px; }
+  .opt { font-size: 13px; padding: 10px 10px; }
+}
