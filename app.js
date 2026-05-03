@@ -201,9 +201,9 @@ function updateCloudStatus(){
 }
 async function initFirebase(){
   if(firebaseState.ready)return firebaseState;
-  let raw=localStorage.getItem(FIREBASE_CONFIG_KEY);
-  if(!raw)throw new Error('还没有保存 Firebase 配置。');
-  let cfg=JSON.parse(raw);
+
+  
+  let cfg = firebaseConfig;
   const appMod=await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
   const authMod=await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
   const fsMod=await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
