@@ -1,4 +1,13 @@
 const DBKEY='lou_pce_quiz_cloud_v1';
+const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "pce-quiz-e18a8.firebaseapp.com",
+  projectId: "pce-quiz-e18a8",
+  storageBucket: "pce-quiz-e18a8.firebasestorage.app",
+  messagingSenderId: "688362163182",
+  appId: "1:688362163182:web:b635ff25466345752bdcff",
+  measurementId: "G-K5150P19W6"
+};
 const FIREBASE_CONFIG_KEY='lou_pce_firebase_config';
 let DB=loadDB();
 let Q={batchId:null,questions:[],idx:0,answers:[],dk:{},selected:null,timer:null,left:0,limit:60,mode:'normal',mockStart:null};
