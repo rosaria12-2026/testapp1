@@ -1,30 +1,43 @@
-# PCE 针灸答题器 App
+# PCE 针灸答题器：修正版 + 云同步入口
 
-这是一个可部署到 GitHub Pages 的 PWA 网页 App。
+## 修复内容
+- 修掉页面底部出现 JavaScript 乱码的问题
+- HTML / CSS / JS 分文件，GitHub Pages 更稳定
+- 保留：导入题目、答题、错题库、不会题、模拟考试、CSV、打印报告
+- 新增：Firebase 云同步入口
 
-## 使用方法
+## 上传到 GitHub
+把这些文件全部上传到仓库根目录：
+- index.html
+- style.css
+- app.js
+- manifest.json
+- sw.js
+- icon.svg
+- README.md
 
-1. 登录 GitHub，新建一个 repository，例如：`pce-quiz-app`
-2. 上传本文件夹里的所有文件：
-   - `index.html`
-   - `manifest.json`
-   - `sw.js`
-   - `icon-192.svg`
-   - `icon-512.svg`
-3. 进入 GitHub 仓库：
-   - Settings
-   - Pages
-   - Build and deployment
-   - Source 选择 `Deploy from a branch`
-   - Branch 选择 `main` 和 `/root`
-   - Save
-4. 等 1-2 分钟，GitHub 会给你一个网址。
-5. 用手机打开这个网址：
-   - iPhone: Safari → 分享 → Add to Home Screen
-   - Android/Chrome: 菜单 → Add to Home screen
+GitHub Pages 设置：
+Settings → Pages → Deploy from a branch → main → /root
 
-## 注意
+## 云同步设置
+需要你自己创建 Firebase 免费项目：
 
-- 数据保存在浏览器本地 localStorage。
-- 换手机、清缓存、换浏览器，数据不会自动同步。
-- 如果要做账号登录和云同步，需要后端数据库版本。
+1. 打开 Firebase Console，新建项目
+2. Build → Authentication → Sign-in method → 开启 Email/Password
+3. Build → Firestore Database → Create database
+4. Firestore Rules 可先用下面规则：
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /pceQuizData/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+
+5. Project settings → Web app → 复制 firebaseConfig
+6. 打开你的答题器 → 云同步 → 粘贴配置 → 保存
+7. 注册/登录 → 上传本地数据到云端
+
+注意：第一次同步先“上传本地数据到云端”。

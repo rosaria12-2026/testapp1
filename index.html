@@ -1,328 +1,216 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PCE 针灸答题器完整版</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1f1d18">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="PCE答题器">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#f6f3ec;--card:#fffdf8;--card2:#f1eee6;--line:#ded8ca;
-  --text:#221f18;--muted:#756f63;--dark:#1f1d18;
-  --green:#28744d;--red:#b73434;--orange:#c47a1a;--blue:#2458a6;--purple:#6846b7;
-  --radius:14px;--shadow:0 8px 24px rgba(60,45,25,.08);
-}
-body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
-header{position:sticky;top:0;z-index:20;background:rgba(246,243,236,.96);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.nav{max-width:1100px;margin:auto;height:58px;display:flex;align-items:center;gap:8px;padding:0 16px;overflow:auto}
-.brand{font-weight:850;margin-right:auto;display:flex;align-items:center;gap:10px;white-space:nowrap}
-.logo{width:32px;height:32px;border-radius:9px;background:var(--dark);color:white;display:flex;align-items:center;justify-content:center;font-weight:900}
-button{font-family:inherit;cursor:pointer;border:none}
-.tab{padding:8px 13px;border-radius:9px;background:transparent;color:var(--muted);font-weight:700;white-space:nowrap}
-.tab:hover{background:var(--card2);color:var(--text)}
-.tab.active{background:var(--dark);color:white}
-main{max-width:1100px;margin:auto;padding:24px 16px 80px}
-.page{display:none}.page.active{display:block}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
-.title{font-size:22px;font-weight:850;margin-bottom:4px}.sub{color:var(--muted);font-size:13px;margin-bottom:12px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}
-.stat{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:14px}
-.stat .k{font-size:12px;color:var(--muted)}.stat .v{font-size:28px;font-weight:850;line-height:1.2}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.spacer{margin-left:auto}
-.btn{padding:9px 16px;border-radius:10px;font-weight:750;font-size:14px;border:1px solid transparent;background:var(--card2);color:var(--text);display:inline-flex;align-items:center;justify-content:center;gap:6px}
-.btn:hover{filter:brightness(.97)}.primary{background:var(--dark);color:white}.green{background:var(--green);color:white}.red{background:var(--red);color:white}.orange{background:#fff2d2;color:#9b5700;border-color:#ecc16e}.blue{background:var(--blue);color:white}.purple{background:var(--purple);color:white}
-.small{padding:6px 10px;font-size:12px;border-radius:8px}
-input,textarea,select{font-family:inherit;border:1px solid #c9c0ad;background:#fff;color:var(--text);border-radius:10px;padding:10px 12px;outline:none;font-size:14px}
-input:focus,textarea:focus,select:focus{border-color:var(--dark)}
-textarea{width:100%;min-height:260px;resize:vertical;line-height:1.75}
-.hint{font-size:12px;color:var(--muted);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px}
-.batch{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card2);margin-bottom:9px}
-.batch-name{font-weight:800;flex:1;min-width:160px}.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid var(--line);background:white;color:var(--muted);white-space:nowrap}
-.badge.green{background:#e5f3eb;color:var(--green);border-color:#b9dcc8}.badge.red{background:#fae6e6;color:var(--red);border-color:#efbcbc}.badge.orange{background:#fff2d2;color:#a05b00;border-color:#e9c46c}.badge.blue{background:#e8effa;color:var(--blue);border-color:#bad0ef}.badge.purple{background:#f0ebff;color:var(--purple);border-color:#d6c7fa}
-.empty{text-align:center;color:var(--muted);padding:38px 10px}.empty strong{display:block;color:var(--text);font-size:18px;margin-bottom:4px}
-.qtop{display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:14px}
-.qcount{font-size:14px;color:var(--muted)}.qcount strong{font-size:24px;color:var(--text)}
-.progress{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:16px}.bar{height:100%;background:var(--dark);width:0%;transition:.25s}
-.timer{min-width:72px;text-align:center;border:1px solid var(--line);background:var(--card2);border-radius:12px;padding:6px 8px;font-weight:850}.timer.warn{color:var(--orange)}.timer.danger{color:var(--red)}
-.case{display:none;background:#fff8de;border:1px solid #e5c66d;border-radius:12px;padding:12px 14px;margin-bottom:13px;white-space:pre-wrap;font-size:14px}.case b{color:#805100}
-.qbody{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:17px 18px;font-size:16px;white-space:pre-wrap;margin-bottom:15px}
-.opts{display:flex;flex-direction:column;gap:9px;margin-bottom:14px}.opt{display:flex;align-items:flex-start;gap:12px;background:white;border:1.7px solid var(--line);border-radius:12px;padding:12px 14px;text-align:left;font-size:15px;color:var(--text);width:100%}.opt:hover{background:#faf7ee}.opt.selected{border-color:var(--dark);background:#f3efe5}.letter{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:850;flex-shrink:0;background:var(--card2)}.opt.selected .letter{background:var(--dark);color:white;border-color:var(--dark)}
-table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--card2);color:var(--muted);font-size:12px}tr:hover td{background:#faf7ee}
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:50;align-items:center;justify-content:center;padding:16px}.modal-bg.open{display:flex}.modal{background:var(--card);border-radius:16px;max-width:820px;width:100%;max-height:90vh;overflow:auto;padding:20px;box-shadow:0 20px 70px rgba(0,0,0,.32)}
-.explain{background:#f3edff;border:1px solid #d6c7fa;border-radius:12px;padding:12px 14px;margin-top:12px;font-size:14px;white-space:pre-wrap}.core{background:#fff8de;border:1px solid #e5c66d;border-radius:12px;padding:10px 14px;margin-top:9px;font-size:14px}
-.upload{border:2px dashed #c9c0ad;background:var(--card2);border-radius:14px;padding:22px;text-align:center;margin-bottom:12px;cursor:pointer;display:block}.upload:hover{border-color:var(--blue);background:#eaf0fb}.upload input{display:none}
-.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
-#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1f1d18;color:white;padding:10px 18px;border-radius:999px;z-index:100;opacity:0;transition:.25s;font-size:14px;pointer-events:none}#toast.show{opacity:1}
-@media(max-width:640px){.brand span{display:none}.tab{font-size:12px;padding:7px 9px}.qtop{align-items:flex-start}.spacer{margin-left:0}.btn{flex:1}.row.actions .btn{font-size:12px;padding:7px 8px}.batch{align-items:flex-start}.batch .btn{flex:0 0 auto}}
-@media print{header,.no-print,.modal-bg,#toast{display:none!important}body{background:white}main{max-width:none;padding:0}.card{box-shadow:none;border:none}.page{display:block}.page:not(.printme){display:none!important}}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PCE 针灸答题器</title>
+  <meta name="theme-color" content="#1f1d18" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="PCE答题器" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<header class="no-print"><div class="nav"><div class="brand"><div class="logo">P</div><span>PCE 针灸答题器</span></div><button class="tab active" data-page="home">主页</button><button class="tab" data-page="import">导入</button><button class="tab" data-page="quiz">答题</button><button class="tab" data-page="review">复习库</button><button class="tab" data-page="mock">模拟考</button></div></header>
+<header>
+  <div class="nav">
+    <div class="brand"><div class="logo">P</div><span>PCE 针灸答题器</span></div>
+    <button class="tab active" data-page="home">主页</button>
+    <button class="tab" data-page="import">导入</button>
+    <button class="tab" data-page="quiz">答题</button>
+    <button class="tab" data-page="review">复习库</button>
+    <button class="tab" data-page="mock">模拟考</button>
+    <button class="tab" data-page="cloud">云同步</button>
+  </div>
+</header>
+
 <main>
   <section id="home" class="page active">
-    <div class="card"><div class="title">学习概况</div><div class="sub">本地保存，不上传。浏览器清缓存前都在。</div><div class="grid"><div class="stat"><div class="k">题库总数</div><div class="v" id="st-total">0</div></div><div class="stat"><div class="k">已作答题次</div><div class="v" id="st-done">0</div></div><div class="stat"><div class="k">错题</div><div class="v" id="st-wrong" style="color:var(--red)">0</div></div><div class="stat"><div class="k">不会</div><div class="v" id="st-dk" style="color:var(--orange)">0</div></div><div class="stat"><div class="k">正确率</div><div class="v" id="st-rate">--</div></div></div></div>
-    <div class="card"><div class="row"><div><div class="title">题目批次</div><div class="sub">导入后会出现在这里。</div></div><button class="btn primary spacer" onclick="showPage('import')">+ 导入新题</button></div><div id="batch-list"></div></div>
-    <div class="card"><div class="title">快速操作</div><div class="row"><button class="btn primary" onclick="resumeQuiz()">继续答题</button><button class="btn" onclick="startFirstUnfinished(true)">从头重做</button><button class="btn orange" onclick="showPage('review');renderReview()">复习错题/不会</button><button class="btn blue" onclick="showPage('mock');renderMockSetup()">模拟考试</button></div></div>
+    <div class="card">
+      <div class="title">学习概况</div>
+      <div class="sub">默认本地保存；开启云同步后可上传/下载数据。</div>
+      <div class="grid">
+        <div class="stat"><div class="k">题库总数</div><div class="v" id="st-total">0</div></div>
+        <div class="stat"><div class="k">已作答题次</div><div class="v" id="st-done">0</div></div>
+        <div class="stat"><div class="k">错题</div><div class="v redtext" id="st-wrong">0</div></div>
+        <div class="stat"><div class="k">不会</div><div class="v orangetext" id="st-dk">0</div></div>
+        <div class="stat"><div class="k">正确率</div><div class="v" id="st-rate">--</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div><div class="title">题目批次</div><div class="sub">导入后会出现在这里。</div></div>
+        <button class="btn primary spacer" onclick="showPage('import')">+ 导入新题</button>
+      </div>
+      <div id="batch-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="title">快速操作</div>
+      <div class="row">
+        <button class="btn primary" onclick="resumeQuiz()">继续答题</button>
+        <button class="btn" onclick="startFirstBatch(true)">从头重做</button>
+        <button class="btn orange" onclick="showPage('review');renderReview()">复习错题/不会</button>
+        <button class="btn blue" onclick="showPage('mock');renderMockSetup()">模拟考试</button>
+      </div>
+    </div>
   </section>
 
   <section id="import" class="page">
-    <div class="card"><div class="title">导入题目</div><div class="sub">支持粘贴文本、TXT、DOCX、PDF文字版。图片扫描版 PDF 不能保证识别。</div>
-      <input id="batch-name" style="width:100%;margin-bottom:12px" placeholder="批次名称，例如：妇科辨证第1套 / PCE模拟卷A" />
-      <label class="upload"><input id="file-input" type="file" accept=".txt,.docx,.pdf" /><div style="font-size:28px">📎</div><div><b>点击上传文件</b></div><div class="sub" id="upload-status">TXT 可直接读取；DOCX/PDF 依赖浏览器文本解析。</div></label>
+    <div class="card">
+      <div class="title">导入题目</div>
+      <div class="sub">支持粘贴文本。TXT 可直接上传；PDF/DOCX 建议先复制文字粘贴。</div>
+      <input id="batch-name" class="full" placeholder="批次名称，例如：妇科辨证第1套 / PCE模拟卷A" />
+      <label class="upload">
+        <input id="file-input" type="file" accept=".txt" />
+        <div class="upload-icon">📎</div>
+        <div><b>点击上传 TXT</b></div>
+        <div class="sub" id="upload-status">如果是 PDF/Word，请先复制题目文字再粘贴。</div>
+      </label>
       <textarea id="raw" placeholder="把题目粘贴在这里：
 
-34. 范女士月经延期……诊断为：
+34. 范女士月经延期，血量少，色淡，质稀。腹闷痛，得温得压则缓。腰背痛，便溏。舌淡，脉细弱。诊断为：
 a）虚寒。
 b）实寒。
 c）气滞。
 d）阳虚。
 e）血虚。
-答案：A
-
-也支持 A. / A) / a） 等格式。"></textarea>
-      <div class="hint"><b>关键规则：</b>支持题号不是从 1 开始；答案比对会按真实题号匹配，避免 43 题错位成第 43 行。纯英文题也可导入，只看题号和选项格式。</div>
-      <div class="row" style="margin-top:12px"><button class="btn primary" onclick="importQuestions(true)">导入并开始</button><button class="btn" onclick="importQuestions(false)">仅导入</button><span class="spacer sub">每题限时</span><input id="limit" type="number" min="0" max="600" value="60" style="width:75px" /><span class="sub">秒，0=不限时</span></div>
-      <div id="import-msg" class="sub" style="margin-top:10px"></div>
+答案：A"></textarea>
+      <div class="hint"><b>格式：</b>题号用 34. 或 34、；选项用 A. / A) / a）都可以。答案可写“答案：A”。题号不是从1开始也能核对。</div>
+      <div class="row mt">
+        <button class="btn primary" onclick="importQuestions(true)">导入并开始</button>
+        <button class="btn" onclick="importQuestions(false)">仅导入</button>
+        <span class="spacer sub">每题限时</span>
+        <input id="limit" type="number" min="0" max="600" value="60" class="tiny" />
+        <span class="sub">秒，0=不限时</span>
+      </div>
+      <div id="import-msg" class="sub mt"></div>
     </div>
   </section>
 
   <section id="quiz" class="page">
-    <div class="card"><div class="qtop"><div><div class="qcount">题 <strong id="q-num">--</strong> / <span id="q-total">--</span></div><div class="sub" id="q-batch"></div></div><div class="timer spacer" id="timer">--</div></div><div class="progress"><div class="bar" id="qbar"></div></div><div class="case" id="casebox"></div><div class="qbody" id="qbody"></div><div class="opts" id="opts"></div><div class="row actions no-print"><button class="btn small" onclick="prevQ()">← 上一题</button><button class="btn small" onclick="skipQ()">跳过</button><button class="btn small orange" id="dkbtn" onclick="toggleDK()">不会</button><button class="btn small primary" onclick="nextQ()">确认/下一题 →</button><button class="btn small red spacer" onclick="finishQuiz()">结束</button></div></div>
+    <div class="card">
+      <div class="qtop">
+        <div><div class="qcount">题 <strong id="q-num">--</strong> / <span id="q-total">--</span></div><div class="sub" id="q-batch"></div></div>
+        <div class="timer spacer" id="timer">--</div>
+      </div>
+      <div class="progress"><div class="bar" id="qbar"></div></div>
+      <div class="case" id="casebox"></div>
+      <div class="qbody" id="qbody"></div>
+      <div class="opts" id="opts"></div>
+      <div class="row actions">
+        <button class="btn small" onclick="prevQ()">← 上一题</button>
+        <button class="btn small" onclick="skipQ()">跳过</button>
+        <button class="btn small orange" id="dkbtn" onclick="toggleDK()">不会</button>
+        <button class="btn small primary" onclick="nextQ()">确认/下一题 →</button>
+        <button class="btn small red spacer" onclick="finishQuiz()">结束</button>
+      </div>
+    </div>
   </section>
 
   <section id="result" class="page">
-    <div class="card"><div class="title">答题结果</div><div class="sub" id="result-batch"></div><div class="grid"><div class="stat"><div class="k">总题</div><div class="v" id="rs-total">0</div></div><div class="stat"><div class="k">答对</div><div class="v" id="rs-ok" style="color:var(--green)">0</div></div><div class="stat"><div class="k">答错</div><div class="v" id="rs-bad" style="color:var(--red)">0</div></div><div class="stat"><div class="k">不会</div><div class="v" id="rs-dk" style="color:var(--orange)">0</div></div><div class="stat"><div class="k">正确率</div><div class="v" id="rs-rate">--</div></div></div></div>
-    <div class="card no-print"><div class="title">补充/更正答案</div><div class="sub">支持：43.A 每行一个，或 ACBDE 字母串。若题号不是从1开始，请用“题号.答案”。</div><textarea id="answer-key" style="min-height:90px" placeholder="43.A
-44.C
-45.B"></textarea><div class="row" style="margin-top:10px"><button class="btn blue" onclick="compareKey()">按答案核对</button><button class="btn purple" onclick="printReport()">打印复习报告 / 存 PDF</button><button class="btn" onclick="downloadCSV()">下载 CSV</button></div><div id="key-msg" class="sub" style="margin-top:8px"></div></div>
+    <div class="card">
+      <div class="title">答题结果</div><div class="sub" id="result-batch"></div>
+      <div class="grid">
+        <div class="stat"><div class="k">总题</div><div class="v" id="rs-total">0</div></div>
+        <div class="stat"><div class="k">答对</div><div class="v greentext" id="rs-ok">0</div></div>
+        <div class="stat"><div class="k">答错</div><div class="v redtext" id="rs-bad">0</div></div>
+        <div class="stat"><div class="k">不会</div><div class="v orangetext" id="rs-dk">0</div></div>
+        <div class="stat"><div class="k">正确率</div><div class="v" id="rs-rate">--</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="title">补充/更正答案</div>
+      <div class="sub">支持：43.A 每行一个，或 ACBDE 字母串。若题号不是从1开始，请用“题号.答案”。</div>
+      <textarea id="answer-key" class="short" placeholder="43.A&#10;44.C&#10;45.B"></textarea>
+      <div class="row mt">
+        <button class="btn blue" onclick="compareKey()">按答案核对</button>
+        <button class="btn purple" onclick="printReport()">打印复习报告 / 存 PDF</button>
+        <button class="btn" onclick="downloadCSV()">下载 CSV</button>
+      </div>
+      <div id="key-msg" class="sub mt"></div>
+    </div>
     <div class="card"><div class="title">明细</div><div class="tablewrap"><table><thead><tr><th>题号</th><th>题目</th><th>我选</th><th>答案</th><th>结果</th></tr></thead><tbody id="result-table"></tbody></table></div></div>
   </section>
 
   <section id="review" class="page">
-    <div class="card"><div class="row"><div><div class="title">复习库</div><div class="sub">错题和“不会”的题都在这里。点题目可看详情。</div></div><button class="btn purple spacer" onclick="printReport()">打印 / 存 PDF</button><button class="btn red" onclick="clearReview()">清空复习库</button></div></div>
+    <div class="card">
+      <div class="row">
+        <div><div class="title">复习库</div><div class="sub">错题和“不会”的题都在这里。点题目可看详情。</div></div>
+        <button class="btn purple spacer" onclick="printReport()">打印 / 存 PDF</button>
+        <button class="btn red" onclick="clearReview()">清空复习库</button>
+      </div>
+    </div>
     <div id="review-list"></div>
   </section>
 
   <section id="mock" class="page">
     <div id="mock-area"></div>
   </section>
+
+  <section id="cloud" class="page">
+    <div class="card">
+      <div class="title">云同步</div>
+      <div class="sub">使用 Firebase 免费云端。先本地能用；设置 Firebase 后可以注册账号、上传、下载。</div>
+
+      <div class="hint">
+        <b>你需要先去 Firebase 建项目：</b><br>
+        1. Firebase Console → Add project<br>
+        2. Build → Authentication → Sign-in method → 开启 Email/Password<br>
+        3. Build → Firestore Database → Create database<br>
+        4. Project settings → Web app → 复制 firebaseConfig<br>
+        5. 粘贴到下面保存
+      </div>
+
+      <textarea id="firebase-config" class="short" placeholder='粘贴 firebaseConfig，例如：
+{
+  "apiKey": "...",
+  "authDomain": "...firebaseapp.com",
+  "projectId": "...",
+  "storageBucket": "...",
+  "messagingSenderId": "...",
+  "appId": "..."
+}'></textarea>
+
+      <div class="row mt">
+        <button class="btn primary" onclick="saveFirebaseConfig()">保存 Firebase 配置</button>
+        <button class="btn" onclick="loadFirebaseConfigToBox()">读取已保存配置</button>
+      </div>
+
+      <hr class="sep">
+
+      <div class="row">
+        <input id="cloud-email" placeholder="Email" />
+        <input id="cloud-pass" type="password" placeholder="Password" />
+        <button class="btn blue" onclick="cloudRegister()">注册</button>
+        <button class="btn primary" onclick="cloudLogin()">登录</button>
+        <button class="btn" onclick="cloudLogout()">退出</button>
+      </div>
+
+      <div id="cloud-status" class="hint mt">未登录。</div>
+
+      <div class="row mt">
+        <button class="btn green" onclick="cloudUpload()">上传本地数据到云端</button>
+        <button class="btn orange" onclick="cloudDownload()">从云端下载覆盖本地</button>
+      </div>
+
+      <div class="hint mt"><b>注意：</b>下载会覆盖当前本地数据。第一次同步建议先点“上传本地数据到云端”。</div>
+    </div>
+  </section>
 </main>
 
-<div id="modal-bg" class="modal-bg" onclick="if(event.target.id==='modal-bg')closeModal()"><div class="modal"><div class="row"><b id="m-title">题目</b><button class="btn small spacer" onclick="closeModal()">关闭</button></div><div id="m-content" style="margin-top:12px"></div></div></div>
+<div id="modal-bg" class="modal-bg" onclick="if(event.target.id==='modal-bg')closeModal()">
+  <div class="modal">
+    <div class="row"><b id="m-title">题目</b><button class="btn small spacer" onclick="closeModal()">关闭</button></div>
+    <div id="m-content" class="mt"></div>
+  </div>
+</div>
 <div id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
-const DBKEY='lou_pce_quiz_complete_v2';
-let DB=loadDB();
-let Q={batchId:null,questions:[],idx:0,answers:[],dk:{},selected:null,timer:null,left:0,limit:60,mode:'normal',mockStart:null};
-
-function freshDB(){return{batches:[],wrong:{},dk:{},attempts:{}}}
-function loadDB(){try{return JSON.parse(localStorage.getItem(DBKEY))||freshDB()}catch(e){return freshDB()}}
-function saveDB(){localStorage.setItem(DBKEY,JSON.stringify(DB))}
-function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4)}
-function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-function normalize(s){return String(s||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-65248)).replace(/[）]/g,')').replace(/[（]/g,'(').replace(/[。]/g,'.').replace(/　/g,' ')}
-function toast(msg){let t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
-
-function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active','printme'));document.getElementById(id).classList.add('active');document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.page===id));if(id==='home')renderHome();if(id==='review')renderReview();if(id==='mock')renderMockSetup()}
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>showPage(b.dataset.page));
-
-function renderHome(){
-  let total=DB.batches.reduce((n,b)=>n+b.questions.length,0), done=0, ok=0;
-  Object.values(DB.attempts||{}).forEach(a=>{done+=a.answered||0;ok+=a.correct||0});
-  document.getElementById('st-total').textContent=total;
-  document.getElementById('st-done').textContent=done;
-  document.getElementById('st-wrong').textContent=Object.keys(DB.wrong||{}).length;
-  document.getElementById('st-dk').textContent=Object.keys(DB.dk||{}).length;
-  document.getElementById('st-rate').textContent=done?Math.round(ok/done*100)+'%':'--';
-  let box=document.getElementById('batch-list');box.innerHTML='';
-  if(!DB.batches.length){box.innerHTML='<div class="empty"><strong>暂无题目</strong>先导入一套卷子，别让考试追着你跑。</div>';return}
-  DB.batches.slice().reverse().forEach(b=>{
-    let answered=(b.progress?.answers||[]).filter(Boolean).length;
-    let row=document.createElement('div');row.className='batch';
-    row.innerHTML=`<div class="batch-name">${esc(b.name)}</div><span class="badge blue">${b.questions.length}题</span><span class="badge">已答 ${answered}</span><button class="btn small primary">开始/继续</button><button class="btn small">重做</button><button class="btn small red">删除</button>`;
-    let btns=row.querySelectorAll('button');
-    btns[0].onclick=()=>startBatch(b.id,false);
-    btns[1].onclick=()=>startBatch(b.id,true);
-    btns[2].onclick=()=>deleteBatch(b.id);
-    box.appendChild(row)
-  })
-}
-function deleteBatch(id){
-  if(!confirm('删除这个批次？错题库里来自这个批次的题也会一起清理。'))return;
-  DB.batches=DB.batches.filter(b=>b.id!==id);
-  for(const k of Object.keys(DB.wrong||{})){if(DB.wrong[k].batchId===id)delete DB.wrong[k]}
-  for(const k of Object.keys(DB.dk||{})){if(DB.dk[k].batchId===id)delete DB.dk[k]}
-  delete DB.attempts[id];saveDB();renderHome()
-}
-
-function parseQuestions(raw){
-  raw=normalize(raw);let lines=raw.split('\n').map(x=>x.trim()).filter(Boolean);
-  const qRe=/^[(\[]?\s*(\d{1,4})\s*[).、]\s*(.+)$/;
-  const optRe=/^([A-Ha-h])\s*[).、]\s*(.+)$/;
-  const ansRe=/(?:答案|Answer|Ans)\s*[:：]?\s*([A-Ha-h])/i;
-  const caseRe=/(使用以下信息|使用下列信息|根据以下|根据下列|以下病例|following case|following information|case scenario)/i;
-  let qs=[],cur=null,pendingCase='';
-  function push(){if(cur&&cur.opts.length>=2){cur.body=cur.body.trim();cur.opts=cur.opts.filter(o=>o.text.trim());qs.push(cur)}}
-  for(let i=0;i<lines.length;i++){
-    let l=lines[i];let am=l.match(ansRe);if(am&&cur){cur.answer=am[1].toUpperCase();continue}
-    if(caseRe.test(l)&&!qRe.test(l)){let c=[l];let j=i+1;while(j<lines.length&&!qRe.test(lines[j])){c.push(lines[j]);j++}pendingCase=c.join('\n');i=j-1;continue}
-    let qm=l.match(qRe);if(qm){push();cur={id:uid(),num:parseInt(qm[1],10),body:qm[2],opts:[],answer:null,caseText:pendingCase||''};continue}
-    if(!cur)continue;
-    let om=l.match(optRe);if(om){cur.opts.push({letter:om[1].toUpperCase(),text:om[2].trim()});continue}
-    let inline=[...l.matchAll(/([A-Ha-h])\s*[).、]\s*([^A-Ha-h]+?)(?=\s+[A-Ha-h]\s*[).、]|$)/g)].map(m=>({letter:m[1].toUpperCase(),text:m[2].trim()}));
-    if(inline.length>=2){cur.opts.push(...inline);continue}
-    if(cur.opts.length===0)cur.body+='\n'+l;else cur.opts[cur.opts.length-1].text+=' '+l;
-  }
-  push();
-  return qs;
-}
-
-function importQuestions(start){
-  let raw=document.getElementById('raw').value.trim(),msg=document.getElementById('import-msg');
-  if(!raw){msg.textContent='先粘贴或上传题目。';msg.style.color='var(--red)';return}
-  let qs=parseQuestions(raw);
-  if(!qs.length){msg.textContent='没有识别到题目。检查题号/选项格式。';msg.style.color='var(--red)';return}
-  let name=document.getElementById('batch-name').value.trim()||('批次 '+(DB.batches.length+1)+' - '+new Date().toLocaleDateString('zh-CN'));
-  let b={id:uid(),name,date:Date.now(),questions:qs,progress:{idx:0,answers:Array(qs.length).fill(null),dk:{}}};
-  DB.batches.push(b);saveDB();
-  document.getElementById('raw').value='';document.getElementById('batch-name').value='';
-  msg.textContent='已导入 '+qs.length+' 道题：'+name;msg.style.color='var(--green)';
-  renderHome();if(start)setTimeout(()=>startBatch(b.id,true),300)
-}
-
-function startBatch(id,restart){
-  let b=DB.batches.find(x=>x.id===id);if(!b)return;
-  let limit=parseInt(document.getElementById('limit').value,10);if(Number.isNaN(limit))limit=60;
-  if(restart)b.progress={idx:0,answers:Array(b.questions.length).fill(null),dk:{}};
-  Q={batchId:id,questions:b.questions,idx:b.progress.idx||0,answers:[...(b.progress.answers||Array(b.questions.length).fill(null))],dk:{...(b.progress.dk||{})},selected:null,timer:null,left:limit,limit,mode:'normal',mockStart:null};
-  showPage('quiz');loadQuestion()
-}
-function resumeQuiz(){let b=DB.batches.find(x=>(x.progress?.answers||[]).filter(Boolean).length<x.questions.length)||DB.batches[0];if(!b){alert('先导入题目。');return}startBatch(b.id,false)}
-function startFirstUnfinished(restart){let b=DB.batches[0];if(!b){alert('先导入题目。');return}startBatch(b.id,restart)}
-function saveProgress(){let b=DB.batches.find(x=>x.id===Q.batchId);if(!b)return;b.progress={idx:Q.idx,answers:Q.answers,dk:Q.dk};saveDB()}
-function loadQuestion(){
-  clearInterval(Q.timer);let q=Q.questions[Q.idx];if(!q){alert('没有题目');return}
-  Q.selected=Q.answers[Q.idx]&&Q.answers[Q.idx]!=='skip'?Q.answers[Q.idx]:null;
-  document.getElementById('q-num').textContent=q.num;
-  document.getElementById('q-total').textContent=Q.questions.length;
-  document.getElementById('q-batch').textContent=Q.mode==='mock'?'模拟考试':((DB.batches.find(b=>b.id===Q.batchId)?.name)||'');
-  document.getElementById('qbar').style.width=(Q.idx/Q.questions.length*100)+'%';
-  let cb=document.getElementById('casebox');if(q.caseText){cb.style.display='block';cb.innerHTML='<b>病例资料</b>\n'+esc(q.caseText)}else cb.style.display='none';
-  document.getElementById('qbody').textContent=q.body;
-  let box=document.getElementById('opts');box.innerHTML='';
-  q.opts.forEach(o=>{let btn=document.createElement('button');btn.className='opt'+(Q.selected===o.letter?' selected':'');btn.innerHTML=`<span class="letter">${o.letter}</span><span>${esc(o.text)}</span>`;btn.onclick=()=>{Q.selected=o.letter;Q.answers[Q.idx]=o.letter;saveProgress();loadOptionsOnly()};box.appendChild(btn)});
-  document.getElementById('dkbtn').classList.toggle('active',!!Q.dk[Q.idx]);
-  startTimer()
-}
-function loadOptionsOnly(){document.querySelectorAll('#opts .opt').forEach(btn=>btn.classList.toggle('selected',btn.querySelector('.letter').textContent===Q.selected))}
-function startTimer(){
-  let el=document.getElementById('timer');el.className='timer';
-  if(Q.limit===0){el.textContent='不限时';return}
-  Q.left=Q.limit;tick();Q.timer=setInterval(()=>{Q.left--;tick();if(Q.left<=0){clearInterval(Q.timer);if(!Q.answers[Q.idx])Q.answers[Q.idx]='skip';nextQ()}},1000)
-}
-function tick(){let el=document.getElementById('timer');el.textContent=Q.left+'s';el.className='timer'+(Q.left<=10?' danger':Q.left<=20?' warn':'')}
-function nextQ(){clearInterval(Q.timer);if(!Q.answers[Q.idx])Q.answers[Q.idx]=Q.selected||'skip';saveProgress();if(Q.idx>=Q.questions.length-1){finishQuiz();return}Q.idx++;saveProgress();loadQuestion()}
-function prevQ(){clearInterval(Q.timer);if(Q.idx>0){Q.idx--;saveProgress();loadQuestion()}}
-function skipQ(){Q.answers[Q.idx]='skip';nextQ()}
-function toggleDK(){Q.dk[Q.idx]=!Q.dk[Q.idx];if(!Q.dk[Q.idx])delete Q.dk[Q.idx];saveProgress();document.getElementById('dkbtn').classList.toggle('active',!!Q.dk[Q.idx])}
-function finishQuiz(){clearInterval(Q.timer);for(let i=0;i<Q.answers.length;i++)if(!Q.answers[i])Q.answers[i]='skip';saveProgress();commitAttempt();renderResult();showPage('result')}
-function commitAttempt(){
-  let b=DB.batches.find(x=>x.id===Q.batchId)||{id:'mock',name:'模拟考试'};let answered=0,correct=0;
-  Q.questions.forEach((q,i)=>{let my=Q.answers[i];if(my&&my!=='skip')answered++;let ok=q.answer&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();if(ok)correct++;if(q.answer&&my&&my!=='skip'&&!ok)DB.wrong[q.id]={q,batchId:b.id,batchName:b.name,myAns:my};else if(ok)delete DB.wrong[q.id];if(Q.dk[i])DB.dk[q.id]={q,batchId:b.id,batchName:b.name,myAns:my};else if(ok)delete DB.dk[q.id]});
-  DB.attempts[b.id]={answered,correct,last:Date.now()};saveDB()
-}
-function renderResult(){
-  let total=Q.questions.length,ok=0,bad=0,dk=Object.keys(Q.dk).length,withAns=0;let tbody=document.getElementById('result-table');tbody.innerHTML='';
-  document.getElementById('result-batch').textContent=Q.mode==='mock'?'模拟考试':(DB.batches.find(b=>b.id===Q.batchId)?.name||'');
-  Q.questions.forEach((q,i)=>{let my=Q.answers[i]||'skip',has=!!q.answer;if(has)withAns++;let good=has&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();let wrong=has&&my!=='skip'&&!good;if(good)ok++;if(wrong)bad++;let tr=document.createElement('tr');tr.style.cursor='pointer';tr.onclick=()=>openQuestion(q,{myAns:my,batchName:document.getElementById('result-batch').textContent});tr.innerHTML=`<td><b>${q.num}</b></td><td>${esc(q.body.slice(0,70))}${Q.dk[i]?' <span class="badge orange">不会</span>':''}</td><td>${my==='skip'?'—':my}</td><td>${q.answer||'—'}</td><td>${has?(good?'<span class="badge green">对</span>':wrong?'<span class="badge red">错</span>':'<span class="badge">跳过</span>'):'<span class="badge">无答案</span>'}</td>`;tbody.appendChild(tr)});
-  document.getElementById('rs-total').textContent=total;document.getElementById('rs-ok').textContent=ok;document.getElementById('rs-bad').textContent=bad;document.getElementById('rs-dk').textContent=dk;document.getElementById('rs-rate').textContent=withAns?Math.round(ok/withAns*100)+'%':'--';renderHome()
-}
-
-function compareKey(){
-  let raw=document.getElementById('answer-key').value.trim();let msg=document.getElementById('key-msg');if(!raw){msg.textContent='先粘贴答案。';msg.style.color='var(--red)';return}
-  let byNum={},byIndex={};if(/^[A-Ha-h\s]+$/.test(raw)&&raw.replace(/\s/g,'').length>=2){raw.replace(/\s/g,'').split('').forEach((c,i)=>byIndex[i]=c.toUpperCase())}else raw.split(/\n|;/).forEach(line=>{let m=line.match(/(\d{1,4})\s*[.、:：\-]?\s*([A-Ha-h])/);if(m)byNum[parseInt(m[1],10)]=m[2].toUpperCase()});
-  let n=0;Q.questions.forEach((q,i)=>{let key=byNum[q.num]||byIndex[i];if(key){q.answer=key;n++}});
-  saveProgress();commitAttempt();renderResult();msg.textContent='已更新/核对 '+n+' 题答案。';msg.style.color='var(--green)'
-}
-
-function renderReview(){
-  let list=document.getElementById('review-list');list.innerHTML='';
-  let items=[...Object.values(DB.wrong||{}).map(e=>({...e,type:'wrong'})),...Object.values(DB.dk||{}).filter(e=>!DB.wrong[e.q.id]).map(e=>({...e,type:'dk'}))];
-  if(!items.length){list.innerHTML='<div class="card empty"><strong>复习库是空的</strong>这很好，但也可能是你还没开始刷。别装睡，起来做题。</div>';return}
-  items.sort((a,b)=>(a.q.num||0)-(b.q.num||0));
-  items.forEach(e=>{let c=document.createElement('div');c.className='card';c.style.cursor='pointer';c.onclick=()=>openQuestion(e.q,e);c.innerHTML=`<div class="row"><span class="badge ${e.type==='wrong'?'red':'orange'}">${e.type==='wrong'?'错题':'不会'}</span><b>题号 ${e.q.num}</b><span class="sub">${esc(e.batchName||'')}</span><button class="btn small spacer">查看</button></div><div style="margin-top:8px">${esc(e.q.body.slice(0,140))}</div>`;list.appendChild(c)})
-}
-function clearReview(){if(!confirm('清空错题和不会题？'))return;DB.wrong={};DB.dk={};saveDB();renderReview();renderHome()}
-function openQuestion(q,e={}){
-  let html='';if(q.caseText)html+=`<div class="case" style="display:block"><b>病例资料</b>\n${esc(q.caseText)}</div>`;
-  html+=`<div class="qbody">${esc(q.body)}</div><div class="opts">`;
-  q.opts.forEach(o=>{let cls='opt';if(o.letter===q.answer)cls+=' selected';html+=`<div class="${cls}"><span class="letter">${o.letter}</span><span>${esc(o.text)}${o.letter===q.answer?' <b style="color:var(--green)">✓ 正确</b>':''}${o.letter===e.myAns&&o.letter!==q.answer?' <b style="color:var(--red)">← 我选</b>':''}</span></div>`});
-  html+='</div>';html+=`<div class="explain"><b>核心判断：</b>\n正确答案：${q.answer||'未提供'}；你选：${e.myAns&&e.myAns!=='skip'?e.myAns:'—'}。\n\n提示：这一版不把 API Key 写进前端，避免泄露。要 AI 解析时，把这题复制给 ChatGPT 即可。</div>`;
-  document.getElementById('m-title').textContent='题号 '+q.num;document.getElementById('m-content').innerHTML=html;document.getElementById('modal-bg').classList.add('open')
-}
-function closeModal(){document.getElementById('modal-bg').classList.remove('open')}
-
-function renderMockSetup(){
-  let area=document.getElementById('mock-area');let all=DB.batches.flatMap(b=>b.questions.map(q=>({q,b})));
-  area.innerHTML=`<div class="card"><div class="title">模拟考试</div><div class="sub">默认最多抽 125 题；题库不足就抽全部。错题加权会提高薄弱题出现概率。</div><div class="grid"><div class="stat"><div class="k">可用题目</div><div class="v">${all.length}</div></div><div class="stat"><div class="k">考试题数</div><div class="v">${Math.min(125,all.length)}</div></div><div class="stat"><div class="k">建议时间</div><div class="v">2.5h</div></div></div><div class="row" style="margin-top:16px"><label class="sub"><input type="checkbox" id="mock-wrong" /> 错题加权抽取</label><button class="btn primary spacer" onclick="startMock()">开始模拟考</button></div></div>`
-}
-function startMock(){
-  let all=DB.batches.flatMap(b=>b.questions.map(q=>q));if(!all.length){alert('先导入题目。');return}
-  let pool=[...all];if(document.getElementById('mock-wrong')?.checked){Object.values(DB.wrong||{}).forEach(e=>{pool.push(e.q,e.q)})}
-  pool=pool.sort(()=>Math.random()-.5).slice(0,Math.min(125,pool.length));
-  Q={batchId:'mock',questions:pool,idx:0,answers:Array(pool.length).fill(null),dk:{},selected:null,timer:null,left:0,limit:0,mode:'mock',mockStart:Date.now()};
-  showPage('quiz');loadQuestion()
-}
-
-function printReport(){
-  let items=[...Object.values(DB.wrong||{}).map(e=>({...e,type:'错题'})),...Object.values(DB.dk||{}).filter(e=>!DB.wrong[e.q.id]).map(e=>({...e,type:'不会'}))];
-  if(!items.length){alert('没有错题/不会题可以输出。');return}
-  let w=window.open('','_blank');let html=`<html><head><title>PCE复习报告</title><style>body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",Arial,sans-serif;padding:32px;line-height:1.7;color:#222}.q{page-break-inside:avoid;border-left:5px solid #b73434;background:#fff8f8;padding:14px 18px;margin:0 0 18px;border-radius:8px}.dk{border-left-color:#c47a1a;background:#fffdf0}.tag{font-size:12px;font-weight:bold}.opt{padding:3px 0}.ok{color:#28744d;font-weight:bold}.bad{color:#b73434;font-weight:bold}pre{white-space:pre-wrap;font-family:inherit}</style></head><body><h1>PCE 针灸复习报告</h1><p>生成时间：${new Date().toLocaleString('zh-CN')} ｜ 共 ${items.length} 题</p>`;
-  items.forEach(e=>{let q=e.q;html+=`<div class="q ${e.type==='不会'?'dk':''}"><div class="tag">${e.type} ｜ 题号 ${q.num} ｜ ${esc(e.batchName||'')}</div>${q.caseText?`<pre><b>病例资料</b>\n${esc(q.caseText)}</pre>`:''}<pre><b>${esc(q.body)}</b></pre>`;q.opts.forEach(o=>{html+=`<div class="opt ${o.letter===q.answer?'ok':''}">${o.letter}. ${esc(o.text)} ${o.letter===q.answer?'✓ 正确':''} ${o.letter===e.myAns&&o.letter!==q.answer?'<span class="bad">← 我选</span>':''}</div>`});html+=`<p>正确答案：<b>${q.answer||'未提供'}</b>；我选：<b>${e.myAns||'—'}</b></p></div>`});
-  html+='<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('./sw.js').catch(function(){});
-  });
-}
-</script>
-</body></html>';w.document.write(html);w.document.close();w.focus();w.print()
-}
-function downloadCSV(){
-  if(!Q.questions.length){alert('暂无答题结果');return}
-  let rows=[['题号','题目','我选','答案','结果']];
-  Q.questions.forEach((q,i)=>{let my=Q.answers[i]||'';let ok=q.answer&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();rows.push([q.num,q.body.replace(/\n/g,' '),my,q.answer||'',q.answer?(ok?'对':'错/跳过'):'无答案'])});
-  let csv='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='PCE答题结果.csv';a.click()
-}
-
-const fi=document.getElementById('file-input');
-fi.onchange=async e=>{
-  let f=e.target.files[0];if(!f)return;let st=document.getElementById('upload-status');st.textContent='正在读取 '+f.name+' ...';let ext=f.name.split('.').pop().toLowerCase();
-  try{
-    if(ext==='txt'){document.getElementById('raw').value=await f.text()}
-    else if(ext==='docx'){if(!window.mammoth)throw new Error('Word解析库未加载，请检查网络或改用复制粘贴。');let buf=await f.arrayBuffer();let res=await mammoth.extractRawText({arrayBuffer:buf});document.getElementById('raw').value=res.value}
-    else if(ext==='pdf'){if(!window.pdfjsLib)throw new Error('PDF解析库未加载，请检查网络或改用复制粘贴。');let buf=await f.arrayBuffer();let pdf=await pdfjsLib.getDocument(new Uint8Array(buf)).promise;let texts=[];for(let i=1;i<=pdf.numPages;i++){let p=await pdf.getPage(i);let tc=await p.getTextContent();texts.push(tc.items.map(it=>it.str).join(' '))}document.getElementById('raw').value=texts.join('\n')}
-    else throw new Error('不支持格式');
-    st.textContent='读取完成：'+f.name;toast('文件读取完成')
-  }catch(err){st.textContent='读取失败：'+err.message+'。可以复制粘贴文本。'}
-};
-
-renderHome();
-</script>
+<script src="app.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('./sw.js').catch(function(){});
-  });
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
 }
 </script>
 </body>
