@@ -195,7 +195,7 @@ function saveFirebaseConfig(){
 function loadFirebaseConfigToBox(){byId('firebase-config').value=localStorage.getItem(FIREBASE_CONFIG_KEY)||''}
 function updateCloudStatus(){
   let el=byId('cloud-status');if(!el)return;
-  let has=!!localStorage.getItem(FIREBASE_CONFIG_KEY);
+  let has=true;
   let user=firebaseState.user;
   el.innerHTML=(has?'Firebase配置：已保存。':'Firebase配置：未保存。')+'<br>'+(user?'当前登录：'+esc(user.email):'未登录。');
 }
@@ -248,4 +248,4 @@ async function cloudDownload(){
   }catch(e){alert('下载失败：'+e.message)}
 }
 
-renderHome();loadFirebaseConfigToBox();
+renderHome();
