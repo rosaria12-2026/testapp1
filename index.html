@@ -204,9 +204,12 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 </main>
 
 <!-- MODAL -->
-<div id="modal-bg" class="modal-bg" onclick="if(event.target.id==='modal-bg')closeModal()">
-  <div class="modal">
-    <div class="row"><b id="m-title">题目</b><button class="btn small spacer" onclick="closeModal()">关闭</button></div>
+<div id="modal-bg" class="modal-bg" onclick="if(event.target.id==='modal-bg')closeModal()" style="align-items:flex-start;padding:12px;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+  <div class="modal" style="max-height:none;width:100%;max-width:680px;margin:auto;overflow:visible;">
+    <div class="row" style="position:sticky;top:0;background:#fff;z-index:10;padding-bottom:8px;border-bottom:1px solid #eee;margin-bottom:8px;">
+      <b id="m-title">题目</b>
+      <button class="btn small spacer" onclick="closeModal()">关闭 ✕</button>
+    </div>
     <div id="m-content" class="mt"></div>
   </div>
 </div>
