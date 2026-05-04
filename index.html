@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PCE 针灸答题器</title>
   <meta name="theme-color" content="#1f1d18" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="PCE答题器" />
+  <style>
+    /* 底部大按钮样式 */
+    .bottom-back { width: 100%; padding: 16px; font-size: 16px; font-weight: 700; background: #e0dceb; color: #6040b0; border: none; border-radius: 12px; margin-top: 24px; cursor: pointer; }
+    .bottom-back:hover { background: #d4c9f5; }
+  </style>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -20,7 +23,7 @@
     <button class="tab" data-page="review">复习库</button>
     <button class="tab" data-page="mock">模拟考</button>
     <button class="tab" data-page="notes">📝笔记</button>
-    <button class="tab" data-page="cloud">云同步</button>
+    <button class="tab" data-page="cloud">设置</button>
   </div>
 </header>
 
@@ -29,7 +32,6 @@
   <section id="home" class="page active">
     <div class="card">
       <div class="title">学习概况</div>
-      <div class="sub">默认本地保存；已内置 Firebase 云同步，登录后可上传/下载数据。</div>
       <div class="grid">
         <div class="stat"><div class="k">题库总数</div><div class="v" id="st-total">0</div></div>
         <div class="stat"><div class="k">已作答题次</div><div class="v" id="st-done">0</div></div>
@@ -39,20 +41,19 @@
       </div>
     </div>
     <div class="card">
-      <div class="row">
-        <div><div class="title">题目批次</div><div class="sub">导入后会出现在这里。</div></div>
-        <button class="btn primary spacer" onclick="showPage('import')">+ 导入新题</button>
-      </div>
-      <div id="batch-list"></div>
-    </div>
-    <div class="card">
       <div class="title">快速操作</div>
       <div class="row">
-        <button class="btn primary" onclick="resumeQuiz()">继续答题</button>
-        <button class="btn" onclick="startFirstBatch(true)">从头重做</button>
+        <button class="btn primary" onclick="resumeQuiz()">▶ 继续答题 (上次停止处)</button>
         <button class="btn orange" onclick="showPage('review');renderReview()">复习错题/不会</button>
         <button class="btn blue" onclick="showPage('mock');renderMockSetup()">模拟考试</button>
       </div>
+    </div>
+    <div class="card">
+      <div class="row">
+        <div><div class="title">题目批次</div></div>
+        <button class="btn primary spacer" onclick="showPage('import')">+ 导入新题</button>
+      </div>
+      <div id="batch-list"></div>
     </div>
   </section>
 
@@ -60,29 +61,22 @@
   <section id="import" class="page">
     <div class="card">
       <div class="row"><button class="btn small" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">导入题目</div></div>
-      <div class="sub">支持粘贴文本。TXT 可直接上传；PDF/DOCX 建议先复制文字粘贴。</div>
       <input id="batch-name" class="full" placeholder="批次名称，例如：PCE模拟卷A" />
       <label class="upload">
         <input id="file-input" type="file" accept=".txt" />
         <div class="upload-icon">📎</div>
         <div><b>点击上传 TXT</b></div>
-        <div class="sub" id="upload-status">如果是 PDF/Word，请先复制题目文字再粘贴。</div>
       </label>
-      <textarea id="raw" placeholder="把题目粘贴在这里：
-
-34. 范女士月经延期，血量少，色淡，质稀。诊断为：
-a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
-答案：A"></textarea>
-      <div class="hint"><b>格式：</b>题号用 34. 或 34、；选项用 A. / A) / a）都可以。答案可写"答案：A"。</div>
+      <textarea id="raw" placeholder="把题目粘贴在这里..."></textarea>
       <div class="row mt">
         <button class="btn primary" onclick="importQuestions(true)">导入并开始</button>
         <button class="btn" onclick="importQuestions(false)">仅导入</button>
         <span class="spacer sub">每题限时</span>
-        <input id="limit" type="number" min="0" max="600" value="60" class="tiny" />
-        <span class="sub">秒，0=不限时</span>
+        <input id="limit" type="number" min="0" max="600" value="60" class="tiny" /><span class="sub">秒</span>
       </div>
       <div id="import-msg" class="sub mt"></div>
     </div>
+    <button class="bottom-back" onclick="navBack()">← 返回上一页</button>
   </section>
 
   <!-- QUIZ -->
@@ -90,13 +84,15 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
     <div class="card">
       <div class="qtop">
         <div><div class="qcount">题 <strong id="q-num">--</strong> / <span id="q-total">--</span></div><div class="sub" id="q-batch"></div></div>
-        <div class="timer spacer" id="timer" title="点击暂停/停止/重启">--</div>
+        <div class="timer spacer" id="timer" title="点击停止/重启，停止后不自动跳题">--</div>
       </div>
       <div class="progress"><div class="bar" id="qbar"></div></div>
       <div class="case" id="casebox"></div>
       <div class="qbody" id="qbody"></div>
       <div class="opts" id="opts"></div>
-      <div class="row actions" id="quiz-actions">
+      <!-- 做题时的动态AI按钮插入处 -->
+      <div id="quiz-ai-container"></div>
+      <div class="row actions" id="quiz-actions" style="margin-top:15px">
         <button class="btn small" onclick="prevQ()">← 上一题</button>
         <button class="btn small" onclick="skipQ()">跳过</button>
         <button class="btn small orange" id="dkbtn" onclick="toggleDK()">不会</button>
@@ -104,15 +100,14 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
         <button class="btn small red spacer" onclick="finishQuiz()">结束</button>
       </div>
     </div>
+    <button class="bottom-back" onclick="navBack()">← 返回上一页</button>
   </section>
 
   <!-- RESULT -->
   <section id="result" class="page">
     <div class="card">
       <div class="row"><button class="btn small" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">答题结果</div></div>
-      <div class="sub" id="result-batch"></div>
       <div class="grid">
-        <div class="stat"><div class="k">总题</div><div class="v" id="rs-total">0</div></div>
         <div class="stat"><div class="k">答对</div><div class="v greentext" id="rs-ok">0</div></div>
         <div class="stat"><div class="k">答错</div><div class="v redtext" id="rs-bad">0</div></div>
         <div class="stat"><div class="k">不会</div><div class="v orangetext" id="rs-dk">0</div></div>
@@ -120,35 +115,32 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
       </div>
     </div>
     <div class="card">
-      <div class="title">补充/更正答案</div>
-      <div class="sub">支持：43.A 每行一个，或 ACBDE 字母串。</div>
-      <textarea id="answer-key" class="short" placeholder="43.A&#10;44.C&#10;45.B"></textarea>
+      <div class="title">核对与明细</div>
+      <textarea id="answer-key" class="short" placeholder="粘贴正确答案，例如：43.A"></textarea>
       <div class="row mt">
         <button class="btn blue" onclick="compareKey()">按答案核对</button>
-        <button class="btn purple" onclick="printReport()">打印复习报告 / 存 PDF</button>
-        <button class="btn" onclick="downloadCSV()">下载 CSV</button>
       </div>
       <div id="key-msg" class="sub mt"></div>
-    </div>
-    <div class="card">
-      <div class="title">明细</div>
-      <div class="tablewrap">
+      <div class="tablewrap mt">
         <table>
           <thead><tr><th>题号</th><th>题目</th><th>我选</th><th>答案</th><th>结果</th><th>解析</th></tr></thead>
           <tbody id="result-table"></tbody>
         </table>
       </div>
     </div>
+    <button class="bottom-back" onclick="navBack()">← 返回上一页</button>
   </section>
 
   <!-- REVIEW -->
   <section id="review" class="page">
     <div id="review-list"></div>
+    <button class="bottom-back" onclick="navBack()">← 返回上一页</button>
   </section>
 
   <!-- MOCK -->
   <section id="mock" class="page">
     <div id="mock-area"></div>
+    <button class="bottom-back" onclick="navBack()">← 返回上一页</button>
   </section>
 
   <!-- NOTES -->
@@ -159,21 +151,10 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
   <!-- CLOUD -->
   <section id="cloud" class="page">
     <div class="card">
-      <div class="row"><button class="btn small" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">云同步</div></div>
-      <div class="sub">Firebase 已内置。你不用再粘 firebaseConfig；登录后即可上传/下载。</div>
+      <div class="row"><button class="btn small" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">云端与 API 设置</div></div>
       <div class="hint">
-        <b>Firebase：</b>已写入代码。新设备打开后不需要再粘配置；只需登录账号。
-      </div>
-      <textarea id="firebase-config" class="short" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
-      <div class="row mt">
-        <button class="btn primary" onclick="saveFirebaseConfig()">重新保存 Firebase 配置（备用）</button>
-        <button class="btn" onclick="loadFirebaseConfigToBox()">读取已保存配置</button>
-      </div>
-      <hr class="sep">
-      <div class="hint">
-        <b>🤖 Claude AI 解析功能：</b><br>
-        需要 Anthropic API Key。去 <a href="https://console.anthropic.com" target="_blank" style="color:#1a4fa0">console.anthropic.com</a> → API Keys → Create Key<br>
-        Key 只存在你自己的浏览器里。
+        <b>🤖 AI 解析功能 (Claude)：</b><br>
+        填入一次自动永久保存。无需每次填。
       </div>
       <div class="row mt">
         <input id="api-key-input" type="password" placeholder="sk-ant-api03-..." style="flex:1" />
@@ -181,7 +162,13 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
       </div>
       <div id="api-key-status" class="sub mt"></div>
       <hr class="sep">
-      <div class="row">
+      <div class="hint"><b>云端同步设置 (Firebase)</b></div>
+      <textarea id="firebase-config" class="short" placeholder='{"apiKey":"..."}'></textarea>
+      <div class="row mt">
+        <button class="btn primary" onclick="saveFirebaseConfig()">保存配置</button>
+        <button class="btn" onclick="loadFirebaseConfigToBox()">读取已保存配置</button>
+      </div>
+      <div class="row mt">
         <input id="cloud-email" placeholder="Email" />
         <input id="cloud-pass" type="password" placeholder="Password" />
         <button class="btn blue" onclick="cloudRegister()">注册</button>
@@ -190,11 +177,11 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
       </div>
       <div id="cloud-status" class="hint mt">未登录。</div>
       <div class="row mt">
-        <button class="btn green" onclick="cloudUpload()">上传本地数据到云端</button>
-        <button class="btn orange" onclick="cloudDownload()">从云端下载覆盖本地</button>
+        <button class="btn green" onclick="cloudUpload()">↑ 上传数据到云端</button>
+        <button class="btn orange" onclick="cloudDownload()">↓ 从云端下载覆盖</button>
       </div>
-      <div class="hint mt"><b>注意：</b>下载会覆盖当前本地数据。第一次同步建议先上传。</div>
     </div>
+    <button class="bottom-back" onclick="navBack()">← 返回上一页</button>
   </section>
 </main>
 
@@ -209,13 +196,9 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 
 <script src="app.js"></script>
 <script>
-  // Init notes page when tab clicked
   document.querySelector('.tab[data-page="notes"]').addEventListener('click', function(){ renderNotes(); });
   document.querySelector('.tab[data-page="review"]').addEventListener('click', function(){ renderReview(); });
   document.querySelector('.tab[data-page="mock"]').addEventListener('click', function(){ renderMockSetup(); });
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
-  }
 </script>
 </body>
 </html>
