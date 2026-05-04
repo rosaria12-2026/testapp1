@@ -19,11 +19,13 @@
     <button class="tab" data-page="quiz">答题</button>
     <button class="tab" data-page="review">复习库</button>
     <button class="tab" data-page="mock">模拟考</button>
+    <button class="tab" data-page="notes">📝笔记</button>
     <button class="tab" data-page="cloud">云同步</button>
   </div>
 </header>
 
 <main>
+  <!-- HOME -->
   <section id="home" class="page active">
     <div class="card">
       <div class="title">学习概况</div>
@@ -36,7 +38,6 @@
         <div class="stat"><div class="k">正确率</div><div class="v" id="st-rate">--</div></div>
       </div>
     </div>
-
     <div class="card">
       <div class="row">
         <div><div class="title">题目批次</div><div class="sub">导入后会出现在这里。</div></div>
@@ -44,7 +45,6 @@
       </div>
       <div id="batch-list"></div>
     </div>
-
     <div class="card">
       <div class="title">快速操作</div>
       <div class="row">
@@ -56,11 +56,12 @@
     </div>
   </section>
 
+  <!-- IMPORT -->
   <section id="import" class="page">
     <div class="card">
-      <div class="title">导入题目</div>
+      <div class="row"><button class="btn small" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">导入题目</div></div>
       <div class="sub">支持粘贴文本。TXT 可直接上传；PDF/DOCX 建议先复制文字粘贴。</div>
-      <input id="batch-name" class="full" placeholder="批次名称，例如：妇科辨证第1套 / PCE模拟卷A" />
+      <input id="batch-name" class="full" placeholder="批次名称，例如：PCE模拟卷A" />
       <label class="upload">
         <input id="file-input" type="file" accept=".txt" />
         <div class="upload-icon">📎</div>
@@ -69,14 +70,10 @@
       </label>
       <textarea id="raw" placeholder="把题目粘贴在这里：
 
-34. 范女士月经延期，血量少，色淡，质稀。腹闷痛，得温得压则缓。腰背痛，便溏。舌淡，脉细弱。诊断为：
-a）虚寒。
-b）实寒。
-c）气滞。
-d）阳虚。
-e）血虚。
+34. 范女士月经延期，血量少，色淡，质稀。诊断为：
+a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 答案：A"></textarea>
-      <div class="hint"><b>格式：</b>题号用 34. 或 34、；选项用 A. / A) / a）都可以。答案可写"答案：A"。题号不是从1开始也能核对。</div>
+      <div class="hint"><b>格式：</b>题号用 34. 或 34、；选项用 A. / A) / a）都可以。答案可写"答案：A"。</div>
       <div class="row mt">
         <button class="btn primary" onclick="importQuestions(true)">导入并开始</button>
         <button class="btn" onclick="importQuestions(false)">仅导入</button>
@@ -88,17 +85,18 @@ e）血虚。
     </div>
   </section>
 
+  <!-- QUIZ -->
   <section id="quiz" class="page">
     <div class="card">
       <div class="qtop">
         <div><div class="qcount">题 <strong id="q-num">--</strong> / <span id="q-total">--</span></div><div class="sub" id="q-batch"></div></div>
-        <div class="timer spacer" id="timer" title="点击暂停/继续">--</div>
+        <div class="timer spacer" id="timer" title="点击暂停/停止/重启">--</div>
       </div>
       <div class="progress"><div class="bar" id="qbar"></div></div>
       <div class="case" id="casebox"></div>
       <div class="qbody" id="qbody"></div>
       <div class="opts" id="opts"></div>
-      <div class="row actions">
+      <div class="row actions" id="quiz-actions">
         <button class="btn small" onclick="prevQ()">← 上一题</button>
         <button class="btn small" onclick="skipQ()">跳过</button>
         <button class="btn small orange" id="dkbtn" onclick="toggleDK()">不会</button>
@@ -108,9 +106,11 @@ e）血虚。
     </div>
   </section>
 
+  <!-- RESULT -->
   <section id="result" class="page">
     <div class="card">
-      <div class="title">答题结果</div><div class="sub" id="result-batch"></div>
+      <div class="row"><button class="btn small" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">答题结果</div></div>
+      <div class="sub" id="result-batch"></div>
       <div class="grid">
         <div class="stat"><div class="k">总题</div><div class="v" id="rs-total">0</div></div>
         <div class="stat"><div class="k">答对</div><div class="v greentext" id="rs-ok">0</div></div>
@@ -121,7 +121,7 @@ e）血虚。
     </div>
     <div class="card">
       <div class="title">补充/更正答案</div>
-      <div class="sub">支持：43.A 每行一个，或 ACBDE 字母串。若题号不是从1开始，请用"题号.答案"。</div>
+      <div class="sub">支持：43.A 每行一个，或 ACBDE 字母串。</div>
       <textarea id="answer-key" class="short" placeholder="43.A&#10;44.C&#10;45.B"></textarea>
       <div class="row mt">
         <button class="btn blue" onclick="compareKey()">按答案核对</button>
@@ -141,68 +141,51 @@ e）血虚。
     </div>
   </section>
 
+  <!-- REVIEW -->
   <section id="review" class="page">
-    <div class="card">
-      <div class="row">
-        <div><div class="title">复习库</div><div class="sub">错题和"不会"的题都在这里。点题目可看详情。</div></div>
-        <button class="btn purple spacer" onclick="printReport()">打印 / 存 PDF</button>
-        <button class="btn red" onclick="clearReview()">清空复习库</button>
-      </div>
-    </div>
     <div id="review-list"></div>
   </section>
 
+  <!-- MOCK -->
   <section id="mock" class="page">
     <div id="mock-area"></div>
   </section>
 
+  <!-- NOTES -->
+  <section id="notes" class="page">
+    <!-- rendered by renderNotes() -->
+  </section>
+
+  <!-- CLOUD -->
   <section id="cloud" class="page">
     <div class="card">
-      <div class="title">云同步</div>
-      <div class="sub">使用 Firebase 免费云端。先本地能用；设置 Firebase 后可以注册账号、上传、下载。</div>
-
+      <div class="row"><button class="btn small" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">云同步</div></div>
+      <div class="sub">使用 Firebase 免费云端。先本地能用；设置 Firebase 后可注册账号、上传、下载。</div>
       <div class="hint">
-        <b>你需要先去 Firebase 建项目：</b><br>
+        <b>Firebase 设置步骤：</b><br>
         1. Firebase Console → Add project<br>
-        2. Build → Authentication → Sign-in method → 开启 Email/Password<br>
+        2. Build → Authentication → Email/Password 开启<br>
         3. Build → Firestore Database → Create database<br>
         4. Project settings → Web app → 复制 firebaseConfig<br>
         5. 粘贴到下面保存
       </div>
-
-      <textarea id="firebase-config" class="short" placeholder='粘贴 firebaseConfig，例如：
-{
-  "apiKey": "...",
-  "authDomain": "...firebaseapp.com",
-  "projectId": "...",
-  "storageBucket": "...",
-  "messagingSenderId": "...",
-  "appId": "..."
-}'></textarea>
-
+      <textarea id="firebase-config" class="short" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
       <div class="row mt">
         <button class="btn primary" onclick="saveFirebaseConfig()">保存 Firebase 配置</button>
         <button class="btn" onclick="loadFirebaseConfigToBox()">读取已保存配置</button>
       </div>
-
       <hr class="sep">
-
       <div class="hint">
         <b>🤖 Claude AI 解析功能：</b><br>
-        需要 Anthropic API Key 才能使用 AI解析、生成同类题等功能。<br>
-        1. 去 <a href="https://console.anthropic.com" target="_blank" style="color:#1a4fa0">console.anthropic.com</a> 注册<br>
-        2. 左边菜单 API Keys → Create Key<br>
-        3. 复制 sk-ant-... 开头的 Key 粘贴到下面保存<br>
-        4. Key 只存在你自己的浏览器里，别人无法使用
+        需要 Anthropic API Key。去 <a href="https://console.anthropic.com" target="_blank" style="color:#1a4fa0">console.anthropic.com</a> → API Keys → Create Key<br>
+        Key 只存在你自己的浏览器里。
       </div>
       <div class="row mt">
         <input id="api-key-input" type="password" placeholder="sk-ant-api03-..." style="flex:1" />
         <button class="btn primary" onclick="saveApiKey()">保存 API Key</button>
       </div>
       <div id="api-key-status" class="sub mt"></div>
-
       <hr class="sep">
-
       <div class="row">
         <input id="cloud-email" placeholder="Email" />
         <input id="cloud-pass" type="password" placeholder="Password" />
@@ -210,19 +193,17 @@ e）血虚。
         <button class="btn primary" onclick="cloudLogin()">登录</button>
         <button class="btn" onclick="cloudLogout()">退出</button>
       </div>
-
       <div id="cloud-status" class="hint mt">未登录。</div>
-
       <div class="row mt">
         <button class="btn green" onclick="cloudUpload()">上传本地数据到云端</button>
         <button class="btn orange" onclick="cloudDownload()">从云端下载覆盖本地</button>
       </div>
-
-      <div class="hint mt"><b>注意：</b>下载会覆盖当前本地数据。第一次同步建议先点"上传本地数据到云端"。</div>
+      <div class="hint mt"><b>注意：</b>下载会覆盖当前本地数据。第一次同步建议先上传。</div>
     </div>
   </section>
 </main>
 
+<!-- MODAL -->
 <div id="modal-bg" class="modal-bg" onclick="if(event.target.id==='modal-bg')closeModal()">
   <div class="modal">
     <div class="row"><b id="m-title">题目</b><button class="btn small spacer" onclick="closeModal()">关闭</button></div>
@@ -233,9 +214,13 @@ e）血虚。
 
 <script src="app.js"></script>
 <script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
-}
+  // Init notes page when tab clicked
+  document.querySelector('.tab[data-page="notes"]').addEventListener('click', function(){ renderNotes(); });
+  document.querySelector('.tab[data-page="review"]').addEventListener('click', function(){ renderReview(); });
+  document.querySelector('.tab[data-page="mock"]').addEventListener('click', function(){ renderMockSetup(); });
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
+  }
 </script>
 </body>
 </html>
