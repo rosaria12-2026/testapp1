@@ -10,12 +10,13 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
 // migrate old keys
 ['analysisCache','notes','starMap','answerKeys'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
+if(DB.lastPos===undefined) DB.lastPos=null;
 // migrate from v4 if v5 is empty
 (function(){
   if(DB.batches.length===0){
@@ -358,8 +359,14 @@ async function batchAISummary(batchId){
 // ═══════════════════════════════════════════════════════
 var QZ = {batch:null,qs:[],ans:[],dk:{},cur:0,sel:null,tmr:null,tLeft:60,tMax:60,paused:false,stopped:false,_autoNext:null,returnToBatchId:null};
 
-// FIX: resumeQuiz directly jumps to last unanswered question
 function resumeQuiz(){
+  if(!DB.batches.length){ showToast('请先导入题目。'); return; }
+  // First: use saved last position if available
+  if(DB.lastPos && DB.lastPos.batchId && DB.lastPos.idx!=null){
+    var lb=null; for(var x=0;x<DB.batches.length;x++){if(DB.batches[x].id===DB.lastPos.batchId){lb=DB.batches[x];break;}}
+    if(lb){ startBatchFrom(DB.lastPos.batchId, DB.lastPos.idx); return; }
+  }
+  // Fallback: find first unanswered question
   var batch=null, resumeIdx=0;
   for(var i=0;i<DB.batches.length;i++){
     var b=DB.batches[i], p=b.progress, found=false;
@@ -367,8 +374,9 @@ function resumeQuiz(){
     if(found){ batch=b; break; }
   }
   if(!batch){
-    showToast(DB.batches.length ? '所有题目已全部作答完毕！' : '请先导入题目。');
-    return;
+    // All answered: go to last batch, last question
+    batch=DB.batches[DB.batches.length-1];
+    resumeIdx=batch.questions.length-1;
   }
   startBatchFrom(batch.id, resumeIdx);
 }
@@ -377,9 +385,23 @@ function startFirstBatch(){ if(!DB.batches.length){showToast('请先导入题目
 
 function startBatch(batchId, fromStart){
   var batch=null; for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}} if(!batch)return;
-  if(fromStart){ batch.progress={idx:0,answers:new Array(batch.questions.length).fill(null),dk:{}}; saveDB(); }
-  var p=batch.progress, resumeIdx=0;
-  if(!fromStart){ for(var j=0;j<p.answers.length;j++){if(!p.answers[j]){resumeIdx=j;break;}} }
+  if(fromStart){
+    batch.progress={idx:0,answers:new Array(batch.questions.length).fill(null),dk:{}};
+    saveDB();
+    startBatchFrom(batchId, 0);
+    return;
+  }
+  var p=batch.progress;
+  // Use saved lastPos for this batch if available
+  if(DB.lastPos && DB.lastPos.batchId===batchId && DB.lastPos.idx!=null){
+    startBatchFrom(batchId, DB.lastPos.idx);
+    return;
+  }
+  // Otherwise find first unanswered
+  var resumeIdx=-1;
+  for(var j=0;j<p.answers.length;j++){ if(!p.answers[j]){ resumeIdx=j; break; } }
+  // If all answered, go to last question
+  if(resumeIdx<0) resumeIdx=batch.questions.length-1;
   startBatchFrom(batchId, resumeIdx);
 }
 
@@ -470,7 +492,15 @@ function pickOpt(l,btn){
     },700);
   }
 }
-function autoSave(i,ans){ QZ.ans[i]=ans; QZ.batch.progress.answers=QZ.ans; QZ.batch.progress.idx=QZ.cur; QZ.batch.progress.dk=QZ.dk; saveDB(); }
+function autoSave(i,ans){
+  QZ.ans[i]=ans;
+  QZ.batch.progress.answers=QZ.ans;
+  QZ.batch.progress.idx=QZ.cur;
+  QZ.batch.progress.dk=QZ.dk;
+  // Save last played position for resumeQuiz
+  DB.lastPos={batchId:QZ.batch.id, idx:QZ.cur};
+  saveDB();
+}
 
 // ═══════════════════════════════════════════════════════
 // TIMER — click once to pause, click again to stop (no auto-jump)
@@ -568,21 +598,26 @@ function showResultPage(){
   } else {
     document.getElementById('key-msg').textContent='';
   }
-  // Add back-to-batch button
+  // Add back-to-batch button — only once, remove old one first
   var batchId = QZ.returnToBatchId;
-  if(batchId){
-    setTimeout(function(){
-      var r=document.getElementById('result');
-      if(!r) return;
-      var btn=document.createElement('div');
-      btn.style.cssText='padding:12px 16px;background:#e8f5ed;border:1px solid #b8dfc8;border-radius:8px;margin:12px 16px;display:flex;align-items:center;gap:12px';
-      var bBtn=document.createElement('button');bBtn.className='btn primary';bBtn.textContent='📋 回到题目列表';
-      (function(bid){bBtn.addEventListener('click',function(){showBatchDetail(bid);});})(batchId);
-      btn.innerHTML='<span style="font-size:14px;flex:1">✓ 答题完成！</span>';
-      btn.appendChild(bBtn);
-      r.insertBefore(btn, r.firstChild);
-    },100);
-  }
+  setTimeout(function(){
+    // Remove any previous banners (prevents duplicates)
+    var old = document.getElementById('result-done-banner');
+    if(old) old.parentNode.removeChild(old);
+    if(!batchId) return;
+    var r=document.getElementById('result'); if(!r) return;
+    var btn=document.createElement('div');
+    btn.id='result-done-banner';
+    btn.style.cssText='padding:12px 16px;background:#e8f5ed;border:1px solid #b8dfc8;border-radius:8px;margin:0 0 12px 0;display:flex;align-items:center;gap:12px';
+    var bBtn=document.createElement('button');bBtn.className='btn primary';bBtn.textContent='📋 回到题目列表';
+    (function(bid){bBtn.addEventListener('click',function(){showBatchDetail(bid);});})(batchId);
+    btn.innerHTML='<span style="font-size:14px;flex:1">✓ 答题完成！</span>';
+    btn.appendChild(bBtn);
+    // Insert after the first card (result stats card), not before everything
+    var firstCard = r.querySelector('.card');
+    if(firstCard) firstCard.parentNode.insertBefore(btn, firstCard.nextSibling);
+    else r.insertBefore(btn, r.firstChild);
+  },50);
   navTo('result');
 }
 
