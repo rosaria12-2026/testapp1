@@ -10,12 +10,12 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
 // migrate old keys
-['analysisCache','notes','starMap'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
+['analysisCache','notes','starMap','answerKeys'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
 // migrate from v4 if v5 is empty
 (function(){
   if(DB.batches.length===0){
@@ -492,7 +492,15 @@ function showResultPage(){
   document.getElementById('rs-bad').textContent=wrong;
   document.getElementById('rs-dk').textContent=dkCount;
   document.getElementById('rs-rate').textContent=withAns?Math.round(correct/withAns*100)+'%':'—';
-  document.getElementById('answer-key').value=''; document.getElementById('key-msg').textContent='';
+  // Auto-load saved answer key for this batch
+  var savedKey = (QZ.batch && DB.answerKeys) ? (DB.answerKeys[QZ.batch.id]||'') : '';
+  document.getElementById('answer-key').value=savedKey;
+  if(savedKey){
+    document.getElementById('key-msg').textContent='（已自动加载上次答案 — 直接点"核对"即可）';
+    document.getElementById('key-msg').style.color='#2e7d52';
+  } else {
+    document.getElementById('key-msg').textContent='';
+  }
   // Add back-to-batch button
   var batchId = QZ.returnToBatchId;
   if(batchId){
@@ -514,12 +522,60 @@ function showResultPage(){
 function compareKey(){
   var raw=document.getElementById('answer-key').value.trim(), msg=document.getElementById('key-msg');
   if(!raw){msg.textContent='请先粘贴答案。';return;}
-  var keyMap={};
-  if(/^\s*[A-Ea-e]{5,}/.test(raw)){ raw.replace(/\s/g,'').split('').forEach(function(c,i){keyMap[i]=c.toUpperCase();}); }
-  else{ raw.split('\n').forEach(function(line){var m=line.match(/(\d+)[.\s]*([A-Ea-e])/i);if(m)keyMap[parseInt(m[1])-1]=m[2].toUpperCase();}); }
-  var updated=0, correct=0;
-  QZ.qs.forEach(function(q,i){ var key=keyMap[i]; if(!key)return; q.answer=key; updated++; var my=QZ.ans[i]; if(my&&my!=='skip'&&my.toUpperCase()===key)correct++; });
-  showResultPage(); msg.textContent='✓ 已对比 '+updated+' 题，答对 '+correct+' 题。'; msg.style.color='green';
+
+  var keyByNum={};  // qNum -> letter,  e.g. {141:'D', 142:'C'}
+  var keyByPos={};  // position -> letter, for pure letter string fallback
+
+  // Format 1: pure letter string e.g. "ACBDE..."
+  if(/^\s*[A-Ea-e]+\s*$/.test(raw.replace(/\s/g,''))){
+    raw.replace(/\s/g,'').split('').forEach(function(c,i){keyByPos[i]=c.toUpperCase();});
+  } else {
+    // Format 2: "141. d  142. c  143. e" — tab/space/newline separated
+    // Match all (number, letter) pairs anywhere in the text
+    var pairRe=/(\d{1,4})\s*[.、]?\s*([A-Ea-e])(?=[^A-Za-z]|$)/gi, m;
+    while((m=pairRe.exec(raw))!==null){
+      keyByNum[parseInt(m[1])]=m[2].toUpperCase();
+    }
+  }
+
+  if(!Object.keys(keyByNum).length && !Object.keys(keyByPos).length){
+    msg.textContent='未能识别答案格式，请检查。'; msg.style.color='red'; return;
+  }
+
+  var updated=0, correct=0, notFound=0;
+  QZ.qs.forEach(function(q,i){
+    var key;
+    if(Object.keys(keyByNum).length){
+      // Match by question number
+      key = keyByNum[q.num];
+      if(!key){ notFound++; return; }
+    } else {
+      // Match by position
+      key = keyByPos[i]; if(!key) return;
+    }
+    q.answer=key; updated++;
+    var my=QZ.ans[i];
+    if(my&&my!=='skip'&&my.toUpperCase()===key) correct++;
+  });
+
+  // Save answer key for this batch so it auto-loads next time
+  if(QZ.batch){ saveAnswerKeyForBatch(QZ.batch.id, raw); }
+
+  showResultPage();
+  var note = notFound>0?' ('+notFound+'题题号未匹配，请检查题号是否一致)':'';
+  msg.textContent='✓ 已对比 '+updated+' 题，答对 '+correct+' 题'+note+'。';
+  msg.style.color='green';
+}
+
+// Per-batch answer key storage
+function saveAnswerKeyForBatch(batchId, raw){
+  if(!DB.answerKeys) DB.answerKeys={};
+  DB.answerKeys[batchId]=raw; saveDB();
+  showToast('✓ 答案已保存，下次自动加载');
+}
+function loadAnswerKeyForBatch(batchId){
+  if(!DB.answerKeys) return '';
+  return DB.answerKeys[batchId]||'';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -561,6 +617,7 @@ function openModal(qid,idx){
     +'<button class="btn small" style="background:#FF6B6B;color:#fff;border:none;font-weight:700" onclick="hlSelected(\'red\')">🔴 红色标注</button>'
     +'<button class="btn small" style="background:#fff;color:#333;border-bottom:2.5px solid #333;font-weight:700" onclick="hlSelected(\'underline\')"><u>U</u> 划线</button>'
     +'<button class="btn small" style="background:#fff;color:#333;border:1px solid #aaa;font-weight:700" onclick="hlSelected(\'bold\')"><b>B</b> 粗体</button>'
+    +'<button class="btn small" style="background:#f5f5f5;color:#555;border:1px solid #ccc" onclick="undoHighlight()">↩ 撤销</button>'
     +'<button class="btn small blue" onclick="saveSelToNote()">📝 选中→笔记</button>'
     +'<button class="btn small" onclick="addWholeQToNote()">📌 整题→笔记</button>'
     +'</div>';
@@ -626,6 +683,7 @@ function openModalFromBatch(qid, batchId, idx){
     +'<button class="btn small" style="background:#FF6B6B;color:#fff;border:none;font-weight:700" onclick="hlSelected(\'red\')">🔴 红色</button>'
     +'<button class="btn small" style="background:#fff;color:#333;border-bottom:2.5px solid #333;font-weight:700" onclick="hlSelected(\'underline\')"><u>U</u> 划线</button>'
     +'<button class="btn small" style="background:#fff;color:#333;border:1px solid #aaa;font-weight:700" onclick="hlSelected(\'bold\')"><b>B</b> 粗体</button>'
+    +'<button class="btn small" style="background:#f5f5f5;color:#555;border:1px solid #ccc" onclick="undoHighlight()">↩ 撤销</button>'
     +'<button class="btn small blue" onclick="saveSelToNote()">📝 存入笔记</button>'
     +'<button class="btn small" onclick="addWholeQToNote()">📌 整题→笔记</button>'
     +'</div>';
@@ -698,10 +756,28 @@ function hlSelected(type){
     else if(type==='red') span.style.cssText='background:#FF6B6B;color:#fff;border-radius:2px;padding:0 1px';
     else if(type==='underline') span.style.cssText='text-decoration:underline;text-underline-offset:2px;text-decoration-color:#333';
     else if(type==='bold') span.style.cssText='font-weight:700';
+    span.dataset.hlType = type;
     range.surroundContents(span);
+    _hlUndo.push(span);
     sel.removeAllRanges();
+    showToast('已标注，点「↩ 撤销」可取消');
   }catch(e){ showToast('选中跨越多个区域，请重新选择一段文字'); }
 }
+// Undo stack for highlights
+var _hlUndo = [];
+
+function undoHighlight(){
+  if(!_hlUndo.length){ showToast('没有可撤销的标注'); return; }
+  var span = _hlUndo.pop();
+  try{
+    var parent = span.parentNode;
+    if(!parent){ showToast('已无法撤销（可能已关闭弹窗）'); return; }
+    while(span.firstChild) parent.insertBefore(span.firstChild, span);
+    parent.removeChild(span);
+    showToast('✓ 已撤销最后一次标注');
+  }catch(e){ showToast('撤销失败'); }
+}
+
 function saveSelToNote(){
   var sel=window.getSelection(); if(!sel||sel.toString().trim()===''){showToast('请先选中文字');return;}
   var text=sel.toString().trim();
@@ -1301,7 +1377,7 @@ function cloudDownload(){
     .then(function(doc){
       if(!doc.exists){showToast('云端暂无数据');return;}
       DB=JSON.parse(doc.data().db);
-      ['analysisCache','notes','starMap'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
+      ['analysisCache','notes','starMap','answerKeys'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
       saveDB(); renderHome(); showToast('✓ 已从云端下载数据');
     })
     .catch(function(e){showToast('下载失败：'+e.message);});
