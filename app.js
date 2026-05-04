@@ -125,91 +125,176 @@ function parseQ(raw) {
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-65248);})
     .replace(/）/g,')').replace(/（/g,'(').replace(/。/g,'.').replace(/　/g,' ');
   var lines = raw.split('\n').map(function(l){return l.trim();});
-  // qRe: number+dot+content OR number+dot alone (body on next line)
-  var qRe=/^[(\[]?\s*(\d{1,4})\s*[).、]\s*(.*)/, optRe=/^([A-Ea-e])\s*[).、]\s*(.+)/;
-  var inRe=/([A-Ea-e])\s*[).]\s*(.+?)(?=\s{2,}[A-Ea-e]\s*[).]|$)/g;
-  var ansRe=/[\u3010\[]?[\u7b54\u6848Aa][\u6848nswer]*[\uff1a:]\s*([A-Ea-e])[\u3011\]]?/i;
-  var caseRe=/根据以下|根据下列|以下病例|基于以下|以下案例|following case|following scenario/i;
-  // Range header: e.g. "208-215 基于以下病案：" or "213-215基于以下病例"
-  var caseRangeRe=/^(\d{1,4})\s*[-–~]\s*(\d{1,4})\s*[\s:：]*(基于|根据|以下|following)/i;
+  var qRe   = /^[(\[]?\s*(\d{1,4})\s*[).、]\s*(.*)/;
+  var optRe = /^([A-Ea-e])\s*[).、]\s*(.+)/;
+  var inRe  = /([A-Ea-e])\s*[).]\s*(.+?)(?=\s{2,}[A-Ea-e]\s*[).]|$)/g;
+  var ansRe = /[\u3010\[]?[\u7b54\u6848Aa][\u6848nswer]*[\uff1a:]\s*([A-Ea-e])[\u3011\]]?/i;
+  // Case keywords
+  var caseKw = /根据以下|根据下列|以下病例|基于以下|以下案例|以下情况|病案|following case|following scenario/i;
+  // Range line: "208-215 基于以下病案：" — number range + case keyword
+  var rangeRe = /^(\d{1,4})\s*[-–~]\s*(\d{1,4})[^\n]*(基于|根据|以下|病例|病案|案例|following)/i;
   function isCN(q){return /[\u4e00-\u9fff]/.test(q.body);}
-  var blocks=[], curQ=null, pendingCase=null;
-  function push(){
-    if(curQ&&curQ.opts.length>=2&&isCN(curQ)){
-      if(pendingCase&&!curQ.caseText) curQ.caseText=pendingCase;
-      blocks.push(curQ);
-    }
-  }
+
+  // ── STEP 1: Pre-scan to find all case blocks ──────────
+  // caseBlocks: [{lo, hi, text}]  hi=null means "until next case"
+  var caseBlocks = [];
   for(var i=0;i<lines.length;i++){
     var l=lines[i]; if(!l) continue;
+    // Range header: "208-215 基于以下病案"
+    var rm=l.match(rangeRe);
+    if(rm){
+      var lo=parseInt(rm[1]), hi=parseInt(rm[2]);
+      // Collect case body: everything after this line until next question-like line
+      var bodyLines=[l], j=i+1;
+      while(j<lines.length){
+        var nl=lines[j];
+        // Stop if we hit a line that looks like a new question (num + option pattern later)
+        // But DON'T stop just because a line starts with a number — case text can have numbers
+        // Stop at: optRe line, or ansRe line, or another rangeRe line
+        if(!nl){j++;continue;}
+        if(nl.match(rangeRe)) break;        // another case range
+        if(nl.match(optRe)) break;          // options starting = first question's options
+        if(nl.match(ansRe)) break;
+        // If line matches qRe AND the number is within our range → it's the first question, stop
+        var qm2=nl.match(qRe);
+        if(qm2&&parseInt(qm2[1])>=lo) break;
+        bodyLines.push(nl); j++;
+      }
+      caseBlocks.push({lo:lo, hi:hi, text:bodyLines.join('\n').trim()});
+      i=j-1; continue;
+    }
+    // Pure keyword line (no range): "根据以下病例..."
+    if(caseKw.test(l)&&!l.match(qRe)){
+      var bodyLines=[l], j=i+1;
+      while(j<lines.length&&lines[j]&&!lines[j].match(qRe)&&!lines[j].match(rangeRe)){
+        bodyLines.push(lines[j]); j++;
+      }
+      // Peek at first question number after this block to infer range start
+      var firstQ=null;
+      if(j<lines.length){ var qm3=lines[j].match(qRe); if(qm3) firstQ=parseInt(qm3[1]); }
+      caseBlocks.push({lo:firstQ, hi:null, text:bodyLines.join('\n').trim()});
+      i=j-1; continue;
+    }
+  }
+
+  // ── STEP 2: Parse questions normally ──────────────────
+  var blocks=[], curQ=null;
+  // Reset and re-scan, now skipping lines consumed by case detection
+  // We need a clean pass — rebuild lines without case header lines
+  // Actually easier: just do a normal parse pass and skip rangeRe / pure caseKw lines
+  var i2=0;
+  var rawLines=raw.split('\n').map(function(l){return l.trim();});
+  while(i2<rawLines.length){
+    var l=rawLines[i2]; i2++;
+    if(!l) continue;
     if(/^请为|^please select/i.test(l)&&l.length<60) continue;
-    // Detect range-based case header: "208-215 基于以下病案："
-    var crm=l.match(caseRangeRe);
-    if(crm){
-      // This line is a case range header — collect following lines as case body
-      var cl=[l],j=i+1;
-      while(j<lines.length&&lines[j]&&!lines[j].match(qRe)){cl.push(lines[j]);j++;}
-      pendingCase=cl.join('\n');i=j-1;continue;
-    }
-    if(caseRe.test(l)&&!l.match(qRe)){
-      var cl=[l],j=i+1;
-      while(j<lines.length&&lines[j]&&!lines[j].match(qRe)){cl.push(lines[j]);j++;}
-      pendingCase=cl.join('\n');i=j-1;continue;
-    }
+    // Skip range headers and pure case keyword lines (already extracted above)
+    if(l.match(rangeRe)){ while(i2<rawLines.length&&rawLines[i2]&&!rawLines[i2].match(qRe)&&!rawLines[i2].match(rangeRe)) i2++; continue; }
+    if(caseKw.test(l)&&!l.match(qRe)){ while(i2<rawLines.length&&rawLines[i2]&&!rawLines[i2].match(qRe)&&!rawLines[i2].match(rangeRe)) i2++; continue; }
     var am=l.match(ansRe); if(am&&curQ){curQ.answer=am[1].toUpperCase();continue;}
     var qm=l.match(qRe);
     if(qm){
       var qnum=parseInt(qm[1]), qbody=qm[2].trim();
-      // If body is empty, grab next non-empty line as body
       if(!qbody){
-        var ni=i+1;
-        while(ni<lines.length&&!lines[ni].trim()) ni++;
-        if(ni<lines.length&&!lines[ni].match(optRe)&&!lines[ni].match(ansRe)){
-          qbody=lines[ni].trim(); i=ni;
+        while(i2<rawLines.length&&!rawLines[i2].trim()) i2++;
+        if(i2<rawLines.length&&!rawLines[i2].match(optRe)&&!rawLines[i2].match(ansRe)){
+          qbody=rawLines[i2].trim(); i2++;
         }
       }
-      if(!qbody) continue; // skip bare number with no body
-      push();
+      if(!qbody) continue;
+      if(curQ&&curQ.opts.length>=2&&isCN(curQ)) blocks.push(curQ);
       curQ={num:qnum,body:qbody,opts:[],answer:null,id:uid(),caseText:null};
       continue;
     }
     if(!curQ) continue;
     var om=l.match(optRe); if(om){curQ.opts.push({letter:om[1].toUpperCase(),text:om[2].trim()});continue;}
     if(/[A-Ea-e]\s*[).]/.test(l)){
-      var found=[],m; inRe.lastIndex=0;
-      while((m=inRe.exec(l))!==null)found.push({letter:m[1].toUpperCase(),text:m[2].trim()});
+      var found=[],m2; inRe.lastIndex=0;
+      while((m2=inRe.exec(l))!==null) found.push({letter:m2[1].toUpperCase(),text:m2[2].trim()});
       if(found.length>=2){curQ.opts.push.apply(curQ.opts,found);continue;}
     }
-    // After options are complete, don't silently swallow lines — check if it's a new question number
     if(curQ.opts.length>=2){
-      // Short Chinese lines after options = continuation noise, skip
       if(/^[\u4e00-\u9fff]/.test(l)&&l.length<80) continue;
       if(l.length<80&&!/\d/.test(l)) continue;
-    } else if(curQ.opts.length===0){
-      curQ.body+='\n'+l;
-    } else {
-      curQ.opts[curQ.opts.length-1].text+=' '+l;
-    }
+    } else if(curQ.opts.length===0){ curQ.body+='\n'+l; }
+    else { curQ.opts[curQ.opts.length-1].text+=' '+l; }
   }
-  push();
-  blocks.forEach(function(q){ if(!q.caseText)return; var rm=q.caseText.match(/(\d{1,4})\s*[-–~]\s*(\d{1,4})/); if(rm) q._cr={lo:parseInt(rm[1]),hi:parseInt(rm[2])}; });
-  var actCase=null,actRange=null;
+  if(curQ&&curQ.opts.length>=2&&isCN(curQ)) blocks.push(curQ);
+
+  // ── STEP 3: Assign case text to questions ─────────────
+  // For each question, find matching case block by question number
   blocks.forEach(function(q){
-    if(q.caseText){
-      actCase=q.caseText; actRange=q._cr||null;
-      // If this question already has the case, assign it and keep propagating
-      return;
-    }
-    if(actCase){
-      if(actRange){
-        if(q.num>=actRange.lo&&q.num<=actRange.hi){ q.caseText=actCase; }
-        else if(q.num>actRange.hi){ actCase=null; actRange=null; }
+    for(var ci=0;ci<caseBlocks.length;ci++){
+      var cb=caseBlocks[ci];
+      if(cb.lo===null) continue; // no range info, skip for now
+      if(cb.hi!==null){
+        // Explicit range: e.g. 208-215
+        if(q.num>=cb.lo&&q.num<=cb.hi){ q.caseText=cb.text; return; }
       } else {
-        // No range specified — propagate until we hit another case or end
-        q.caseText=actCase;
+        // Range start only: propagate from lo until next case block starts
+        var nextLo=Infinity;
+        for(var ci2=ci+1;ci2<caseBlocks.length;ci2++){
+          if(caseBlocks[ci2].lo!==null){ nextLo=caseBlocks[ci2].lo; break; }
+        }
+        if(q.num>=cb.lo&&q.num<nextLo){ q.caseText=cb.text; return; }
+      }
+    }
+    // Fallback: assign no-range case blocks based on position
+    for(var ci3=0;ci3<caseBlocks.length;ci3++){
+      if(caseBlocks[ci3].lo===null){
+        // Assign to questions that come right after this block (no explicit range)
+        // Only if question has no case yet
+        // Skip — handled by pendingCase fallback below
       }
     }
   });
+
+  // Fallback: assign null-lo caseBlocks to questions sequentially
+  var pendingNullCase=null;
+  var nullCaseCi=0;
+  var nullCases=caseBlocks.filter(function(c){return c.lo===null;});
+  // For null-lo cases, find which questions they precede by position in blocks array
+  // Use a second pass with original line order
+  if(nullCases.length){
+    // Re-scan raw to map null-lo cases to question numbers
+    var scanI=0, nullCI=0;
+    var rawL2=raw.split('\n').map(function(l){return l.trim();});
+    var nullCaseAssigned=false;
+    var currentNullCase=null;
+    var currentNullCaseNextQ=null;
+    // Find for each null-lo case: the first question number after it
+    nullCases.forEach(function(nc,nci){
+      // Find position of this case text in rawL2
+      for(var ri=0;ri<rawL2.length;ri++){
+        if(caseKw.test(rawL2[ri])&&!rawL2[ri].match(qRe)){
+          // Found a case keyword line — find next question
+          for(var ri2=ri+1;ri2<rawL2.length;ri2++){
+            var qm4=rawL2[ri2].match(qRe);
+            if(qm4){ nc.lo=parseInt(qm4[1]); break; }
+          }
+          break;
+        }
+      }
+    });
+    // Now re-run assignment for null-lo cases that now have lo
+    blocks.forEach(function(q){
+      if(q.caseText) return; // already assigned
+      for(var ci4=0;ci4<caseBlocks.length;ci4++){
+        var cb=caseBlocks[ci4];
+        if(cb.lo===null) continue;
+        if(cb.hi!==null){
+          if(q.num>=cb.lo&&q.num<=cb.hi){ q.caseText=cb.text; return; }
+        } else {
+          var nextLo2=Infinity;
+          for(var ci5=ci4+1;ci5<caseBlocks.length;ci5++){
+            if(caseBlocks[ci5].lo!==null){ nextLo2=caseBlocks[ci5].lo; break; }
+          }
+          if(q.num>=cb.lo&&q.num<nextLo2){ q.caseText=cb.text; return; }
+        }
+      }
+    });
+  }
+
   return blocks;
 }
 function uid(){return Math.random().toString(36).slice(2,10);}
