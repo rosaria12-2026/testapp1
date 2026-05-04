@@ -17,6 +17,37 @@ function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } cat
 // migrate old keys
 ['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
 if(DB.lastPos===undefined) DB.lastPos=null;
+// Re-fix caseText for existing batches: clear wrong case assignments beyond range
+(function fixCaseRanges(){
+  DB.batches.forEach(function(batch){
+    // Build a map of caseText ranges from questions that have caseText
+    // Find all distinct caseText values and their number ranges
+    var caseRanges = []; // [{lo, hi, text}]
+    batch.questions.forEach(function(q){
+      if(!q.caseText) return;
+      var rm = q.caseText.match(/(\d{1,4})\s*[-–~]\s*(\d{1,4})/);
+      if(rm){
+        var lo=parseInt(rm[1]), hi=parseInt(rm[2]);
+        // Only keep if not already recorded
+        var found=caseRanges.some(function(r){return r.lo===lo&&r.hi===hi;});
+        if(!found) caseRanges.push({lo:lo,hi:hi,text:q.caseText});
+      }
+    });
+    if(!caseRanges.length) return;
+    // Re-assign caseText: clear questions outside their range
+    batch.questions.forEach(function(q){
+      if(!q.caseText) return;
+      var rm = q.caseText.match(/(\d{1,4})\s*[-–~]\s*(\d{1,4})/);
+      if(rm){
+        var lo=parseInt(rm[1]), hi=parseInt(rm[2]);
+        if(q.num<lo || q.num>hi){
+          q.caseText=null; // clear wrong assignment
+        }
+      }
+    });
+  });
+  saveDB();
+})();
 // migrate from v4 if v5 is empty
 (function(){
   if(DB.batches.length===0){
