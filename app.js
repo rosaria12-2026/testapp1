@@ -124,30 +124,69 @@ function parseQ(raw) {
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-65248);})
     .replace(/）/g,')').replace(/（/g,'(').replace(/。/g,'.').replace(/　/g,' ');
   var lines = raw.split('\n').map(function(l){return l.trim();});
-  var qRe=/^[(\[]?\s*(\d{1,4})\s*[).、]\s*(.+)/, optRe=/^([A-Ea-e])\s*[).、]\s*(.+)/;
+  // qRe: number+dot+content OR number+dot alone (body on next line)
+  var qRe=/^[(\[]?\s*(\d{1,4})\s*[).、]\s*(.*)/, optRe=/^([A-Ea-e])\s*[).、]\s*(.+)/;
   var inRe=/([A-Ea-e])\s*[).]\s*(.+?)(?=\s{2,}[A-Ea-e]\s*[).]|$)/g;
   var ansRe=/[\u3010\[]?[\u7b54\u6848Aa][\u6848nswer]*[\uff1a:]\s*([A-Ea-e])[\u3011\]]?/i;
   var caseRe=/根据以下|根据下列|以下病例|following case|following scenario/i;
   function isCN(q){return /[\u4e00-\u9fff]/.test(q.body);}
   var blocks=[], curQ=null, pendingCase=null;
-  function push(){ if(curQ&&curQ.opts.length>=2&&isCN(curQ)){ if(pendingCase&&!curQ.caseText) curQ.caseText=pendingCase; blocks.push(curQ); } }
+  function push(){
+    if(curQ&&curQ.opts.length>=2&&isCN(curQ)){
+      if(pendingCase&&!curQ.caseText) curQ.caseText=pendingCase;
+      blocks.push(curQ);
+    }
+  }
   for(var i=0;i<lines.length;i++){
     var l=lines[i]; if(!l) continue;
     if(/^请为|^please select/i.test(l)&&l.length<60) continue;
-    if(caseRe.test(l)&&!l.match(qRe)){var cl=[l],j=i+1;while(j<lines.length&&lines[j]&&!lines[j].match(qRe)){cl.push(lines[j]);j++;}pendingCase=cl.join('\n');i=j-1;continue;}
+    if(caseRe.test(l)&&!l.match(qRe)){
+      var cl=[l],j=i+1;
+      while(j<lines.length&&lines[j]&&!lines[j].match(qRe)){cl.push(lines[j]);j++;}
+      pendingCase=cl.join('\n');i=j-1;continue;
+    }
     var am=l.match(ansRe); if(am&&curQ){curQ.answer=am[1].toUpperCase();continue;}
-    var qm=l.match(qRe); if(qm){push();curQ={num:parseInt(qm[1]),body:qm[2].trim(),opts:[],answer:null,id:uid(),caseText:null};continue;}
+    var qm=l.match(qRe);
+    if(qm){
+      var qnum=parseInt(qm[1]), qbody=qm[2].trim();
+      // If body is empty, grab next non-empty line as body
+      if(!qbody){
+        var ni=i+1;
+        while(ni<lines.length&&!lines[ni].trim()) ni++;
+        if(ni<lines.length&&!lines[ni].match(optRe)&&!lines[ni].match(ansRe)){
+          qbody=lines[ni].trim(); i=ni;
+        }
+      }
+      if(!qbody) continue; // skip bare number with no body
+      push();
+      curQ={num:qnum,body:qbody,opts:[],answer:null,id:uid(),caseText:null};
+      continue;
+    }
     if(!curQ) continue;
     var om=l.match(optRe); if(om){curQ.opts.push({letter:om[1].toUpperCase(),text:om[2].trim()});continue;}
-    if(/[A-Ea-e]\s*[).]/.test(l)){var found=[],m;inRe.lastIndex=0;while((m=inRe.exec(l))!==null)found.push({letter:m[1].toUpperCase(),text:m[2].trim()});if(found.length>=2){curQ.opts.push.apply(curQ.opts,found);continue;}}
-    if(curQ.opts.length>=2){if(/^[\u4e00-\u9fff]/.test(l))continue;if(l.length<80)continue;}
-    else if(curQ.opts.length===0) curQ.body+='\n'+l;
-    else curQ.opts[curQ.opts.length-1].text+=' '+l;
+    if(/[A-Ea-e]\s*[).]/.test(l)){
+      var found=[],m; inRe.lastIndex=0;
+      while((m=inRe.exec(l))!==null)found.push({letter:m[1].toUpperCase(),text:m[2].trim()});
+      if(found.length>=2){curQ.opts.push.apply(curQ.opts,found);continue;}
+    }
+    // After options are complete, don't silently swallow lines — check if it's a new question number
+    if(curQ.opts.length>=2){
+      // Short Chinese lines after options = continuation noise, skip
+      if(/^[\u4e00-\u9fff]/.test(l)&&l.length<80) continue;
+      if(l.length<80&&!/\d/.test(l)) continue;
+    } else if(curQ.opts.length===0){
+      curQ.body+='\n'+l;
+    } else {
+      curQ.opts[curQ.opts.length-1].text+=' '+l;
+    }
   }
   push();
   blocks.forEach(function(q){ if(!q.caseText)return; var rm=q.caseText.match(/(\d{1,4})\s*[-–~]\s*(\d{1,4})/); if(rm) q._cr={lo:parseInt(rm[1]),hi:parseInt(rm[2])}; });
   var actCase=null,actRange=null;
-  blocks.forEach(function(q){ if(q.caseText){actCase=q.caseText;actRange=q._cr||null;} else if(actCase){ if(actRange){ if(q.num>=actRange.lo&&q.num<=actRange.hi) q.caseText=actCase; else if(q.num>actRange.hi){actCase=null;actRange=null;} } } });
+  blocks.forEach(function(q){
+    if(q.caseText){actCase=q.caseText;actRange=q._cr||null;}
+    else if(actCase){ if(actRange){ if(q.num>=actRange.lo&&q.num<=actRange.hi) q.caseText=actCase; else if(q.num>actRange.hi){actCase=null;actRange=null;} } }
+  });
   return blocks;
 }
 function uid(){return Math.random().toString(36).slice(2,10);}
@@ -195,6 +234,12 @@ function showBatchDetail(batchId) {
     +'<div class="row" style="gap:8px;flex-wrap:wrap">'
     +'<button class="btn primary" onclick="startBatchFrom(\''+batchId+'\','+resumeIdx+')">'+(allDone?'🔄 从头重做':'▶ 继续第'+(resumeIdx+1)+'题')+'</button>'
     +'<button class="btn" onclick="startBatchFrom(\''+batchId+'\',0)">从第1题开始</button>'
+    +'</div>'
+    +'<div class="row" style="margin-top:8px;align-items:center;gap:6px">'
+    +'<span style="font-size:13px;color:#666">跳到第</span>'
+    +'<input id="goto-q-inp-'+batchId+'" type="number" min="1" max="'+batch.questions.length+'" placeholder="题号" style="width:80px;padding:6px 8px;border:1.5px solid #d0cec8;border-radius:6px;font-size:14px;text-align:center">'
+    +'<span style="font-size:13px;color:#666">题</span>'
+    +'<button class="btn blue small" onclick="gotoQuestion(\''+batchId+'\')">跳转开始</button>'
     +'</div></div>'
 
     +'<div class="card" style="padding:0;overflow:hidden">'
@@ -338,6 +383,25 @@ function startBatch(batchId, fromStart){
   startBatchFrom(batchId, resumeIdx);
 }
 
+function gotoQuestion(batchId){
+  var batch=null; for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}} if(!batch)return;
+  var inp=document.getElementById('goto-q-inp-'+batchId);
+  if(!inp){showToast('请输入题号');return;}
+  var qnum=parseInt(inp.value);
+  if(!qnum||qnum<1){showToast('请输入有效题号');return;}
+  // Find by question number (q.num), fallback to position
+  var idx=-1;
+  for(var j=0;j<batch.questions.length;j++){
+    if(batch.questions[j].num===qnum){idx=j;break;}
+  }
+  if(idx<0){
+    // Fallback: treat as 1-based position
+    idx=qnum-1;
+    if(idx<0||idx>=batch.questions.length){showToast('题号超出范围 (1–'+batch.questions.length+')');return;}
+  }
+  startBatchFrom(batchId, idx);
+}
+
 function startBatchFrom(batchId, fromIdx){
   var batch=null; for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}} if(!batch)return;
   var tMax = parseInt(document.getElementById('limit').value)||60;
@@ -478,12 +542,15 @@ function showResultPage(){
     var dk=!!QZ.dk[i];
     if(ok)correct++; if(hasAns&&my&&my!=='skip'&&!ok)wrong++; if(dk)dkCount++;
     var tr=document.createElement('tr'); tr.style.cursor='pointer';
+    // Row color: green=correct, red=wrong, yellow=dk, grey=no answer yet
+    var rowBg = dk?'#fff3cd' : (hasAns&&my&&my!=='skip'?(ok?'#f0fff4':'#fff5f5'):'');
+    tr.style.background=rowBg;
     (function(qid,idx){ tr.addEventListener('click',function(){openModal(qid,idx);}); })(q.id,i);
     tr.innerHTML='<td><strong>'+(q.num||i+1)+'</strong>'+(DB.starMap[q.id]?' ⭐':'')+'</td>'
-      +'<td style="'+(dk?'background:#fff3cd':'')+'">'+esc(q.body.replace(/\n/g,' ').slice(0,38))+(dk?' <b style="color:#c47a1a">❓</b>':'')+'</td>'
-      +'<td>'+(my&&my!=='skip'?my:'—')+'</td>'
-      +'<td>'+(hasAns?'<b>'+q.answer+'</b>':'—')+'</td>'
-      +'<td>'+(hasAns&&my&&my!=='skip'?(ok?'<span style="color:green">✓</span>':'<span style="color:red">✗</span>'):'—')+'</td>'
+      +'<td>'+esc(q.body.replace(/\n/g,' ').slice(0,38))+(dk?' <b style="color:#c47a1a">❓</b>':'')+'</td>'
+      +'<td style="font-weight:600;color:#1a4fa0">'+(my&&my!=='skip'?my:'<span style="color:#bbb">—</span>')+'</td>'
+      +'<td style="font-weight:700">'+(hasAns?'<span style="color:'+(ok?'#2e7d52':'#b83232')+'">'+q.answer+'</span>':'<span style="color:#bbb">—</span>')+'</td>'
+      +'<td>'+(hasAns&&my&&my!=='skip'?(ok?'<span style="color:#2e7d52;font-size:16px">✓</span>':'<span style="color:#b83232;font-size:16px">✗</span>'):'<span style="color:#bbb">—</span>')+'</td>'
       +'<td><button class="btn small blue" style="padding:3px 8px;font-size:12px" onclick="event.stopPropagation();openModal(\''+q.id+'\','+i+')">解析</button></td>';
     tbody.appendChild(tr);
   });
