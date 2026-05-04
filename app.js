@@ -186,7 +186,7 @@ function showBatchDetail(batchId) {
     html+='<tr style="border-top:1px solid #eee;background:'+rowBg+'" id="brow-'+q.id+'">'
       +'<td style="padding:8px 10px;text-align:center"><input type="checkbox" class="batch-cb" data-qid="'+q.id+'" data-idx="'+i+'" style="width:14px;height:14px"></td>'
       +'<td style="padding:8px 10px;font-weight:700;font-size:13px;cursor:pointer" onclick="startBatchFrom(\''+batchId+'\','+i+')">'
-      +(isStar?'⭐':'')+(q.num||i+1)+'</td>'
+      +(isStar?'⭐':'')+(dk?'<span style="color:#c47a1a;margin-right:3px">❓</span>':'')+(q.num||i+1)+'</td>'
       +'<td style="padding:8px 10px;font-size:13px;color:#333;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="startBatchFrom(\''+batchId+'\','+i+')">'
       +esc(q.body.replace(/\n/g,' ').slice(0,60))+(dk?' ❓':'')+'</td>'
       +'<td style="padding:8px 10px;text-align:center;font-size:13px">'+(my&&my!=='skip'?my:'—')+'</td>'
@@ -352,7 +352,17 @@ function rebuildActions(){
 }
 
 function goBackToBatch(){clearInterval(QZ.tmr);if(QZ.sel)autoSave(QZ.cur,QZ.sel);showBatchDetail(QZ.returnToBatchId);}
-function pickOpt(l,btn){QZ.sel=l;document.querySelectorAll('#opts .opt').forEach(function(b){b.classList.remove('sel');});btn.classList.add('sel');autoSave(QZ.cur,l);}
+function pickOpt(l,btn){
+  QZ.sel=l;
+  document.querySelectorAll('#opts .opt').forEach(function(b){b.classList.remove('sel');});
+  btn.classList.add('sel');
+  autoSave(QZ.cur,l);
+  // Auto-advance 700ms after picking, so user can see their choice
+  clearTimeout(QZ._autoNext);
+  QZ._autoNext=setTimeout(function(){
+    if(QZ.sel===l){ clearInterval(QZ.tmr); advanceQ(); }
+  },700);
+}
 function autoSave(i,ans){QZ.ans[i]=ans;QZ.batch.progress.answers=QZ.ans;QZ.batch.progress.idx=QZ.cur;QZ.batch.progress.dk=QZ.dk;saveDB();}
 
 // ── TIMER ────────────────────────────────────────────────
@@ -691,10 +701,24 @@ function renderNotes(){
   var html='<div class="card">'
     +'<div class="row"><button class="btn small" onclick="navBack()">← 返回</button>'
     +'<div class="title spacer" style="margin-left:10px">📝 笔记本</div>'
-    +'<button class="btn small red" onclick="clearSelectedNotes()">删除选中</button>'
-    +'<button class="btn small purple" onclick="aiSummarizeNotes()">🤖 AI整理笔记</button>'
     +'</div>'
-    +'<div class="sub" style="margin-top:4px">共 '+DB.notes.length+' 条 · 可勾选批量操作</div>'
+    +'<div class="sub" style="margin-top:4px">共 '+DB.notes.length+' 条 · 勾选后可批量操作</div>'
+    +'<div class="row" style="margin-top:10px;flex-wrap:wrap;gap:6px;align-items:center">'
+    +'<input type="checkbox" id="note-cb-all" onchange="noteSelectAll(this.checked)" style="width:14px;height:14px">'
+    +'<label for="note-cb-all" style="font-size:12px;color:#666;cursor:pointer">全选</label>'
+    +'<button class="btn small" onclick="noteSelectAll(false)">全不选</button>'
+    +'<button class="btn small red" onclick="clearSelectedNotes()">删除选中</button>'
+    +'<button class="btn purple" onclick="openAISummarizeDialog()">🤖 AI整理选中笔记</button>'
+    +'</div>'
+    +'<div id="ai-summarize-box" style="display:none;margin-top:10px;padding:12px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px">'
+    +'<div style="font-size:12px;font-weight:700;color:#6040b0;margin-bottom:8px">🤖 告诉AI你想要什么格式</div>'
+    +'<textarea id="ai-summarize-prompt" placeholder="例如：请按知识点归类，用表格对比混淆点，每点加一句口诀
+或：用脑图结构整理，突出重点
+或：按错误频率排序，重点标注" style="width:100%;min-height:72px;padding:8px;border:1px solid #d4c9f5;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>'
+    +'<div class="row" style="margin-top:8px;gap:6px">'
+    +'<button class="btn primary" onclick="doAISummarize()">生成复习笔记</button>'
+    +'<button class="btn small" onclick="document.getElementById('ai-summarize-box').style.display='none'">取消</button>'
+    +'</div></div>'
     +'</div>';
   if(!DB.notes.length){
     html+='<div class="card"><div class="sub">笔记本为空。在题目解析页选中文字可存入笔记。</div></div>';
@@ -768,19 +792,33 @@ function clearSelectedNotes(){
   DB.notes=DB.notes.filter(function(n){return nids.indexOf(n.id)<0;});saveDB();renderNotes();showToast('已删除 '+nids.length+' 条');
 }
 
-async function aiSummarizeNotes(){
+function noteSelectAll(checked){document.querySelectorAll('.note-cb').forEach(function(cb){cb.checked=checked;});}
+
+function openAISummarizeDialog(){
+  var box=document.getElementById('ai-summarize-box');
+  if(box) box.style.display=(box.style.display==='none'||box.style.display==='')?'block':'none';
+}
+
+async function doAISummarize(){
   var checked=document.querySelectorAll('.note-cb:checked');
   var toProcess=[];
-  if(checked.length){checked.forEach(function(cb){var n=DB.notes.find(function(x){return x.id===cb.dataset.nid;});if(n)toProcess.push(n);});}
-  else toProcess=DB.notes.slice(0,15);
-  if(!toProcess.length){showToast('暂无笔记可整理');return;}
-  showToast('🤖 AI整理中…',15000);
-  var content=toProcess.map(function(n,i){return (i+1)+'. ['+n.title+']\n'+n.content.slice(0,300);}).join('\n\n');
-  var prompt='请将以下PCE针灸考试笔记整理成一份结构化复习资料：\n\n'+content
-    +'\n\n要求：\n- 按知识点归类\n- 用表格对比易混淆点\n- 每类知识点配一句记忆口诀\n- 适合考前速览，简洁有力';
+  if(checked.length){
+    checked.forEach(function(cb){var n=DB.notes.find(function(x){return x.id===cb.dataset.nid;});if(n)toProcess.push(n);});
+  } else {
+    toProcess=DB.notes.filter(function(n){return n.type!=='ai-summary';}).slice(0,15);
+  }
+  if(!toProcess.length){showToast('请先勾选笔记，或确保笔记本有内容');return;}
+  var promptEl=document.getElementById('ai-summarize-prompt');
+  var userPrompt=promptEl?promptEl.value.trim():'';
+  var box=document.getElementById('ai-summarize-box');
+  if(box) box.style.display='none';
+  showToast('🤖 AI整理中（约15秒）…',20000);
+  var content=toProcess.map(function(n,i){return (i+1)+'. ['+n.title+']\n'+n.content.slice(0,400);}).join('\n\n');
+  var formatInstr=userPrompt||'请按知识点归类，用Markdown表格对比易混淆点，每类知识点配一句记忆口诀，适合考前速览';
+  var prompt='请将以下'+toProcess.length+'条PCE针灸考试笔记整理成复习资料：\n\n'+content+'\n\n整理要求：'+formatInstr;
   try{
     var txt=await callClaude(prompt);
-    DB.notes.push({id:uid(),type:'ai-summary',title:'AI整合复习笔记 — '+new Date().toLocaleDateString('zh-CN'),content:txt,ts:Date.now(),highlights:[]});
+    DB.notes.push({id:uid(),type:'ai-summary',title:'AI复习笔记('+toProcess.length+'条) — '+new Date().toLocaleDateString('zh-CN'),content:txt,ts:Date.now(),highlights:[]});
     saveDB();renderNotes();showToast('✓ AI复习笔记已生成');
   }catch(e){showToast('生成失败：'+e.message);}
 }
