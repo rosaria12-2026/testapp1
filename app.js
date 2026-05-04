@@ -1468,8 +1468,13 @@ function cloudLogout(){
 function cloudUpload(){
   if(typeof firebase==='undefined'){showToast('请先配置Firebase');return;}
   var user=firebase.auth().currentUser; if(!user){showToast('请先登录');return;}
+  var bname='', qnum='';
+  if(DB.lastPos && DB.lastPos.batchId){
+    var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
+    if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
+  }
   firebase.firestore().collection('users').doc(user.uid).set({db:JSON.stringify(DB)})
-    .then(function(){showToast('✓ 数据已上传到云端');})
+    .then(function(){showToast('✓ 已上传'+(bname?' (含进度：'+bname+' '+qnum+')':''));})
     .catch(function(e){showToast('上传失败：'+e.message);});
 }
 function cloudDownload(){
@@ -1480,7 +1485,15 @@ function cloudDownload(){
       if(!doc.exists){showToast('云端暂无数据');return;}
       DB=JSON.parse(doc.data().db);
       ['analysisCache','notes','starMap','answerKeys'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
-      saveDB(); renderHome(); showToast('✓ 已从云端下载数据');
+      if(DB.lastPos===undefined) DB.lastPos=null;
+      saveDB(); renderHome();
+      // Show what was restored
+      var bname='', qnum='';
+      if(DB.lastPos && DB.lastPos.batchId){
+        var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
+        if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
+      }
+      showToast('✓ 已下载云端数据'+(bname?' — 上次做到：'+bname+' '+qnum:''));
     })
     .catch(function(e){showToast('下载失败：'+e.message);});
 }
