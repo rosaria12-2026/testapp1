@@ -10,12 +10,12 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
 // migrate old keys
-['analysisCache','notes','starMap','answerKeys'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
+['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
 if(DB.lastPos===undefined) DB.lastPos=null;
 // migrate from v4 if v5 is empty
 (function(){
@@ -129,7 +129,9 @@ function parseQ(raw) {
   var qRe=/^[(\[]?\s*(\d{1,4})\s*[).、]\s*(.*)/, optRe=/^([A-Ea-e])\s*[).、]\s*(.+)/;
   var inRe=/([A-Ea-e])\s*[).]\s*(.+?)(?=\s{2,}[A-Ea-e]\s*[).]|$)/g;
   var ansRe=/[\u3010\[]?[\u7b54\u6848Aa][\u6848nswer]*[\uff1a:]\s*([A-Ea-e])[\u3011\]]?/i;
-  var caseRe=/根据以下|根据下列|以下病例|following case|following scenario/i;
+  var caseRe=/根据以下|根据下列|以下病例|基于以下|以下案例|following case|following scenario/i;
+  // Range header: e.g. "208-215 基于以下病案：" or "213-215基于以下病例"
+  var caseRangeRe=/^(\d{1,4})\s*[-–~]\s*(\d{1,4})\s*[\s:：]*(基于|根据|以下|following)/i;
   function isCN(q){return /[\u4e00-\u9fff]/.test(q.body);}
   var blocks=[], curQ=null, pendingCase=null;
   function push(){
@@ -141,6 +143,14 @@ function parseQ(raw) {
   for(var i=0;i<lines.length;i++){
     var l=lines[i]; if(!l) continue;
     if(/^请为|^please select/i.test(l)&&l.length<60) continue;
+    // Detect range-based case header: "208-215 基于以下病案："
+    var crm=l.match(caseRangeRe);
+    if(crm){
+      // This line is a case range header — collect following lines as case body
+      var cl=[l],j=i+1;
+      while(j<lines.length&&lines[j]&&!lines[j].match(qRe)){cl.push(lines[j]);j++;}
+      pendingCase=cl.join('\n');i=j-1;continue;
+    }
     if(caseRe.test(l)&&!l.match(qRe)){
       var cl=[l],j=i+1;
       while(j<lines.length&&lines[j]&&!lines[j].match(qRe)){cl.push(lines[j]);j++;}
@@ -185,8 +195,20 @@ function parseQ(raw) {
   blocks.forEach(function(q){ if(!q.caseText)return; var rm=q.caseText.match(/(\d{1,4})\s*[-–~]\s*(\d{1,4})/); if(rm) q._cr={lo:parseInt(rm[1]),hi:parseInt(rm[2])}; });
   var actCase=null,actRange=null;
   blocks.forEach(function(q){
-    if(q.caseText){actCase=q.caseText;actRange=q._cr||null;}
-    else if(actCase){ if(actRange){ if(q.num>=actRange.lo&&q.num<=actRange.hi) q.caseText=actCase; else if(q.num>actRange.hi){actCase=null;actRange=null;} } }
+    if(q.caseText){
+      actCase=q.caseText; actRange=q._cr||null;
+      // If this question already has the case, assign it and keep propagating
+      return;
+    }
+    if(actCase){
+      if(actRange){
+        if(q.num>=actRange.lo&&q.num<=actRange.hi){ q.caseText=actCase; }
+        else if(q.num>actRange.hi){ actCase=null; actRange=null; }
+      } else {
+        // No range specified — propagate until we hit another case or end
+        q.caseText=actCase;
+      }
+    }
   });
   return blocks;
 }
@@ -744,6 +766,11 @@ function openModal(qid,idx){
 
   content.innerHTML=html;
 
+  // Restore highlighted content if available
+  if(DB.hlCache && DB.hlCache[qid] && DB.hlCache[qid].qbody){
+    var qbEl=document.getElementById('modal-qbody');
+    if(qbEl) qbEl.innerHTML=DB.hlCache[qid].qbody;
+  }
   // Load cached AI analysis
   var cached = DB.analysisCache[qid] || ((DB.wrongMap[qid]||DB.dkMap[qid]||{}).analysis) || null;
   if(cached){
@@ -755,7 +782,14 @@ function openModal(qid,idx){
   }
   document.getElementById('modal-bg').style.display='flex';
 }
-function closeModal(){ document.getElementById('modal-bg').style.display='none'; }
+function closeModal(){
+  // Save current highlighted content before closing
+  if(_mQid){
+    var qb=document.getElementById('modal-qbody');
+    if(qb&&qb.innerHTML){ if(!DB.hlCache)DB.hlCache={}; DB.hlCache[_mQid]={qbody:qb.innerHTML}; saveDB(); }
+  }
+  document.getElementById('modal-bg').style.display='none';
+}
 
 // Open modal from batch detail page (no active quiz session)
 function openModalFromBatch(qid, batchId, idx){
@@ -1454,10 +1488,17 @@ function cloudRegister(){
 function cloudLogin(){
   var email=document.getElementById('cloud-email').value.trim(), pass=document.getElementById('cloud-pass').value;
   if(email) localStorage.setItem('cloud_email',email);
-  if(pass) localStorage.setItem('cloud_pass_hint',pass); // save for auto-login
+  if(pass) localStorage.setItem('cloud_pass_hint',pass);
   if(typeof firebase==='undefined'){showToast('请先保存Firebase配置并刷新');return;}
-  firebase.auth().signInWithEmailAndPassword(email,pass)
-    .then(function(){ document.getElementById('cloud-status').textContent='✓ 已登录：'+email; })
+  // Set persistence to LOCAL so login survives browser restarts
+  firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+    .then(function(){
+      return firebase.auth().signInWithEmailAndPassword(email,pass);
+    })
+    .then(function(){
+      document.getElementById('cloud-status').textContent='✓ 已登录：'+email+' (已设为永久登录)';
+      showToast('✓ 已登录，以后自动保持登录状态');
+    })
     .catch(function(e){ document.getElementById('cloud-status').textContent='登录失败：'+e.message; });
 }
 function cloudLogout(){
@@ -1484,7 +1525,7 @@ function cloudDownload(){
     .then(function(doc){
       if(!doc.exists){showToast('云端暂无数据');return;}
       DB=JSON.parse(doc.data().db);
-      ['analysisCache','notes','starMap','answerKeys'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
+      ['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
       if(DB.lastPos===undefined) DB.lastPos=null;
       saveDB(); renderHome();
       // Show what was restored
