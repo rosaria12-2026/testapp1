@@ -29,7 +29,7 @@
   <section id="home" class="page active">
     <div class="card">
       <div class="title">学习概况</div>
-      <div class="sub">默认本地保存；开启云同步后可上传/下载数据。</div>
+      <div class="sub">默认本地保存；已内置 Firebase 云同步，登录后可上传/下载数据。</div>
       <div class="grid">
         <div class="stat"><div class="k">题库总数</div><div class="v" id="st-total">0</div></div>
         <div class="stat"><div class="k">已作答题次</div><div class="v" id="st-done">0</div></div>
@@ -160,18 +160,13 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
   <section id="cloud" class="page">
     <div class="card">
       <div class="row"><button class="btn small" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">云同步</div></div>
-      <div class="sub">使用 Firebase 免费云端。先本地能用；设置 Firebase 后可注册账号、上传、下载。</div>
+      <div class="sub">Firebase 已内置。你不用再粘 firebaseConfig；登录后即可上传/下载。</div>
       <div class="hint">
-        <b>Firebase 设置步骤：</b><br>
-        1. Firebase Console → Add project<br>
-        2. Build → Authentication → Email/Password 开启<br>
-        3. Build → Firestore Database → Create database<br>
-        4. Project settings → Web app → 复制 firebaseConfig<br>
-        5. 粘贴到下面保存
+        <b>Firebase：</b>已写入代码。新设备打开后不需要再粘配置；只需登录账号。
       </div>
       <textarea id="firebase-config" class="short" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
       <div class="row mt">
-        <button class="btn primary" onclick="saveFirebaseConfig()">保存 Firebase 配置</button>
+        <button class="btn primary" onclick="saveFirebaseConfig()">重新保存 Firebase 配置（备用）</button>
         <button class="btn" onclick="loadFirebaseConfigToBox()">读取已保存配置</button>
       </div>
       <hr class="sep">
