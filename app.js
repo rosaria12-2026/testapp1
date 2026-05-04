@@ -16,6 +16,20 @@ function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } cat
 
 // migrate old keys
 ['analysisCache','notes','starMap'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
+// migrate from v4 if v5 is empty
+(function(){
+  if(DB.batches.length===0){
+    try{
+      var old=JSON.parse(localStorage.getItem('pce_db_v4'));
+      if(old&&old.batches&&old.batches.length){
+        DB.batches=old.batches; DB.wrongMap=old.wrongMap||{}; DB.dkMap=old.dkMap||{};
+        DB.stats=old.stats||{done:0,correct:0}; DB.analysisCache=old.analysisCache||{};
+        DB.notes=old.notes||[]; DB.starMap=old.starMap||{};
+        localStorage.setItem('pce_db_v5',JSON.stringify(DB));
+      }
+    }catch(e){}
+  }
+})();
 
 // ═══════════════════════════════════════════════════════
 // API KEY — auto-saved, never ask again
@@ -199,6 +213,7 @@ function showBatchDetail(batchId) {
     +'<th style="padding:7px 10px;width:38px;text-align:center">我选</th>'
     +'<th style="padding:7px 10px;width:38px;text-align:center">答案</th>'
     +'<th style="padding:7px 10px;width:44px;text-align:center">结果</th>'
+    +'<th style="padding:7px 10px;width:48px;text-align:center">解析</th>'
     +'</tr></thead><tbody>';
 
   batch.questions.forEach(function(q,i){
@@ -219,11 +234,13 @@ function showBatchDetail(batchId) {
       +'<input type="checkbox" class="batch-cb" data-qid="'+q.id+'" data-idx="'+i+'" style="width:14px;height:14px"></td>'
       +'<td style="padding:7px 10px;font-weight:700;font-size:13px;cursor:pointer">'
       +(isStar?'⭐ ':'')+(dk?'<span style="color:#c47a1a">❓</span> ':'')+(q.num||i+1)+'</td>'
-      +'<td style="padding:7px 10px;font-size:13px;color:#333;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer">'
-      +esc(q.body.replace(/\n/g,' ').slice(0,65))+'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;color:#333;cursor:pointer">'
+      +esc((function(b){ var s=b.replace(/\n/g,' ').replace(/\s+/g,' ').trim(); return s.length>80?s.slice(0,80)+'…':s; })(q.body))+'</td>'
       +'<td style="padding:7px 10px;text-align:center;font-size:13px">'+(my&&my!=='skip'?my:'—')+'</td>'
       +'<td style="padding:7px 10px;text-align:center;font-size:13px">'+(hasAns?'<b>'+q.answer+'</b>':'—')+'</td>'
       +'<td style="padding:7px 10px;text-align:center">'+result+'</td>'
+      +'<td style="padding:7px 10px;text-align:center" onclick="event.stopPropagation()">'
+      +'<button class="btn small blue" style="padding:3px 8px;font-size:11px" data-qid="'+q.id+'" data-bid="'+batchId+'" data-idx="'+i+'" onclick="openModalFromBatch(this.dataset.qid,this.dataset.bid,parseInt(this.dataset.idx))">解析</button></td>'
       +'</tr>';
   });
   html += '</tbody></table></div></div>';
@@ -362,9 +379,16 @@ function rebuildActions(){
     +'<button class="btn small" onclick="skipQ()">跳过</button>'
     +'<button class="btn small orange" id="dkbtn" onclick="toggleDK()">不会</button>'
     +'<button class="btn small primary" onclick="nextQ()">确认/下一题 →</button>'
-    +(QZ.returnToBatchId?'<button class="btn small blue" onclick="goBackToBatch()">📋 题目列表</button>':'')
+    +'<button class="btn small blue" onclick="openQuizAI()">🔍 AI解析</button>'
+    +(QZ.returnToBatchId?'<button class="btn small" onclick="goBackToBatch()">📋 列表</button>':'')
     +'<button class="btn small red spacer" onclick="finishQuiz()">结束</button>';
   var db = document.getElementById('dkbtn'); if(db) db.classList.toggle('on',!!QZ.dk[QZ.cur]);
+}
+
+// Open AI modal for current quiz question
+function openQuizAI(){
+  if(!QZ.qs||!QZ.qs[QZ.cur]) return;
+  openModal(QZ.qs[QZ.cur].id, QZ.cur);
 }
 
 function goBackToBatch(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); if(QZ.sel) autoSave(QZ.cur,QZ.sel); showBatchDetail(QZ.returnToBatchId); }
@@ -421,7 +445,13 @@ function skipQ(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); autoSave(QZ
 function prevQ(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); if(QZ.sel) autoSave(QZ.cur,QZ.sel); if(QZ.cur>0){QZ.cur--;loadQ(QZ.cur);}else showToast('已是第一题'); }
 function toggleDK(){ QZ.dk[QZ.cur]=!QZ.dk[QZ.cur]; var db=document.getElementById('dkbtn'); if(db) db.classList.toggle('on',!!QZ.dk[QZ.cur]); autoSave(QZ.cur,QZ.sel||QZ.ans[QZ.cur]||'skip'); showToast(QZ.dk[QZ.cur]?'已标记「不会」':'已取消标记'); }
 function advanceQ(){ if(QZ.cur+1>=QZ.qs.length){finishQuiz();return;} QZ.cur++; loadQ(QZ.cur); }
-function finishQuiz(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); for(var i=0;i<QZ.ans.length;i++){if(!QZ.ans[i])QZ.ans[i]='skip';} autoSave(QZ.cur,QZ.ans[QZ.cur]); commitResults(); showResultPage(); }
+function finishQuiz(){
+  clearInterval(QZ.tmr); clearTimeout(QZ._autoNext);
+  for(var i=0;i<QZ.ans.length;i++){if(!QZ.ans[i])QZ.ans[i]='skip';}
+  autoSave(QZ.cur,QZ.ans[QZ.cur]); commitResults();
+  // Show result then offer to go back to batch
+  showResultPage();
+}
 function commitResults(){
   var batch=QZ.batch;
   for(var i=0;i<QZ.qs.length;i++){
@@ -463,6 +493,21 @@ function showResultPage(){
   document.getElementById('rs-dk').textContent=dkCount;
   document.getElementById('rs-rate').textContent=withAns?Math.round(correct/withAns*100)+'%':'—';
   document.getElementById('answer-key').value=''; document.getElementById('key-msg').textContent='';
+  // Add back-to-batch button
+  var batchId = QZ.returnToBatchId;
+  if(batchId){
+    setTimeout(function(){
+      var r=document.getElementById('result');
+      if(!r) return;
+      var btn=document.createElement('div');
+      btn.style.cssText='padding:12px 16px;background:#e8f5ed;border:1px solid #b8dfc8;border-radius:8px;margin:12px 16px;display:flex;align-items:center;gap:12px';
+      var bBtn=document.createElement('button');bBtn.className='btn primary';bBtn.textContent='📋 回到题目列表';
+      (function(bid){bBtn.addEventListener('click',function(){showBatchDetail(bid);});})(batchId);
+      btn.innerHTML='<span style="font-size:14px;flex:1">✓ 答题完成！</span>';
+      btn.appendChild(bBtn);
+      r.insertBefore(btn, r.firstChild);
+    },100);
+  }
   navTo('result');
 }
 
@@ -552,6 +597,94 @@ function openModal(qid,idx){
   document.getElementById('modal-bg').style.display='flex';
 }
 function closeModal(){ document.getElementById('modal-bg').style.display='none'; }
+
+// Open modal from batch detail page (no active quiz session)
+function openModalFromBatch(qid, batchId, idx){
+  var batch=null; for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}} if(!batch)return;
+  var q=batch.questions[idx]; if(!q)return;
+  var p=batch.progress;
+  // Temporarily set QZ context so AI analysis works
+  _mQid=qid; _mIdx=idx; _aiChat=[];
+  var my=p.answers[idx], hasAns=!!q.answer;
+  var ok=hasAns&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();
+  document.getElementById('m-title').textContent='第 '+(q.num||idx+1)+' 题'+(DB.starMap[q.id]?' ⭐':'');
+  var content=document.getElementById('m-content');
+  var html='';
+  if(q.caseText) html+='<div style="background:#fffbe6;border:1px solid #f0d060;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;white-space:pre-wrap;user-select:text">📋 病例资料<br>'+esc(q.caseText)+'</div>';
+  html+='<div style="font-size:15px;line-height:1.9;margin-bottom:12px;white-space:pre-wrap;user-select:text;cursor:text;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(q.body)+'</div>';
+  html+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
+  q.opts.forEach(function(o){
+    var isCorrect=o.letter===(q.answer||''), isMy=my&&o.letter===my&&!isCorrect;
+    var bg=isCorrect?'background:#e8f5ed;border-color:#2e7d52':isMy?'background:#fdeaea;border-color:#b83232':'';
+    html+='<div style="padding:9px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;'+bg+';user-select:text">'+o.letter+'. '+esc(o.text)+(isCorrect?' <b style="color:#2e7d52">✓ 正确</b>':'')+(isMy?' <b style="color:#b83232">← 我选</b>':'')+'</div>';
+  });
+  html+='</div>';
+  if(hasAns&&my&&my!=='skip') html+='<div style="margin-bottom:10px;font-size:14px;font-weight:600;color:'+(ok?'#2e7d52':'#b83232')+'">'+(ok?'✓ 答对了':'✗ 答错了 — 我选 '+my+'，正确是 '+q.answer)+'</div>';
+  html+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap;padding:8px 10px;background:#f5f3ee;border-radius:8px">'
+    +'<span style="font-size:11px;color:#888;flex-shrink:0">选中文字后：</span>'
+    +'<button class="btn small" style="background:#FFE066;color:#333;border:1px solid #f0c040;font-weight:700" onclick="hlSelected(\'yellow\')">🖊 高亮</button>'
+    +'<button class="btn small" style="background:#FF6B6B;color:#fff;border:none;font-weight:700" onclick="hlSelected(\'red\')">🔴 红色</button>'
+    +'<button class="btn small" style="background:#fff;color:#333;border-bottom:2.5px solid #333;font-weight:700" onclick="hlSelected(\'underline\')"><u>U</u> 划线</button>'
+    +'<button class="btn small" style="background:#fff;color:#333;border:1px solid #aaa;font-weight:700" onclick="hlSelected(\'bold\')"><b>B</b> 粗体</button>'
+    +'<button class="btn small blue" onclick="saveSelToNote()">📝 存入笔记</button>'
+    +'<button class="btn small" onclick="addWholeQToNote()">📌 整题→笔记</button>'
+    +'</div>';
+  html+='<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+    +'<button class="btn blue small" onclick="doAnalyzeFromBatch(\''+qid+'\',\''+batchId+'\','+idx+')">🔍 AI解析此题</button>'
+    +'<button class="btn small" onclick="doSimilarFromBatch(\''+qid+'\',\''+batchId+'\','+idx+')">✨ 同类题</button>'
+    +'</div>'
+    +'<div id="modal-ai-area"></div>';
+  // Chat always visible
+  html+='<div style="margin-top:14px;border-top:2px solid #e8e4f8;padding-top:12px">'
+    +'<div style="font-size:12px;font-weight:700;color:#6040b0;margin-bottom:8px">💬 与AI对话（追问、深究）</div>'
+    +'<div id="chat-messages" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:7px;margin-bottom:8px"></div>'
+    +'<div style="display:flex;gap:6px;align-items:flex-end">'
+    +'<textarea id="chat-input" placeholder="例如：为什么不选B？这个穴位怎么记？" style="flex:1;min-height:52px;max-height:120px;padding:8px;border:1.5px solid #d4c9f5;border-radius:8px;font-size:13px;resize:vertical"></textarea>'
+    +'<button class="btn blue small" onclick="sendChat()" style="align-self:flex-end;padding:8px 14px">发送</button>'
+    +'</div>'
+    +'<div style="font-size:10px;color:#bbb;margin-top:3px">Enter 发送 · Shift+Enter 换行</div>'
+    +'</div>';
+  content.innerHTML=html;
+  // Load cached analysis
+  var cached=DB.analysisCache[qid]||((DB.wrongMap[qid]||DB.dkMap[qid]||{}).analysis)||null;
+  if(cached){
+    renderAI(document.getElementById('modal-ai-area'),cached);
+    _aiChat=[
+      {role:'user',content:'PCE题目：'+q.body+'\n选项：'+q.opts.map(function(o){return o.letter+'. '+o.text;}).join('；')+'\n正确答案：'+(q.answer||'?')+'\n我选：'+(my||'未选')},
+      {role:'assistant',content:cached}
+    ];
+  }
+  document.getElementById('modal-bg').style.display='flex';
+}
+
+async function doAnalyzeFromBatch(qid,batchId,idx){
+  var batch=null; for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}} if(!batch)return;
+  var q=batch.questions[idx]; if(!q)return;
+  var my=(batch.progress.answers[idx])||'未选';
+  _mQid=qid; _mIdx=idx;
+  var aiEl=document.getElementById('modal-ai-area');
+  aiEl.innerHTML='<div style="padding:10px;background:#f8f6ff;border:1px solid #d4c9f5;border-radius:8px;color:#6040b0;font-size:13px">🤖 AI解析中…</div>';
+  var prompt='分析PCE针灸考试题目（要求简洁）：\n\n题目：'+q.body+'\n选项：\n'+q.opts.map(function(o){return o.letter+'. '+o.text;}).join('\n')+'\n正确答案：'+(q.answer||'?')+'\n学生选择：'+my+'\n\n请按以下格式输出：\n【解题逻辑】2-3句说明正确答案推导思路\n【混淆点】用Markdown表格对比容易混淆的选项\n【一句话记忆】最精简的记忆口诀';
+  try{
+    var txt=await callClaude(prompt);
+    DB.analysisCache[qid]=txt;
+    var entry=DB.wrongMap[qid]||DB.dkMap[qid]; if(entry) entry.analysis=txt;
+    saveDB(); renderAI(aiEl,txt);
+    _aiChat=[{role:'user',content:'PCE题目：'+q.body+'\n选项：'+q.opts.map(function(o){return o.letter+'. '+o.text;}).join('；')+'\n正确答案：'+(q.answer||'?')+'\n学生选：'+my},{role:'assistant',content:txt}];
+  }catch(e){ aiEl.innerHTML='<div style="padding:10px;background:#fdeaea;border:1px solid #f5c5c5;border-radius:8px;color:#b83232;font-size:13px">❌ '+esc(e.message)+'</div>'; }
+}
+
+async function doSimilarFromBatch(qid,batchId,idx){
+  var batch=null; for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}} if(!batch)return;
+  var q=batch.questions[idx]; if(!q)return;
+  var aiEl=document.getElementById('modal-ai-area');
+  aiEl.innerHTML='<div style="padding:10px;background:#f8f6ff;border:1px solid #d4c9f5;border-radius:8px;color:#6040b0;font-size:13px">✨ 生成同类题中…</div>';
+  var prompt='根据PCE针灸题目生成3道同知识点练习题：\n原题：'+q.body+'\n选项：'+q.opts.map(function(o){return o.letter+'. '+o.text;}).join(' | ')+'\n\n要求：4选1，标注答案，1句解析，中文，穴位保留英文缩写。\n格式：\n1. 题目\nA. B. C. D.\n答案：X | 解析：一句话';
+  try{
+    var txt=await callClaude(prompt);
+    aiEl.innerHTML='<div style="padding:10px;background:#f8f6ff;border:1px solid #d4c9f5;border-radius:8px"><div style="font-size:11px;font-weight:700;color:#6040b0;margin-bottom:6px">🎯 同类练习题</div><div style="font-size:13px;line-height:1.8;white-space:pre-wrap">'+esc(txt)+'</div></div>';
+  }catch(e){ aiEl.innerHTML='<div style="padding:10px;background:#fdeaea;border:1px solid #f5c5c5;border-radius:8px;color:#b83232;font-size:13px">❌ '+esc(e.message)+'</div>'; }
+}
 
 // ═══════════════════════════════════════════════════════
 // HIGHLIGHT — yellow, red, underline, bold
