@@ -1214,9 +1214,27 @@ function renderNotes(){
         note.opts.forEach(function(o){ var cls=(o.letter===(note.answer||''))?'background:#e8f5ed;color:#2e7d52;font-weight:600':''; html+='<div style="font-size:12px;padding:3px 8px;border-radius:4px;'+cls+'">'+o.letter+'. '+esc(o.text)+(o.letter===note.answer?' ✓':'')+'</div>'; });
         html+='</div>';
       }
-      if(note.analysis) html+='<div style="font-size:12px;padding:8px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:6px;white-space:pre-wrap;color:#18180f"><b style="color:#6040b0">AI解析：</b>'+esc(note.analysis.slice(0,300))+(note.analysis.length>300?'…':'')+'</div>';
+      // AI解析区域 — 显示完整内容，可滚动，有「重新解析」按钮
+      var cachedAI = (note.qid && DB.analysisCache[note.qid]) || note.analysis || '';
+      html+='<div id="note-ai-'+note.id+'" style="margin-top:6px">';
+      if(cachedAI){
+        html+='<div style="background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px;padding:10px 12px">'
+          +'<div style="font-size:11px;font-weight:700;color:#6040b0;margin-bottom:6px">🤖 AI解析</div>'
+          +'<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#18180f;max-height:300px;overflow-y:auto;-webkit-overflow-scrolling:touch">'+esc(cachedAI)+'</div>'
+          +'<div style="margin-top:8px;display:flex;gap:6px">'
+          +'<button class="btn small blue" data-nid="'+note.id+'" data-qid="'+note.qid+'" onclick="refreshNoteAI(this.dataset.nid,this.dataset.qid)" style="font-size:11px">🔄 重新解析</button>'
+          +'</div></div>';
+      } else {
+        html+='<button class="btn small blue" data-nid="'+note.id+'" data-qid="'+note.qid+'" onclick="runNoteAI(this.dataset.nid,this.dataset.qid)" style="font-size:11px;padding:4px 10px">🔍 AI解析此题</button>';
+      }
+      html+='</div>';
+    } else if(note.type==='ai-summary'){
+      // AI整理结果 — 完整显示，可滚动
+      html+='<div style="background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px;padding:12px;max-height:400px;overflow-y:auto;-webkit-overflow-scrolling:touch">'
+        +'<div style="font-size:13px;line-height:1.8;white-space:pre-wrap;color:#18180f">'+esc(note.content)+'</div>'
+        +'</div>';
     } else {
-      html+='<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;padding:8px;background:'+(note.type==='ai-summary'?'#f0ebff':'#f8f7f3')+';border-radius:6px">'+esc(note.content)+'</div>';
+      html+='<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(note.content)+'</div>';
     }
     // Per-note AI chat
     html+='<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px">'
@@ -1251,6 +1269,36 @@ async function sendNoteChat(nid){
   }catch(e){ td.remove(); appendMsg(msgs,'error','❌ '+e.message); }
 }
 function deleteNote(nid){ if(!confirm('删除这条笔记？'))return; DB.notes=DB.notes.filter(function(n){return n.id!==nid;}); saveDB(); renderNotes(); }
+
+// Run AI analysis for a note's question (no cached analysis yet)
+async function runNoteAI(noteId, qid){
+  var note=DB.notes.find(function(n){return n.id===noteId;}); if(!note)return;
+  var el=document.getElementById('note-ai-'+noteId); if(!el)return;
+  el.innerHTML='<div style="padding:8px;background:#f8f6ff;border:1px solid #d4c9f5;border-radius:8px;color:#6040b0;font-size:13px">🤖 解析中…</div>';
+  var prompt='分析PCE针灸考试题目（要求简洁）：\n\n题目：'+note.content+'\n选项：\n'+(note.opts?note.opts.map(function(o){return o.letter+'. '+o.text;}).join('\n'):'（无选项）')+'\n正确答案：'+(note.answer||'?')+'\n\n请按以下格式输出：\n【解题逻辑】2-3句说明正确答案推导思路\n【混淆点】用Markdown表格对比容易混淆的选项\n【一句话记忆】最精简的记忆口诀';
+  try{
+    var txt=await callClaude(prompt);
+    if(qid) DB.analysisCache[qid]=txt;
+    note.analysis=txt; saveDB();
+    el.innerHTML='<div style="background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px;padding:10px 12px">'
+      +'<div style="font-size:11px;font-weight:700;color:#6040b0;margin-bottom:6px">🤖 AI解析</div>'
+      +'<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#18180f;max-height:300px;overflow-y:auto;-webkit-overflow-scrolling:touch">'+esc(txt)+'</div>'
+      +'<div style="margin-top:8px"><button class="btn small blue" data-nid="'+noteId+'" data-qid="'+qid+'" onclick="refreshNoteAI(this.dataset.nid,this.dataset.qid)" style="font-size:11px">🔄 重新解析</button></div>'
+      +'</div>';
+  }catch(e){
+    el.innerHTML='<div style="padding:8px;background:#fdeaea;border:1px solid #f5c5c5;border-radius:8px;color:#b83232;font-size:13px">❌ '+esc(e.message)+'</div>'
+      +'<button class="btn small blue" data-nid="'+noteId+'" data-qid="'+qid+'" onclick="runNoteAI(this.dataset.nid,this.dataset.qid)" style="font-size:11px;margin-top:6px">重试</button>';
+  }
+}
+
+// Re-run AI analysis for a note that already has analysis
+async function refreshNoteAI(noteId, qid){
+  var note=DB.notes.find(function(n){return n.id===noteId;}); if(!note)return;
+  // Clear cache to force re-run
+  if(qid) delete DB.analysisCache[qid];
+  note.analysis=''; saveDB();
+  await runNoteAI(noteId, qid);
+}
 function deleteSelectedNotes(){
   var checked=document.querySelectorAll('.note-cb:checked'); if(!checked.length){showToast('请先勾选');return;}
   if(!confirm('删除选中的 '+checked.length+' 条笔记？'))return;
