@@ -1309,22 +1309,37 @@ async function doAISummarize(){
   var checked=document.querySelectorAll('.note-cb:checked');
   var toProcess=[];
   if(checked.length){ checked.forEach(function(cb){var n=DB.notes.find(function(x){return x.id===cb.dataset.nid;});if(n)toProcess.push(n);}); }
-  else { toProcess=DB.notes.filter(function(n){return n.type!=='ai-summary';}).slice(0,15); }
+  else { toProcess=DB.notes.filter(function(n){return n.type!=='ai-summary';}); }
   if(!toProcess.length){showToast('请先勾选笔记，或确保笔记本有内容');return;}
   var promptEl=document.getElementById('ai-sum-prompt'), userPrompt=promptEl?promptEl.value.trim():'';
   var box=document.getElementById('ai-sum-box'); if(box) box.style.display='none';
   showToast('🤖 AI整理中，约15秒…',20000);
+  // Build compressed content — each note as one line to fit more notes
   var content=toProcess.map(function(n,i){
-    var c=(i+1)+'. ['+n.title+']\n'+n.content;
-    if(n.opts&&n.opts.length) c+='\n选项：'+n.opts.map(function(o){return o.letter+'.'+o.text;}).join(' | ');
-    if(n.answer) c+='\n正确答案：'+n.answer;
-    var ai=DB.analysisCache[n.qid]||n.analysis||''; if(ai) c+='\nAI解析：'+ai.slice(0,200);
+    var c=(i+1)+'. '+n.title;
+    // For question notes, include answer and key analysis only
+    if(n.type==='question'){
+      if(n.answer) c+=' [答案:'+n.answer+']';
+      var ai=DB.analysisCache[n.qid]||n.analysis||'';
+      if(ai){
+        // Extract just the 一句话记忆 if available
+        var mem=ai.match(/【一句话记忆】([^【]+)/); 
+        var logic=ai.match(/【解题逻辑】([^【]+)/);
+        if(mem) c+=' 记忆：'+mem[1].trim().slice(0,80);
+        else if(logic) c+=' 逻辑：'+logic[1].trim().slice(0,80);
+        else c+=' '+ai.slice(0,100);
+      }
+      // Include question body briefly
+      c+=' | 题：'+n.content.slice(0,60).replace(/\n/g,' ');
+    } else {
+      c+=' | '+n.content.slice(0,100).replace(/\n/g,' ');
+    }
     return c;
-  }).join('\n\n---\n\n');
+  }).join('\n');
   var instr=userPrompt||'按知识点归类整理；错误频率高的重点标注；混淆点用Markdown表格对比；每个知识点提炼一句核心金句口诀；整体结构清晰，适合考前速览';
-  var prompt='请将以下'+toProcess.length+'条PCE针灸考试笔记整理成完整复习资料：\n\n'+content+'\n\n整理要求：'+instr;
+  var prompt='请将以下'+toProcess.length+'条PCE针灸考试笔记整理成完整复习资料（必须覆盖全部'+toProcess.length+'条）：\n\n'+content+'\n\n整理要求：'+instr+'\n\n注意：输出要完整，涵盖所有知识点，不要省略。';
   try{
-    var txt=await callClaude(prompt,4096);
+    var txt=await callClaude(prompt,8000);
     var sumId=uid();
     DB.notes.push({id:sumId,type:'ai-summary',title:'AI复习笔记('+toProcess.length+'条) — '+new Date().toLocaleDateString('zh-CN'),content:txt,ts:Date.now()});
     saveDB(); renderNotes(); showToast('✓ AI复习笔记已生成！可在笔记里💬追问AI');
