@@ -486,7 +486,7 @@ async function batchAISummary(batchId){
     +qs.map(function(q,i){return (i+1)+'. '+q.body+'\n答案：'+(q.answer||'?')+(DB.analysisCache[q.id]?'\n解析：'+DB.analysisCache[q.id].slice(0,150):'');}).join('\n\n')
     +'\n\n要求：按知识点归类，用表格对比混淆点，每点一句口诀，适合考前速览';
   try{
-    var txt=await callClaude(prompt);
+    var txt=await callClaude(prompt,4096);
     DB.notes.push({id:uid(),type:'ai-summary',title:'AI复习笔记 — '+batch.name+'('+qs.length+'题)',content:txt,ts:Date.now()});
     saveDB(); showToast('✓ AI复习笔记已存入笔记本'); navTo('notes'); renderNotes();
   }catch(e){showToast('生成失败：'+e.message);}
@@ -1318,7 +1318,7 @@ async function doAISummarize(){
   var instr=userPrompt||'按知识点归类，用表格对比易混淆点，每类配一句记忆口诀，适合考前速览';
   var prompt='将以下'+toProcess.length+'条PCE针灸考试笔记整理成复习资料：\n\n'+content+'\n\n整理要求：'+instr;
   try{
-    var txt=await callClaude(prompt);
+    var txt=await callClaude(prompt,4096);
     DB.notes.push({id:uid(),type:'ai-summary',title:'AI复习笔记('+toProcess.length+'条) — '+new Date().toLocaleDateString('zh-CN'),content:txt,ts:Date.now()});
     saveDB(); renderNotes(); showToast('✓ AI复习笔记已生成');
   }catch(e){showToast('生成失败：'+e.message);}
