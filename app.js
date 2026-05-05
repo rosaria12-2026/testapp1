@@ -1188,11 +1188,11 @@ function renderNotes(){
     +'<button class="btn blue small" onclick="exportNotesPDF()">📄 导出PDF</button>'
     +'</div>'
     // AI summarize dialog
-    +'<div id="ai-sum-box" style="display:none;margin-top:10px;padding:12px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px">'
-    +'<div style="font-size:12px;font-weight:700;color:#6040b0;margin-bottom:8px">🤖 告诉AI你要什么格式</div>'
-    +'<textarea id="ai-sum-prompt" placeholder="例如：按知识点归类，用表格对比混淆点，每点配一句口诀\n例如：用脑图结构整理，突出重点\n例如：按错误频率排序" style="width:100%;min-height:70px;padding:8px;border:1px solid #d4c9f5;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>'
+    +'<div id="ai-sum-box" style="display:none;margin-top:10px;padding:14px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:10px">'
+    +'<div style="font-size:13px;font-weight:700;color:#6040b0;margin-bottom:10px">🤖 AI整理设置（可修改）</div>'
+    +'<textarea id="ai-sum-prompt" style="width:100%;min-height:90px;padding:8px;border:1px solid #d4c9f5;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box">按知识点归类整理；错误频率高的重点标注；混淆点用Markdown表格对比；每个知识点提炼一句核心金句口诀；整体结构清晰，适合考前速览</textarea>'
     +'<div class="row" style="margin-top:8px;gap:6px">'
-    +'<button class="btn primary" onclick="doAISummarize()">生成复习笔记</button>'
+    +'<button class="btn primary" onclick="doAISummarize()">🚀 开始整理</button>'
     +'<button class="btn small" onclick="document.getElementById(\'ai-sum-box\').style.display=\'none\'">取消</button>'
     +'</div></div></div>';
 
@@ -1314,13 +1314,21 @@ async function doAISummarize(){
   var promptEl=document.getElementById('ai-sum-prompt'), userPrompt=promptEl?promptEl.value.trim():'';
   var box=document.getElementById('ai-sum-box'); if(box) box.style.display='none';
   showToast('🤖 AI整理中，约15秒…',20000);
-  var content=toProcess.map(function(n,i){return (i+1)+'. ['+n.title+']\n'+n.content.slice(0,400);}).join('\n\n');
-  var instr=userPrompt||'按知识点归类，用表格对比易混淆点，每类配一句记忆口诀，适合考前速览';
-  var prompt='将以下'+toProcess.length+'条PCE针灸考试笔记整理成复习资料：\n\n'+content+'\n\n整理要求：'+instr;
+  var content=toProcess.map(function(n,i){
+    var c=(i+1)+'. ['+n.title+']\n'+n.content;
+    if(n.opts&&n.opts.length) c+='\n选项：'+n.opts.map(function(o){return o.letter+'.'+o.text;}).join(' | ');
+    if(n.answer) c+='\n正确答案：'+n.answer;
+    var ai=DB.analysisCache[n.qid]||n.analysis||''; if(ai) c+='\nAI解析：'+ai.slice(0,200);
+    return c;
+  }).join('\n\n---\n\n');
+  var instr=userPrompt||'按知识点归类整理；错误频率高的重点标注；混淆点用Markdown表格对比；每个知识点提炼一句核心金句口诀；整体结构清晰，适合考前速览';
+  var prompt='请将以下'+toProcess.length+'条PCE针灸考试笔记整理成完整复习资料：\n\n'+content+'\n\n整理要求：'+instr;
   try{
     var txt=await callClaude(prompt,4096);
-    DB.notes.push({id:uid(),type:'ai-summary',title:'AI复习笔记('+toProcess.length+'条) — '+new Date().toLocaleDateString('zh-CN'),content:txt,ts:Date.now()});
-    saveDB(); renderNotes(); showToast('✓ AI复习笔记已生成');
+    var sumId=uid();
+    DB.notes.push({id:sumId,type:'ai-summary',title:'AI复习笔记('+toProcess.length+'条) — '+new Date().toLocaleDateString('zh-CN'),content:txt,ts:Date.now()});
+    saveDB(); renderNotes(); showToast('✓ AI复习笔记已生成！可在笔记里💬追问AI');
+    setTimeout(function(){var el=document.getElementById('note-'+sumId);if(el)el.scrollIntoView({behavior:'smooth'});},300);
   }catch(e){showToast('生成失败：'+e.message);}
 }
 
