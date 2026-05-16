@@ -1705,52 +1705,29 @@ function cloudUpload(){
   var col = firebase.firestore().collection('users').doc(user.uid).collection('data');
   showToast('上传中…',8000);
 
-  // Doc 1: main — batches, progress, stats, maps (no AI analysis)
   var main = {
-    batches: DB.batches,
-    wrongMap: DB.wrongMap,
-    dkMap: DB.dkMap,
-    stats: DB.stats,
-    starMap: DB.starMap,
-    answerKeys: DB.answerKeys,
-    lastPos: DB.lastPos,
-    notes: DB.notes
+    batches:DB.batches, wrongMap:DB.wrongMap, dkMap:DB.dkMap,
+    stats:DB.stats, starMap:DB.starMap, answerKeys:DB.answerKeys,
+    lastPos:DB.lastPos, notes:DB.notes
   };
-
-  // Doc 2: analysis — all AI analysis cache
   var analysis = { analysisCache: DB.analysisCache };
+  var studyPages = DB.studyPages||[];
 
-  // Doc 3: study — study pages (strip base64 images only)
-  var studyPagesClean = (DB.studyPages||[]).map(function(pg){
-    var cleanText = pg.text||'';
-    // Remove base64 image data (keeps the img tag but removes the large data)
-    cleanText = cleanText.replace(/src="data:[^"]{20,}"/g, 'src="[图片仅本地保存]"');
-    return {id:pg.id, title:pg.title, ts:pg.ts, text:cleanText};
+  // Each study page = its own Firebase doc (incremental, no size limit)
+  var studyUploads = studyPages.map(function(pg){
+    var cleanText = (pg.text||'').replace(/src="data:[^"]{20,}"/g,'src="[图片仅本地]"');
+    return col.doc('study_'+pg.id).set({id:pg.id, title:pg.title, ts:pg.ts, text:cleanText});
   });
-  var study = { studyPages: studyPagesClean };
-  // study pages ready to upload: "studyPagesClean"
+  var studyIndex = col.doc('study_index').set({
+    ids: studyPages.map(function(pg){return pg.id;}),
+    ts: Date.now()
+  });
 
-  var s1=JSON.stringify(main).length, s2=JSON.stringify(analysis).length, s3=JSON.stringify(study).length;
-  var total=Math.round((s1+s2+s3)/1024);
-
-  // Check each doc size before uploading
-  var docs = [
-    {name:'main', data:main, size:s1},
-    {name:'analysis', data:analysis, size:s2},
-    {name:'study', data:study, size:s3}
-  ];
-  var tooBig = docs.filter(function(d){return d.size>900000;});
-  if(tooBig.length){
-    tooBig.forEach(function(d){ showToast('⚠️ 「'+d.name+'」文档 '+Math.round(d.size/1024)+'KB 超限，跳过', 4000); });
-  }
-  var uploadable = docs.filter(function(d){return d.size<=900000;});
-  Promise.all(uploadable.map(function(d){
-    return col.doc(d.name).set(d.data);
-  })).then(function(){
-    var skipped = tooBig.map(function(d){return d.name+'('+Math.round(d.size/1024)+'KB)';}).join(', ');
-    var spInfo=studyPagesClean.map(function(p){return p.title+'('+(p.text||'').length+'字)';}).join(', ');
-    showToast('✓ 已上传'+total+'KB · 背诵:'+studyPagesClean.length+'个['+spInfo+']'+(skipped?' 跳过:'+skipped:''),6000);
-  }).catch(function(e){ showToast('上传失败：'+e.message); });
+  var total = Math.round((JSON.stringify(main).length+JSON.stringify(analysis).length)/1024);
+  Promise.all([col.doc('main').set(main), col.doc('analysis').set(analysis), studyIndex].concat(studyUploads))
+    .then(function(){
+      showToast('✓ 已上传 '+total+'KB · 背诵页：'+studyPages.length+'个（各自独立）'+(bname?' · '+bname+' '+qnum:''),5000);
+    }).catch(function(e){ showToast('上传失败：'+e.message); });
 }
 
 function cloudDownload(){
@@ -1759,57 +1736,51 @@ function cloudDownload(){
   var col = firebase.firestore().collection('users').doc(user.uid).collection('data');
   showToast('下载中…',8000);
 
-  // Try new multi-doc format first
-  Promise.all([
-    col.doc('main').get(),
-    col.doc('analysis').get(),
-    col.doc('study').get()
-  ]).then(function(docs){
-    var mainDoc=docs[0], analysisDoc=docs[1], studyDoc=docs[2];
-    if(!mainDoc.exists){
-      // Fallback: try old single-doc format
-      return firebase.firestore().collection('users').doc(user.uid).get()
-        .then(function(oldDoc){
-          if(!oldDoc.exists){showToast('云端暂无数据');return;}
-          DB=JSON.parse(oldDoc.data().db);
-          ['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
-          if(!DB.studyPages) DB.studyPages=[];
-          if(DB.lastPos===undefined) DB.lastPos=null;
-          saveDB(); renderHome();
-          showToast('✓ 已下载（旧格式）— 建议重新上传更新格式');
-        });
-    }
-    // Merge all docs into DB
-    var m = mainDoc.data();
-    DB.batches = m.batches||[];
-    DB.wrongMap = m.wrongMap||{};
-    DB.dkMap = m.dkMap||{};
-    DB.stats = m.stats||{done:0,correct:0};
-    DB.starMap = m.starMap||{};
-    DB.answerKeys = m.answerKeys||{};
-    DB.lastPos = m.lastPos||null;
-    DB.notes = m.notes||[];
-    DB.analysisCache = analysisDoc.exists ? (analysisDoc.data().analysisCache||{}) : {};
-    DB.studyPages = studyDoc.exists ? (studyDoc.data().studyPages||[]) : [];
-    DB.hlCache = {};
-    saveDB(); renderHome();
-    // Show detailed study page info
-    var bname='', qnum='';
-    if(DB.lastPos && DB.lastPos.batchId){
-      var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
-      if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
-    }
-    showToast('✓ 已下载'+(bname?' — 上次做到：'+bname+' '+qnum:''));
-    // Always refresh study page after download
-    renderStudy();
-    // Show what was received
-    var spDetails = DB.studyPages.map(function(p){return p.title+'('+(p.text||'').length+'字)';}).join('\n');
-    if(studyDoc.exists && DB.studyPages.length>0){
-      alert('✓ 背诵页已同步 '+DB.studyPages.length+' 个：\n'+spDetails+'\n\n请点「📚背诵」tab查看');
-    } else {
-      alert('⚠️ 背诵页未收到数据\nstudyDoc.exists='+studyDoc.exists+'\n页数='+DB.studyPages.length);
-    }
-  }).catch(function(e){ showToast('下载失败：'+e.message); });
+  Promise.all([col.doc('main').get(), col.doc('analysis').get(), col.doc('study_index').get()])
+    .then(function(results){
+      var mainDoc=results[0], analysisDoc=results[1], indexDoc=results[2];
+      if(!mainDoc.exists){
+        // Fallback old single-doc format
+        return firebase.firestore().collection('users').doc(user.uid).get()
+          .then(function(oldDoc){
+            if(!oldDoc.exists){showToast('云端暂无数据');return;}
+            DB=JSON.parse(oldDoc.data().db);
+            ['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
+            if(!DB.studyPages) DB.studyPages=[];
+            if(DB.lastPos===undefined) DB.lastPos=null;
+            saveDB(); renderHome(); renderStudy();
+            showToast('✓ 已下载（旧格式）');
+          });
+      }
+      var m=mainDoc.data();
+      DB.batches=m.batches||[]; DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{};
+      DB.stats=m.stats||{done:0,correct:0}; DB.starMap=m.starMap||{};
+      DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null; DB.notes=m.notes||[];
+      DB.analysisCache=analysisDoc.exists?(analysisDoc.data().analysisCache||{}):{};
+      DB.hlCache={};
+
+      // Download each study page individually
+      var ids = indexDoc.exists?(indexDoc.data().ids||[]):[];
+      var downloadStudyPages = ids.length>0
+        ? Promise.all(ids.map(function(id){return col.doc('study_'+id).get();}))
+            .then(function(pageDocs){
+              return pageDocs.filter(function(d){return d.exists;}).map(function(d){return d.data();});
+            })
+        : col.doc('study').get().then(function(sd){  // fallback old study doc
+            return sd.exists?(sd.data().studyPages||[]):[];
+          });
+
+      return downloadStudyPages.then(function(pages){
+        DB.studyPages = pages;
+        saveDB(); renderHome(); renderStudy();
+        var bname='', qnum='';
+        if(DB.lastPos && DB.lastPos.batchId){
+          var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
+          if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
+        }
+        showToast('✓ 已下载 · 背诵页：'+pages.length+'个'+(bname?' · 上次：'+bname+' '+qnum:''),5000);
+      });
+    }).catch(function(e){ showToast('下载失败：'+e.message); });
 }
 
 // ═══════════════════════════════════════════════════════
