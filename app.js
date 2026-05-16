@@ -1702,44 +1702,90 @@ function cloudUpload(){
     var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
     if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
   }
-  // Strip base64 images from studyPages to reduce size (images stay local only)
-  var dbForCloud = JSON.parse(JSON.stringify(DB));
-  if(dbForCloud.studyPages){
-    dbForCloud.studyPages = dbForCloud.studyPages.map(function(pg){
-      var stripped = JSON.parse(JSON.stringify(pg));
-      // Replace base64 img src with placeholder
-      if(stripped.text) stripped.text = stripped.text.replace(/src="data:image[^"]+"/g,'src="[图片-仅本地保存]"');
-      return stripped;
-    });
-  }
-  // Also strip hlCache (can be large)
-  dbForCloud.hlCache = {};
-  var cloudStr = JSON.stringify(dbForCloud);
-  var sizeKB = Math.round(cloudStr.length/1024);
-  firebase.firestore().collection('users').doc(user.uid).set({db:cloudStr})
-    .then(function(){showToast('✓ 已上传 ('+sizeKB+'KB'+(bname?' · 进度：'+bname+' '+qnum:'')+'，图片仅本地）');  })
-    .catch(function(e){showToast('上传失败：'+e.message);});
+  var col = firebase.firestore().collection('users').doc(user.uid).collection('data');
+  showToast('上传中…',8000);
+
+  // Doc 1: main — batches, progress, stats, maps (no AI analysis)
+  var main = {
+    batches: DB.batches,
+    wrongMap: DB.wrongMap,
+    dkMap: DB.dkMap,
+    stats: DB.stats,
+    starMap: DB.starMap,
+    answerKeys: DB.answerKeys,
+    lastPos: DB.lastPos,
+    notes: DB.notes
+  };
+
+  // Doc 2: analysis — all AI analysis cache
+  var analysis = { analysisCache: DB.analysisCache };
+
+  // Doc 3: study — study pages (no images)
+  var studyPagesClean = (DB.studyPages||[]).map(function(pg){
+    return {id:pg.id, title:pg.title, ts:pg.ts,
+      text:(pg.text||'').replace(/src="data:image\/[^"]*"/g,'src="[图片仅本地]"')};
+  });
+  var study = { studyPages: studyPagesClean };
+
+  var s1=JSON.stringify(main).length, s2=JSON.stringify(analysis).length, s3=JSON.stringify(study).length;
+  var total=Math.round((s1+s2+s3)/1024);
+
+  Promise.all([
+    col.doc('main').set(main),
+    col.doc('analysis').set(analysis),
+    col.doc('study').set(study)
+  ]).then(function(){
+    showToast('✓ 已上传 '+total+'KB'+(bname?' · '+bname+' '+qnum:''));
+  }).catch(function(e){ showToast('上传失败：'+e.message); });
 }
+
 function cloudDownload(){
   if(typeof firebase==='undefined'){showToast('请先配置Firebase');return;}
   var user=firebase.auth().currentUser; if(!user){showToast('请先登录');return;}
-  firebase.firestore().collection('users').doc(user.uid).get()
-    .then(function(doc){
-      if(!doc.exists){showToast('云端暂无数据');return;}
-      DB=JSON.parse(doc.data().db);
-      ['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
-  if(!DB.studyPages) DB.studyPages=[];
-      if(DB.lastPos===undefined) DB.lastPos=null;
-      saveDB(); renderHome();
-      // Show what was restored
-      var bname='', qnum='';
-      if(DB.lastPos && DB.lastPos.batchId){
-        var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
-        if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
-      }
-      showToast('✓ 已下载云端数据'+(bname?' — 上次做到：'+bname+' '+qnum:''));
-    })
-    .catch(function(e){showToast('下载失败：'+e.message);});
+  var col = firebase.firestore().collection('users').doc(user.uid).collection('data');
+  showToast('下载中…',8000);
+
+  // Try new multi-doc format first
+  Promise.all([
+    col.doc('main').get(),
+    col.doc('analysis').get(),
+    col.doc('study').get()
+  ]).then(function(docs){
+    var mainDoc=docs[0], analysisDoc=docs[1], studyDoc=docs[2];
+    if(!mainDoc.exists){
+      // Fallback: try old single-doc format
+      return firebase.firestore().collection('users').doc(user.uid).get()
+        .then(function(oldDoc){
+          if(!oldDoc.exists){showToast('云端暂无数据');return;}
+          DB=JSON.parse(oldDoc.data().db);
+          ['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
+          if(!DB.studyPages) DB.studyPages=[];
+          if(DB.lastPos===undefined) DB.lastPos=null;
+          saveDB(); renderHome();
+          showToast('✓ 已下载（旧格式）— 建议重新上传更新格式');
+        });
+    }
+    // Merge all docs into DB
+    var m = mainDoc.data();
+    DB.batches = m.batches||[];
+    DB.wrongMap = m.wrongMap||{};
+    DB.dkMap = m.dkMap||{};
+    DB.stats = m.stats||{done:0,correct:0};
+    DB.starMap = m.starMap||{};
+    DB.answerKeys = m.answerKeys||{};
+    DB.lastPos = m.lastPos||null;
+    DB.notes = m.notes||[];
+    DB.analysisCache = analysisDoc.exists ? (analysisDoc.data().analysisCache||{}) : {};
+    DB.studyPages = studyDoc.exists ? (studyDoc.data().studyPages||[]) : [];
+    DB.hlCache = {};
+    saveDB(); renderHome();
+    var bname='', qnum='';
+    if(DB.lastPos && DB.lastPos.batchId){
+      var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
+      if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
+    }
+    showToast('✓ 已下载'+(bname?' — 上次做到：'+bname+' '+qnum:''));
+  }).catch(function(e){ showToast('下载失败：'+e.message); });
 }
 
 // ═══════════════════════════════════════════════════════
