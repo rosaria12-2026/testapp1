@@ -20,6 +20,7 @@
     <button class="tab" data-page="review">复习库</button>
     <button class="tab" data-page="mock">模拟考</button>
     <button class="tab" data-page="notes">📝笔记</button>
+    <button class="tab" data-page="study">📚背诵</button>
     <button class="tab" data-page="cloud">云同步</button>
   </div>
 </header>
@@ -156,6 +157,11 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
     <!-- rendered by renderNotes() -->
   </section>
 
+  <!-- STUDY — 背诵页 -->
+  <section id="study" class="page">
+    <div id="study-area"></div>
+  </section>
+
   <!-- CLOUD -->
   <section id="cloud" class="page">
     <div class="card">
@@ -216,6 +222,7 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 <script>
   // Init notes page when tab clicked
   document.querySelector('.tab[data-page="notes"]').addEventListener('click', function(){ renderNotes(); });
+  document.querySelector('.tab[data-page="study"]').addEventListener('click', function(){ renderStudy(); });
   document.querySelector('.tab[data-page="review"]').addEventListener('click', function(){ renderReview(); });
   document.querySelector('.tab[data-page="mock"]').addEventListener('click', function(){ renderMockSetup(); });
   if ('serviceWorker' in navigator) {
