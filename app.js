@@ -1720,12 +1720,16 @@ function cloudUpload(){
   // Doc 2: analysis — all AI analysis cache
   var analysis = { analysisCache: DB.analysisCache };
 
-  // Doc 3: study — study pages (no images)
+  // Doc 3: study — study pages (strip base64 images only)
   var studyPagesClean = (DB.studyPages||[]).map(function(pg){
-    return {id:pg.id, title:pg.title, ts:pg.ts,
-      text:(pg.text||'').replace(/src="data:image\/[^"]*"/g,'src="[图片仅本地]"')};
+    var cleanText = pg.text||'';
+    // Remove base64 image data (keeps the img tag but removes the large data)
+    cleanText = cleanText.replace(/src="data:[^"]{20,}"/g, 'src="[图片仅本地保存]"');
+    return {id:pg.id, title:pg.title, ts:pg.ts, text:cleanText};
   });
   var study = { studyPages: studyPagesClean };
+  // Debug: log study pages
+  console.log('Study pages to upload:', studyPagesClean.length, studyPagesClean.map(function(p){return p.title+'('+Math.round((p.text||'').length/1024)+'KB)';}));
 
   var s1=JSON.stringify(main).length, s2=JSON.stringify(analysis).length, s3=JSON.stringify(study).length;
   var total=Math.round((s1+s2+s3)/1024);
