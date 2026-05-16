@@ -1728,15 +1728,7 @@ function cloudUpload(){
     return {id:pg.id, title:pg.title, ts:pg.ts, text:cleanText};
   });
   var study = { studyPages: studyPagesClean };
-  // Show study pages info in alert so it doesn't disappear
-  var spDebug = studyPagesClean.map(function(p){
-    return p.title + ': ' + (p.text||'').length + ' 字';
-  }).join('\n');
-  if(studyPagesClean.length===0){
-    alert('⚠️ 背诵页是空的！DB.studyPages长度：'+(DB.studyPages||[]).length);
-  } else {
-    alert('背诵页将上传 '+studyPagesClean.length+' 个：\n'+spDebug);
-  }
+  // study pages ready to upload: "studyPagesClean"
 
   var s1=JSON.stringify(main).length, s2=JSON.stringify(analysis).length, s3=JSON.stringify(study).length;
   var total=Math.round((s1+s2+s3)/1024);
@@ -1802,22 +1794,21 @@ function cloudDownload(){
     DB.hlCache = {};
     saveDB(); renderHome();
     // Show detailed study page info
-    var spDetails = DB.studyPages.map(function(p){return '"'+p.title+'"('+(p.text||'').length+'字)';}).join(', ');
-    var spMsg = studyDoc.exists
-      ? '背诵页收到 '+DB.studyPages.length+' 个: '+spDetails
-      : '⚠️ 云端无背诵页数据（请先在Mac上传）';
-    showToast(spMsg, 6000);
     var bname='', qnum='';
     if(DB.lastPos && DB.lastPos.batchId){
       var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
       if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
     }
-    setTimeout(function(){
-      showToast('✓ 已下载'+(bname?' — 上次做到：'+bname+' '+qnum:''));
-      // Refresh study page
-      var studyArea = document.getElementById('study-area');
-      if(studyArea) renderStudy();
-    }, 3000);
+    showToast('✓ 已下载'+(bname?' — 上次做到：'+bname+' '+qnum:''));
+    // Always refresh study page after download
+    renderStudy();
+    // Show what was received
+    var spDetails = DB.studyPages.map(function(p){return p.title+'('+(p.text||'').length+'字)';}).join('\n');
+    if(studyDoc.exists && DB.studyPages.length>0){
+      alert('✓ 背诵页已同步 '+DB.studyPages.length+' 个：\n'+spDetails+'\n\n请点「📚背诵」tab查看');
+    } else {
+      alert('⚠️ 背诵页未收到数据\nstudyDoc.exists='+studyDoc.exists+'\n页数='+DB.studyPages.length);
+    }
   }).catch(function(e){ showToast('下载失败：'+e.message); });
 }
 
