@@ -1702,8 +1702,22 @@ function cloudUpload(){
     var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
     if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
   }
-  firebase.firestore().collection('users').doc(user.uid).set({db:JSON.stringify(DB)})
-    .then(function(){showToast('✓ 已上传'+(bname?' (含进度：'+bname+' '+qnum+')':''));})
+  // Strip base64 images from studyPages to reduce size (images stay local only)
+  var dbForCloud = JSON.parse(JSON.stringify(DB));
+  if(dbForCloud.studyPages){
+    dbForCloud.studyPages = dbForCloud.studyPages.map(function(pg){
+      var stripped = JSON.parse(JSON.stringify(pg));
+      // Replace base64 img src with placeholder
+      if(stripped.text) stripped.text = stripped.text.replace(/src="data:image[^"]+"/g,'src="[图片-仅本地保存]"');
+      return stripped;
+    });
+  }
+  // Also strip hlCache (can be large)
+  dbForCloud.hlCache = {};
+  var cloudStr = JSON.stringify(dbForCloud);
+  var sizeKB = Math.round(cloudStr.length/1024);
+  firebase.firestore().collection('users').doc(user.uid).set({db:cloudStr})
+    .then(function(){showToast('✓ 已上传 ('+sizeKB+'KB'+(bname?' · 进度：'+bname+' '+qnum:'')+'，图片仅本地）');  })
     .catch(function(e){showToast('上传失败：'+e.message);});
 }
 function cloudDownload(){
