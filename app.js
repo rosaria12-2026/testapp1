@@ -1728,8 +1728,15 @@ function cloudUpload(){
     return {id:pg.id, title:pg.title, ts:pg.ts, text:cleanText};
   });
   var study = { studyPages: studyPagesClean };
-  // Debug: log study pages
-  console.log('Study pages to upload:', studyPagesClean.length, studyPagesClean.map(function(p){return p.title+'('+Math.round((p.text||'').length/1024)+'KB)';}));
+  // Show study pages info in alert so it doesn't disappear
+  var spDebug = studyPagesClean.map(function(p){
+    return p.title + ': ' + (p.text||'').length + ' 字';
+  }).join('\n');
+  if(studyPagesClean.length===0){
+    alert('⚠️ 背诵页是空的！DB.studyPages长度：'+(DB.studyPages||[]).length);
+  } else {
+    alert('背诵页将上传 '+studyPagesClean.length+' 个：\n'+spDebug);
+  }
 
   var s1=JSON.stringify(main).length, s2=JSON.stringify(analysis).length, s3=JSON.stringify(study).length;
   var total=Math.round((s1+s2+s3)/1024);
