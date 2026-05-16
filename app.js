@@ -1730,12 +1730,22 @@ function cloudUpload(){
   var s1=JSON.stringify(main).length, s2=JSON.stringify(analysis).length, s3=JSON.stringify(study).length;
   var total=Math.round((s1+s2+s3)/1024);
 
-  Promise.all([
-    col.doc('main').set(main),
-    col.doc('analysis').set(analysis),
-    col.doc('study').set(study)
-  ]).then(function(){
-    showToast('✓ 已上传 '+total+'KB'+(bname?' · '+bname+' '+qnum:''));
+  // Check each doc size before uploading
+  var docs = [
+    {name:'main', data:main, size:s1},
+    {name:'analysis', data:analysis, size:s2},
+    {name:'study', data:study, size:s3}
+  ];
+  var tooBig = docs.filter(function(d){return d.size>900000;});
+  if(tooBig.length){
+    tooBig.forEach(function(d){ showToast('⚠️ 「'+d.name+'」文档 '+Math.round(d.size/1024)+'KB 超限，跳过', 4000); });
+  }
+  var uploadable = docs.filter(function(d){return d.size<=900000;});
+  Promise.all(uploadable.map(function(d){
+    return col.doc(d.name).set(d.data);
+  })).then(function(){
+    var skipped = tooBig.map(function(d){return d.name+'('+Math.round(d.size/1024)+'KB)';}).join(', ');
+    showToast('✓ 已上传 '+total+'KB'+(skipped?' · 跳过：'+skipped:'')+(bname?' · '+bname+' '+qnum:''));
   }).catch(function(e){ showToast('上传失败：'+e.message); });
 }
 
