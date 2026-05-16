@@ -1826,6 +1826,8 @@ function studyOpenPage(pgId){
     // Image and file upload
     +'<label class="btn small blue" style="cursor:pointer">📷 上载图片<input type="file" accept="image/*" style="display:none" onchange="studyInsertImage(event)"></label>'
     +'<label class="btn small" style="cursor:pointer">📄 上载文档<input type="file" accept=".txt,.md" style="display:none" onchange="studyInsertFile(event)"></label>'
+    +'<button class="btn small" style="background:#fff;border:1px solid #aaa" onclick="studyPasteFromClipboard()">📋 粘贴</button>'
+    +'<button class="btn small" style="background:#e8f0fe;color:#1a4fa0;border:1px solid #b8d0f0" onclick="studyInsertTable()">⊞ 插入表格</button>'
     +'</div></div>'
 
     // Editor
@@ -1928,7 +1930,6 @@ function studyInsertFile(event){
     var ed = document.getElementById('study-editor'); if(!ed) return;
     ed.focus();
     var text = e.target.result;
-    // Insert as formatted text block
     var div = document.createElement('div');
     div.style.cssText = 'background:#f8f7f3;border:1px solid #ddd;border-radius:6px;padding:12px;margin:8px 0;white-space:pre-wrap;font-size:14px';
     div.textContent = '📄 '+file.name+'\n\n'+text;
@@ -1947,6 +1948,83 @@ function studyInsertFile(event){
   };
   reader.readAsText(file,'utf-8');
   event.target.value='';
+}
+
+// 粘贴功能 — 支持文字、图片、富文本
+async function studyPasteFromClipboard(){
+  var ed = document.getElementById('study-editor'); if(!ed) return;
+  ed.focus();
+  try{
+    // Try clipboard API first (modern browsers)
+    var items = await navigator.clipboard.read();
+    for(var i=0;i<items.length;i++){
+      var item = items[i];
+      if(item.types.indexOf('image/png')>=0||item.types.indexOf('image/jpeg')>=0){
+        var imgType = item.types.find(function(t){return t.startsWith('image/');});
+        var blob = await item.getType(imgType);
+        var url = URL.createObjectURL(blob);
+        var img = document.createElement('img');
+        img.src = url; img.style.cssText='max-width:100%;border-radius:8px;margin:8px 0;display:block';
+        insertNodeAtCursor(img); studyAutoSave();
+        showToast('✓ 图片已粘贴'); return;
+      }
+      if(item.types.indexOf('text/html')>=0){
+        var blob2 = await item.getType('text/html');
+        var html2 = await blob2.text();
+        document.execCommand('insertHTML',false,html2);
+        studyAutoSave(); showToast('✓ 已粘贴（含格式）'); return;
+      }
+      if(item.types.indexOf('text/plain')>=0){
+        var blob3 = await item.getType('text/plain');
+        var txt = await blob3.text();
+        document.execCommand('insertText',false,txt);
+        studyAutoSave(); showToast('✓ 已粘贴'); return;
+      }
+    }
+  }catch(e){
+    // Fallback: use execCommand paste (works in most browsers)
+    try{ document.execCommand('paste'); studyAutoSave(); showToast('✓ 已粘贴'); }
+    catch(e2){ showToast('请直接用 Ctrl+V / ⌘+V 粘贴'); }
+  }
+}
+
+function insertNodeAtCursor(node){
+  var sel=window.getSelection();
+  if(sel&&sel.rangeCount){
+    var range=sel.getRangeAt(0);
+    range.collapse(false);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else { document.getElementById('study-editor').appendChild(node); }
+}
+
+// 插入表格
+function studyInsertTable(){
+  var rows = parseInt(prompt('行数：','3')||'3');
+  var cols = parseInt(prompt('列数：','3')||'3');
+  if(!rows||!cols||rows<1||cols<1){showToast('行列数无效');return;}
+  var html = '<table style="border-collapse:collapse;width:100%;margin:10px 0">';
+  for(var r=0;r<rows;r++){
+    html+='<tr>';
+    for(var c=0;c<cols;c++){
+      var isHeader = r===0;
+      var tag = isHeader?'th':'td';
+      var style = isHeader
+        ? 'border:1px solid #aaa;padding:7px 10px;background:#e8e4f8;font-weight:700;text-align:center;min-width:60px'
+        : 'border:1px solid #aaa;padding:7px 10px;min-width:60px;vertical-align:top';
+      html+='<'+tag+' contenteditable="true" style="'+style+'">'+(isHeader?'标题'+(c+1):'')+'</'+tag+'>';
+    }
+    html+='</tr>';
+  }
+  html+='</table><p></p>';
+  var ed = document.getElementById('study-editor'); if(!ed) return;
+  ed.focus();
+  document.execCommand('insertHTML',false,html);
+  studyAutoSave();
+  showToast('✓ 表格已插入（可直接点击单元格编辑）');
 }
 
 // ═══════════════════════════════════════════════════════
