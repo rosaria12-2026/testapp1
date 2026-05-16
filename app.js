@@ -1749,7 +1749,8 @@ function cloudUpload(){
     return col.doc(d.name).set(d.data);
   })).then(function(){
     var skipped = tooBig.map(function(d){return d.name+'('+Math.round(d.size/1024)+'KB)';}).join(', ');
-    showToast('✓ 已上传 '+total+'KB'+(skipped?' · 跳过：'+skipped:'')+(bname?' · '+bname+' '+qnum:''));
+    var spInfo=studyPagesClean.map(function(p){return p.title+'('+(p.text||'').length+'字)';}).join(', ');
+    showToast('✓ 已上传'+total+'KB · 背诵:'+studyPagesClean.length+'个['+spInfo+']'+(skipped?' 跳过:'+skipped:''),6000);
   }).catch(function(e){ showToast('上传失败：'+e.message); });
 }
 
@@ -1793,18 +1794,23 @@ function cloudDownload(){
     DB.studyPages = studyDoc.exists ? (studyDoc.data().studyPages||[]) : [];
     DB.hlCache = {};
     saveDB(); renderHome();
-    // Debug: show study pages count
-    console.log('studyDoc exists:', studyDoc.exists, 'pages:', DB.studyPages.length);
-    showToast('背诵页：'+(studyDoc.exists ? DB.studyPages.length+'个页面' : '云端无数据'));
+    // Show detailed study page info
+    var spDetails = DB.studyPages.map(function(p){return '"'+p.title+'"('+(p.text||'').length+'字)';}).join(', ');
+    var spMsg = studyDoc.exists
+      ? '背诵页收到 '+DB.studyPages.length+' 个: '+spDetails
+      : '⚠️ 云端无背诵页数据（请先在Mac上传）';
+    showToast(spMsg, 6000);
     var bname='', qnum='';
     if(DB.lastPos && DB.lastPos.batchId){
       var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
       if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
     }
-    showToast('✓ 已下载'+(bname?' — 上次做到：'+bname+' '+qnum:''));
-    // Refresh study page if currently visible
-    var studyArea = document.getElementById('study-area');
-    if(studyArea && document.getElementById('study').classList.contains('active')) renderStudy();
+    setTimeout(function(){
+      showToast('✓ 已下载'+(bname?' — 上次做到：'+bname+' '+qnum:''));
+      // Refresh study page
+      var studyArea = document.getElementById('study-area');
+      if(studyArea) renderStudy();
+    }, 3000);
   }).catch(function(e){ showToast('下载失败：'+e.message); });
 }
 
