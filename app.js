@@ -10,12 +10,13 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[] };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
 // migrate old keys
 ['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
+if(!DB.studyPages) DB.studyPages=[];
 if(DB.lastPos===undefined) DB.lastPos=null;
 // Re-fix caseText for existing batches: clear wrong case assignments beyond range
 (function fixCaseRanges(){
@@ -1713,6 +1714,7 @@ function cloudDownload(){
       if(!doc.exists){showToast('云端暂无数据');return;}
       DB=JSON.parse(doc.data().db);
       ['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
+  if(!DB.studyPages) DB.studyPages=[];
       if(DB.lastPos===undefined) DB.lastPos=null;
       saveDB(); renderHome();
       // Show what was restored
@@ -1734,6 +1736,217 @@ function downloadCSV(){
   var csv='题号,题目,我选,正确答案,结果\n';
   QZ.qs.forEach(function(q,i){ var my=QZ.ans[i]||'—',ans=q.answer||'—'; var res=q.answer&&my!=='—'?(my.toUpperCase()===q.answer.toUpperCase()?'正确':'错误'):'—'; csv+=(q.num||i+1)+',"'+q.body.replace(/"/g,'""').replace(/\n/g,' ')+'",'+my+','+ans+','+res+'\n'; });
   var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='答题结果.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ═══════════════════════════════════════════════════════
+// 背诵页 STUDY PAGE
+// ═══════════════════════════════════════════════════════
+var _studyCurPage = null; // current page id being edited
+
+function renderStudy(){
+  var area = document.getElementById('study-area'); if(!area) return;
+  if(!DB.studyPages) DB.studyPages=[];
+
+  var html = '<div class="card">'
+    +'<div class="row"><button class="btn" onclick="navBack()">← 返回</button>'
+    +'<div class="title spacer" style="margin-left:10px">📚 背诵资料库</div>'
+    +'<button class="btn primary" onclick="studyNewPage()">+ 新建页面</button>'
+    +'</div>'
+    +'<div class="sub" style="margin-top:4px">共 '+DB.studyPages.length+' 个页面 · 永久保存，除非你删除</div>'
+    +'</div>';
+
+  if(!DB.studyPages.length){
+    html+='<div class="card"><div class="sub">还没有背诵页面。点「+ 新建页面」开始！</div></div>';
+  } else {
+    DB.studyPages.forEach(function(pg){
+      html+='<div class="card" style="padding:12px 14px">'
+        +'<div class="row" style="margin-bottom:8px;gap:8px;flex-wrap:wrap">'
+        +'<span style="font-size:15px;font-weight:700;flex:1">'+esc(pg.title)+'</span>'
+        +'<span style="font-size:11px;color:#aaa">'+new Date(pg.ts).toLocaleDateString('zh-CN')+'</span>'
+        +'<button class="btn small primary" data-pid="'+pg.id+'" onclick="studyOpenPage(this.dataset.pid)">✏️ 编辑/查看</button>'
+        +'<button class="btn small red" data-pid="'+pg.id+'" onclick="studyDeletePage(this.dataset.pid)">删除</button>'
+        +'</div>'
+        // Preview first 100 chars
+        +'<div style="font-size:13px;color:#666;overflow:hidden;max-height:40px;line-height:1.5">'+esc((pg.text||'').replace(/<[^>]+>/g,'').slice(0,120))+'</div>'
+        +'</div>';
+    });
+  }
+  html += backBtn();
+  area.innerHTML = html;
+}
+
+function studyNewPage(){
+  var title = prompt('页面名称（例如：穴位速记、经络口诀）：');
+  if(!title||!title.trim()) return;
+  var pg = {id:uid(), title:title.trim(), text:'', images:[], ts:Date.now()};
+  DB.studyPages.push(pg);
+  saveDB();
+  studyOpenPage(pg.id);
+}
+
+function studyDeletePage(pgId){
+  if(!confirm('确定删除这个背诵页面？')) return;
+  DB.studyPages = DB.studyPages.filter(function(p){return p.id!==pgId;});
+  saveDB(); renderStudy(); showToast('已删除');
+}
+
+function studyOpenPage(pgId){
+  var pg = DB.studyPages.find(function(p){return p.id===pgId;});
+  if(!pg) return;
+  _studyCurPage = pgId;
+  var area = document.getElementById('study-area');
+
+  var html = '<div class="card">'
+    +'<div class="row" style="gap:8px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="studySavePage();renderStudy()">← 返回</button>'
+    +'<div class="title spacer" contenteditable="true" id="study-title-'+pgId+'" data-pid="'+pgId+'" '
+    +'onblur="studySaveTitleInline(this.dataset.pid)" style="margin-left:8px;font-size:17px;outline:none;flex:1">'+esc(pg.title)+'</div>'
+    +'<button class="btn primary" onclick="studySavePage()">💾 保存</button>'
+    +'</div></div>'
+
+    // Toolbar
+    +'<div class="card" style="padding:10px 12px">'
+    +'<div class="row" style="flex-wrap:wrap;gap:6px;align-items:center">'
+    // Text formatting
+    +'<button class="btn small" style="background:#FFE066;color:#333;border:1px solid #f0c040;font-weight:700" data-cmd="hilite" data-val="#FFE066" onclick="studyFormat(this.dataset.cmd,this.dataset.val)">🖊 黄色</button>'
+    +'<button class="btn small" style="background:#FF6B6B;color:#fff;font-weight:700" data-cmd="hilite" data-val="#FF6B6B" onclick="studyFormat(this.dataset.cmd,this.dataset.val)">🔴 红色</button>'
+    +'<button class="btn small" style="background:#90EE90;color:#333;font-weight:700" data-cmd="hilite" data-val="#90EE90" onclick="studyFormat(this.dataset.cmd,this.dataset.val)">🟢 绿色</button>'
+    +'<button class="btn small" style="background:#87CEEB;color:#333;font-weight:700" data-cmd="hilite" data-val="#87CEEB" onclick="studyFormat(this.dataset.cmd,this.dataset.val)">🔵 蓝色</button>'
+    +'<button class="btn small" style="font-weight:700;border:1px solid #aaa" onclick="studyFormat(\'bold\')"><b>B</b> 粗体</button>'
+    +'<button class="btn small" style="border-bottom:2.5px solid #333;font-weight:700" onclick="studyFormat(\'underline\')"><u>U</u> 划线</button>'
+    +'<button class="btn small" style="color:#b83232;font-weight:700;border:1px solid #f5c5c5" data-cmd="foreColor" data-val="#b83232" onclick="studyFormat(this.dataset.cmd,this.dataset.val)">A 红字</button>'
+    +'<button class="btn small" style="background:#f5f5f5;color:#555;border:1px solid #ccc" onclick="studyUndo()">↩ 撤销</button>'
+    +'<span style="width:1px;background:#ddd;height:20px;flex-shrink:0"></span>'
+    // Font size
+    +'<select onchange="studyFontSize(this.value)" style="padding:4px 6px;border:1px solid #ddd;border-radius:6px;font-size:12px">'
+    +'<option value="">字号</option>'
+    +'<option value="1">小</option><option value="3" selected>中</option><option value="5">大</option><option value="7">特大</option>'
+    +'</select>'
+    +'<span style="width:1px;background:#ddd;height:20px;flex-shrink:0"></span>'
+    // Image and file upload
+    +'<label class="btn small blue" style="cursor:pointer">📷 上载图片<input type="file" accept="image/*" style="display:none" onchange="studyInsertImage(event)"></label>'
+    +'<label class="btn small" style="cursor:pointer">📄 上载文档<input type="file" accept=".txt,.md" style="display:none" onchange="studyInsertFile(event)"></label>'
+    +'</div></div>'
+
+    // Editor
+    +'<div class="card" style="padding:0">'
+    +'<div id="study-editor" contenteditable="true" '
+    +'style="min-height:500px;padding:20px;font-size:15px;line-height:1.8;outline:none;white-space:pre-wrap;word-break:break-word;-webkit-user-modify:read-write-plaintext-only" '
+    +'oninput="studyAutoSave()">'
+    +pg.text
+    +'</div></div>'
+    + backBtn();
+
+  // Fix contenteditable style conflict
+  area.innerHTML = html;
+  // Set editor to use formatted content
+  var editor = document.getElementById('study-editor');
+  if(editor){
+    editor.style.webkitUserModify = '';
+    editor.innerHTML = pg.text || '';
+  }
+  // Focus at end
+  setTimeout(function(){
+    var ed = document.getElementById('study-editor');
+    if(ed){ ed.focus(); var r=document.createRange(),s=window.getSelection();r.selectNodeContents(ed);r.collapse(false);s.removeAllRanges();s.addRange(r); }
+  },100);
+}
+
+function studyFormat(cmd, val){
+  var ed = document.getElementById('study-editor'); if(!ed) return;
+  ed.focus();
+  if(cmd==='hilite') document.execCommand('hiliteColor',false,val);
+  else if(cmd==='foreColor') document.execCommand('foreColor',false,val);
+  else document.execCommand(cmd,false,val||null);
+  studyAutoSave();
+}
+function studyFontSize(val){
+  if(!val) return;
+  var ed = document.getElementById('study-editor'); if(!ed) return;
+  ed.focus(); document.execCommand('fontSize',false,val); studyAutoSave();
+}
+function studyUndo(){
+  var ed = document.getElementById('study-editor'); if(!ed) return;
+  ed.focus(); document.execCommand('undo',false,null);
+  studyAutoSave();
+}
+
+function studyAutoSave(){
+  if(!_studyCurPage) return;
+  var pg = DB.studyPages.find(function(p){return p.id===_studyCurPage;}); if(!pg) return;
+  var ed = document.getElementById('study-editor');
+  if(ed) pg.text = ed.innerHTML;
+  var titleEl = document.getElementById('study-title-'+_studyCurPage);
+  if(titleEl) pg.title = titleEl.textContent.trim()||pg.title;
+  pg.ts = Date.now();
+  saveDB();
+}
+
+function studySavePage(){
+  studyAutoSave();
+  showToast('✓ 已保存');
+}
+
+function studySaveTitleInline(pgId){
+  var pg = DB.studyPages.find(function(p){return p.id===pgId;}); if(!pg) return;
+  var el = document.getElementById('study-title-'+pgId);
+  if(el&&el.textContent.trim()) pg.title=el.textContent.trim();
+  saveDB();
+}
+
+function studyInsertImage(event){
+  var file = event.target.files[0]; if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var ed = document.getElementById('study-editor'); if(!ed) return;
+    ed.focus();
+    // Insert image at cursor
+    var img = document.createElement('img');
+    img.src = e.target.result;
+    img.style.cssText = 'max-width:100%;border-radius:8px;margin:8px 0;display:block';
+    var sel = window.getSelection();
+    if(sel&&sel.rangeCount){
+      var range = sel.getRangeAt(0);
+      range.collapse(false);
+      range.insertNode(img);
+      range.setStartAfter(img);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else { ed.appendChild(img); }
+    studyAutoSave();
+    showToast('✓ 图片已插入');
+  };
+  reader.readAsDataURL(file);
+  event.target.value=''; // reset input
+}
+
+function studyInsertFile(event){
+  var file = event.target.files[0]; if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var ed = document.getElementById('study-editor'); if(!ed) return;
+    ed.focus();
+    var text = e.target.result;
+    // Insert as formatted text block
+    var div = document.createElement('div');
+    div.style.cssText = 'background:#f8f7f3;border:1px solid #ddd;border-radius:6px;padding:12px;margin:8px 0;white-space:pre-wrap;font-size:14px';
+    div.textContent = '📄 '+file.name+'\n\n'+text;
+    var sel = window.getSelection();
+    if(sel&&sel.rangeCount){
+      var range = sel.getRangeAt(0);
+      range.collapse(false);
+      range.insertNode(div);
+      range.setStartAfter(div);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else { ed.appendChild(div); }
+    studyAutoSave();
+    showToast('✓ 文档已插入');
+  };
+  reader.readAsText(file,'utf-8');
+  event.target.value='';
 }
 
 // ═══════════════════════════════════════════════════════
