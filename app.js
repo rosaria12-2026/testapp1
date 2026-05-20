@@ -10,12 +10,12 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[] };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
 // migrate old keys
-['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
+['analysisCache','notes','starMap','answerKeys','hlCache','qNotes'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
 if(!DB.studyPages) DB.studyPages=[];
 if(DB.lastPos===undefined) DB.lastPos=null;
 // Re-fix caseText for existing batches: clear wrong case assignments beyond range
@@ -720,7 +720,7 @@ function showResultPage(){
       +'<td style="font-weight:600;color:#1a4fa0">'+(my&&my!=='skip'?my:'<span style="color:#bbb">—</span>')+'</td>'
       +'<td style="font-weight:700">'+(hasAns?'<span style="color:'+(ok?'#2e7d52':'#b83232')+'">'+q.answer+'</span>':'<span style="color:#bbb">—</span>')+'</td>'
       +'<td>'+(hasAns&&my&&my!=='skip'?(ok?'<span style="color:#2e7d52;font-size:16px">✓</span>':'<span style="color:#b83232;font-size:16px">✗</span>'):'<span style="color:#bbb">—</span>')+'</td>'
-      +'<td><button class="btn small blue" style="padding:3px 8px;font-size:12px" onclick="event.stopPropagation();openModal(\''+q.id+'\','+i+')">解析</button></td>';
+      +'<td onclick="event.stopPropagation()" style="min-width:90px">'+'<div style="display:flex;flex-direction:column;gap:3px">'+'<button class="btn small blue" style="padding:2px 6px;font-size:11px" onclick="event.stopPropagation();openModal(\''+q.id+'\','+i+')">解析</button>'+(DB.qNotes&&DB.qNotes[q.id]?'<span style="font-size:11px;color:#b83232;background:#fff3cd;padding:2px 5px;border-radius:4px;cursor:pointer;display:block;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();editQNote(\''+q.id+'\')" title="'+esc((DB.qNotes&&DB.qNotes[q.id])||'')+'">📌 '+esc(((DB.qNotes&&DB.qNotes[q.id])||'').slice(0,12))+'</span>':'')+'<button class="btn small" style="padding:2px 5px;font-size:10px;color:#888" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">'+(DB.qNotes&&DB.qNotes[q.id]?'✏️ 改':'＋ 标注')+'</button>'+'</div></td>';
     tbody.appendChild(tr);
   });
   document.getElementById('rs-total').textContent=QZ.qs.length;
@@ -1708,7 +1708,7 @@ function cloudUpload(){
   var main = {
     batches:DB.batches, wrongMap:DB.wrongMap, dkMap:DB.dkMap,
     stats:DB.stats, starMap:DB.starMap, answerKeys:DB.answerKeys,
-    lastPos:DB.lastPos, notes:DB.notes
+    lastPos:DB.lastPos, notes:DB.notes, qNotes:DB.qNotes||{}
   };
   var analysis = { analysisCache: DB.analysisCache };
   var studyPages = DB.studyPages||[];
@@ -1781,6 +1781,19 @@ function cloudDownload(){
         showToast('✓ 已下载 · 背诵页：'+pages.length+'个'+(bname?' · 上次：'+bname+' '+qnum:''),5000);
       });
     }).catch(function(e){ showToast('下载失败：'+e.message); });
+}
+
+// ═══════════════════════════════════════════════════════
+// QUESTION NOTES 标注
+// ═══════════════════════════════════════════════════════
+function editQNote(qid){
+  if(!DB.qNotes) DB.qNotes={};
+  var cur=DB.qNotes[qid]||'';
+  var val=prompt('为这道题添加标注（例如：更正为C / 答案有疑问 / 留空则清除）：',cur);
+  if(val===null) return;
+  if(val.trim()===''){delete DB.qNotes[qid];showToast('已清除标注');}
+  else{DB.qNotes[qid]=val.trim();showToast('✓ 已标注');}
+  saveDB(); showResultPage();
 }
 
 // ═══════════════════════════════════════════════════════
