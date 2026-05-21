@@ -870,6 +870,14 @@ function openModal(qid,idx){
     +'</div>'
     +'<div id="modal-ai-area"></div>';
 
+  // Annotation box — syncs with result table
+  html+='<div style="margin-top:12px;padding:10px 12px;background:#fffbe6;border:1px solid #f0d060;border-radius:8px">'
+    +'<div style="font-size:12px;font-weight:700;color:#8a6000;margin-bottom:6px">📌 我的标注（与总表同步）</div>'
+    +'<textarea id="modal-qnote" placeholder="例如：更正为C / 答案有疑问 / 考点备注…" '
+    +'style="width:100%;min-height:60px;padding:8px;border:1px solid #f0d060;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box;background:#fffdf5"'
+    +'oninput="saveModalQNote()"></textarea>'
+    +'</div>';
+
   // Chat — always visible
   html+='<div style="margin-top:14px;border-top:2px solid #e8e4f8;padding-top:12px">'
     +'<div style="font-size:12px;font-weight:700;color:#6040b0;margin-bottom:8px">💬 与AI对话（追问、深究）</div>'
@@ -882,6 +890,12 @@ function openModal(qid,idx){
     +'</div>';
 
   content.innerHTML=html;
+
+  // Load existing qNote into textarea
+  setTimeout(function(){
+    var ta=document.getElementById('modal-qnote');
+    if(ta&&DB.qNotes&&DB.qNotes[qid]) ta.value=DB.qNotes[qid];
+  },50);
 
   // Restore highlighted content if available
   if(DB.hlCache && DB.hlCache[qid] && DB.hlCache[qid].qbody){
@@ -906,6 +920,19 @@ function closeModal(){
     if(qb&&qb.innerHTML){ if(!DB.hlCache)DB.hlCache={}; DB.hlCache[_mQid]={qbody:qb.innerHTML}; saveDB(); }
   }
   document.getElementById('modal-bg').style.display='none';
+}
+
+// Save annotation from modal — syncs to result table
+function saveModalQNote(){
+  if(!_mQid) return;
+  var ta=document.getElementById('modal-qnote'); if(!ta) return;
+  if(!DB.qNotes) DB.qNotes={};
+  var val=ta.value.trim();
+  if(val) DB.qNotes[_mQid]=val;
+  else delete DB.qNotes[_mQid];
+  saveDB();
+  // If result table is visible, refresh it
+  if(document.getElementById('result').classList.contains('active')) showResultPage();
 }
 
 // Open modal from batch detail page (no active quiz session)
