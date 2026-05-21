@@ -720,7 +720,7 @@ function showResultPage(){
       +'<td style="font-weight:600;color:#1a4fa0">'+(my&&my!=='skip'?my:'<span style="color:#bbb">—</span>')+'</td>'
       +'<td style="font-weight:700">'+(hasAns?'<span style="color:'+(ok?'#2e7d52':'#b83232')+'">'+q.answer+'</span>':'<span style="color:#bbb">—</span>')+'</td>'
       +'<td>'+(hasAns&&my&&my!=='skip'?(ok?'<span style="color:#2e7d52;font-size:16px">✓</span>':'<span style="color:#b83232;font-size:16px">✗</span>'):'<span style="color:#bbb">—</span>')+'</td>'
-      +'<td onclick="event.stopPropagation()" style="min-width:160px;max-width:280px">'+'<div style="display:flex;flex-direction:column;gap:4px">'+'<button class="btn small blue" style="padding:2px 6px;font-size:11px" onclick="event.stopPropagation();openModal(\''+q.id+'\','+i+')">解析</button>'+(DB.qNotes&&DB.qNotes[q.id]?'<div style="font-size:12px;color:#b83232;background:#fff3cd;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:pre-wrap;word-break:break-all;line-height:1.5;border:1px solid #f0d060" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">📌 '+esc(DB.qNotes[q.id])+'</div>':'')+'<button class="btn small" style="padding:2px 5px;font-size:10px;color:#888;align-self:flex-start" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">'+(DB.qNotes&&DB.qNotes[q.id]?'✏️ 改':'＋ 标注')+'</button>'+'</div></td>';
+      +'<td onclick="event.stopPropagation()" data-qid="'+q.id+'" style="min-width:160px;max-width:280px">'+'<div style="display:flex;flex-direction:column;gap:4px">'+'<button class="btn small blue" style="padding:2px 6px;font-size:11px" onclick="event.stopPropagation();openModal(\''+q.id+'\','+i+')">解析</button>'+'<div class="qnote-display" style="font-size:12px;color:#b83232;background:#fff3cd;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:pre-wrap;word-break:break-all;line-height:1.5;border:1px solid #f0d060;display:'+(DB.qNotes&&DB.qNotes[q.id]?'block':'none')+'" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">📌 '+(DB.qNotes&&DB.qNotes[q.id]?esc(DB.qNotes[q.id]):'')+'</div>'+'<button class="btn small qnote-btn" style="padding:2px 5px;font-size:10px;color:#888;align-self:flex-start" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">'+(DB.qNotes&&DB.qNotes[q.id]?'✏️ 改':'＋ 标注')+'</button>'+'</div></td>';
     tbody.appendChild(tr);
   });
   document.getElementById('rs-total').textContent=QZ.qs.length;
@@ -922,7 +922,7 @@ function closeModal(){
   document.getElementById('modal-bg').style.display='none';
 }
 
-// Save annotation from modal — syncs to result table
+// Save annotation from modal — syncs to result table WITHOUT re-rendering page
 function saveModalQNote(){
   if(!_mQid) return;
   var ta=document.getElementById('modal-qnote'); if(!ta) return;
@@ -931,8 +931,32 @@ function saveModalQNote(){
   if(val) DB.qNotes[_mQid]=val;
   else delete DB.qNotes[_mQid];
   saveDB();
-  // If result table is visible, refresh it
-  if(document.getElementById('result').classList.contains('active')) showResultPage();
+  // Only update the specific row in result table, don't re-render whole page
+  updateQNoteInTable(_mQid);
+}
+
+function updateQNoteInTable(qid){
+  // Find all note cells in result table and update just the annotation part
+  var rows = document.querySelectorAll('#result-table tr');
+  rows.forEach(function(tr){
+    // Find the row that matches this qid by its onclick
+    var noteVal = DB.qNotes&&DB.qNotes[qid] ? DB.qNotes[qid] : '';
+    // Check if this row is for our qid (via data attribute or by scanning)
+    var noteCell = tr.querySelector('td[data-qid="'+qid+'"]');
+    if(noteCell){
+      var noteDiv = noteCell.querySelector('.qnote-display');
+      var editBtn = noteCell.querySelector('.qnote-btn');
+      if(noteDiv){
+        if(noteVal){
+          noteDiv.style.display='block';
+          noteDiv.textContent='📌 '+noteVal;
+        } else {
+          noteDiv.style.display='none';
+        }
+      }
+      if(editBtn) editBtn.textContent = noteVal ? '✏️ 改' : '＋ 标注';
+    }
+  });
 }
 
 // Open modal from batch detail page (no active quiz session)
