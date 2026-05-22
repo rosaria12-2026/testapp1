@@ -2030,7 +2030,11 @@ function studyOpenPage(pgId){
     editor.addEventListener('touchend', studyShowFloatToolbar);
     editor.addEventListener('keyup', function(){
       var sel=window.getSelection();
-      if(!sel||sel.toString().trim()==='') studyHideFloatToolbar();
+      if(!sel||sel.toString().trim()===''){
+        setTimeout(function(){ studyHideFloatToolbar(); }, 100);
+      } else {
+        studyShowFloatToolbar();
+      }
     });
   }
   // Hide toolbar only when clicking outside both editor AND toolbar
@@ -2084,19 +2088,22 @@ function studySavePage(){
 }
 
 function studyShowFloatToolbar(){
-  var sel=window.getSelection();
-  if(!sel||sel.rangeCount===0||sel.toString().trim()===''){studyHideFloatToolbar();return;}
-  var tb=document.getElementById('study-float-toolbar'); if(!tb)return;
-  var range=sel.getRangeAt(0), rect=range.getBoundingClientRect();
-  if(!rect.width&&!rect.height){studyHideFloatToolbar();return;}
-  // Position above selection
-  var top=rect.top+window.scrollY-50;
-  var left=rect.left+window.scrollX+(rect.width/2)-120;
-  if(left<8) left=8;
-  if(left+240>window.innerWidth-8) left=window.innerWidth-248;
-  tb.style.top=top+'px';
-  tb.style.left=left+'px';
-  tb.style.display='flex';
+  // Delay to let selection settle after mouseup
+  setTimeout(function(){
+    var sel=window.getSelection();
+    if(!sel||sel.rangeCount===0||sel.toString().trim()===''){studyHideFloatToolbar();return;}
+    var tb=document.getElementById('study-float-toolbar'); if(!tb)return;
+    var range=sel.getRangeAt(0), rect=range.getBoundingClientRect();
+    if(!rect.width&&!rect.height){studyHideFloatToolbar();return;}
+    var top=rect.top+window.scrollY-52;
+    if(top<8) top=rect.bottom+window.scrollY+8; // show below if too close to top
+    var left=rect.left+window.scrollX+(rect.width/2)-130;
+    if(left<8) left=8;
+    if(left+260>window.innerWidth-8) left=window.innerWidth-268;
+    tb.style.top=top+'px';
+    tb.style.left=left+'px';
+    tb.style.display='flex';
+  }, 50);
 }
 
 function studyHideFloatToolbar(){
