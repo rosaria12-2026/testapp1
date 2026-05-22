@@ -525,7 +525,14 @@ function startFirstBatch(){ if(!DB.batches.length){showToast('请先导入题目
 function startBatch(batchId, fromStart){
   var batch=null; for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}} if(!batch)return;
   if(fromStart){
-    batch.progress={idx:0,answers:new Array(batch.questions.length).fill(null),dk:{}};
+    // Save first-time answers before resetting (for comparison)
+    var prev = batch.progress.answers||[];
+    var hasAnswers = prev.some(function(a){return a&&a!=='skip';});
+    if(hasAnswers && !batch.progress.firstAnswers){
+      batch.progress.firstAnswers = prev.slice(); // save first attempt
+    }
+    batch.progress={idx:0, answers:new Array(batch.questions.length).fill(null), dk:{},
+      firstAnswers: batch.progress.firstAnswers||null};
     saveDB();
     startBatchFrom(batchId, 0);
     return;
@@ -710,14 +717,15 @@ function showResultPage(){
     var ok=hasAns&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();
     var dk=!!QZ.dk[i];
     if(ok)correct++; if(hasAns&&my&&my!=='skip'&&!ok)wrong++; if(dk)dkCount++;
+    var firstAns = (QZ.batch&&QZ.batch.progress&&QZ.batch.progress.firstAnswers) ? QZ.batch.progress.firstAnswers[i] : null;
     var tr=document.createElement('tr'); tr.style.cursor='pointer';
-    // Row color: green=correct, red=wrong, yellow=dk, grey=no answer yet
     var rowBg = dk?'#fff3cd' : (hasAns&&my&&my!=='skip'?(ok?'#f0fff4':'#fff5f5'):'');
     tr.style.background=rowBg;
     (function(qid,idx){ tr.addEventListener('click',function(){openModal(qid,idx);}); })(q.id,i);
     tr.innerHTML='<td><strong>'+(q.num||i+1)+'</strong>'+(DB.starMap[q.id]?' ⭐':'')+'</td>'
       +'<td>'+esc(q.body.replace(/\n/g,' ').slice(0,38))+(dk?' <b style="color:#c47a1a">❓</b>':'')+'</td>'
-      +'<td style="font-weight:600;color:#1a4fa0">'+(my&&my!=='skip'?my:'<span style="color:#bbb">—</span>')+'</td>'
+      +'<td style="font-weight:600;color:#1a4fa0">'+(my&&my!=='skip'?my:'<span style="color:#bbb">—</span>')
+      +(firstAns&&firstAns!=='skip'&&firstAns!==my?'<br><span style="font-size:10px;color:#aaa">初：'+firstAns+'</span>':'')+'</td>'
       +'<td style="font-weight:700">'+(hasAns?'<span style="color:'+(ok?'#2e7d52':'#b83232')+'">'+q.answer+'</span>':'<span style="color:#bbb">—</span>')+'</td>'
       +'<td>'+(hasAns&&my&&my!=='skip'?(ok?'<span style="color:#2e7d52;font-size:16px">✓</span>':'<span style="color:#b83232;font-size:16px">✗</span>'):'<span style="color:#bbb">—</span>')+'</td>'
       +'<td onclick="event.stopPropagation()" data-qid="'+q.id+'" style="min-width:160px;max-width:280px">'+'<div style="display:flex;flex-direction:column;gap:4px">'+'<button class="btn small blue" style="padding:2px 6px;font-size:11px" onclick="event.stopPropagation();openModal(\''+q.id+'\','+i+')">解析</button>'+'<div class="qnote-display" style="font-size:12px;color:#b83232;background:#fff3cd;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:pre-wrap;word-break:break-all;line-height:1.5;border:1px solid #f0d060;display:'+(DB.qNotes&&DB.qNotes[q.id]?'block':'none')+'" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">📌 '+(DB.qNotes&&DB.qNotes[q.id]?esc(DB.qNotes[q.id]):'')+'</div>'+'<button class="btn small qnote-btn" style="padding:2px 5px;font-size:10px;color:#888;align-self:flex-start" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">'+(DB.qNotes&&DB.qNotes[q.id]?'✏️ 改':'＋ 标注')+'</button>'+'</div></td>';
@@ -1063,8 +1071,17 @@ function hlSelected(type){
     span.dataset.hlType = type;
     range.surroundContents(span);
     _hlUndo.push(span);
+    // Auto-append highlighted text to annotation box
+    var selText = span.textContent.trim();
+    if(selText){
+      var ta=document.getElementById('modal-qnote');
+      if(ta){
+        ta.value = ta.value ? ta.value+' / '+selText : selText;
+        saveModalQNote();
+      }
+    }
     sel.removeAllRanges();
-    showToast('已标注，点「↩ 撤销」可取消');
+    showToast('已标注，文字已同步到标注框');
   }catch(e){ showToast('选中跨越多个区域，请重新选择一段文字'); }
 }
 // Undo stack for highlights
@@ -1566,9 +1583,10 @@ function renderMockSetup(){
     +'<div style="font-size:13px;font-weight:700;margin-bottom:8px">🎯 刻意练习设置</div>'
     +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="mock-wrong-cb" checked> 错题加权（出现概率×3）</label>'
     +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="mock-dk-cb" checked> 不会题加权（概率×2）</label>'
-    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mock-only-weak-cb"> 只考错题/不会题（专项突破）</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="mock-only-weak-cb"> 只考错题/不会题（专项突破，打乱）</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="mock-ordered-cb"> 错题/不会题按原题号顺序（不打乱）</label>'
     +'</div>'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span class="sub">题目数量：</span><input id="mock-count" type="number" min="10" max="200" value="125" class="tiny"><span class="sub">题</span></div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span class="sub">题目数量：</span><input id="mock-count" type="number" min="10" max="500" value="125" class="tiny"><span class="sub">题（0=全部）</span></div>'
     +'<button class="btn primary" onclick="startMock()">开始模拟考试</button></div>'
     +backBtn();
 }
@@ -1582,7 +1600,15 @@ function startMock(){
   var wids=Object.keys(DB.wrongMap), dids=Object.keys(DB.dkMap), pool;
   if(onlyWeak){ pool=allQs.filter(function(q){return wids.indexOf(q.id)>=0||dids.indexOf(q.id)>=0;}); if(!pool.length){alert('错题库和不会题库都是空的。');return;} }
   else{ pool=allQs.slice(); if(useWrong) allQs.filter(function(q){return wids.indexOf(q.id)>=0;}).forEach(function(q){pool.push(q);pool.push(q);}); if(useDk) allQs.filter(function(q){return dids.indexOf(q.id)>=0;}).forEach(function(q){pool.push(q);}); }
-  pool=shuffle(pool).slice(0,count);
+  var ordered = document.getElementById('mock-ordered-cb')&&document.getElementById('mock-ordered-cb').checked;
+  if(ordered){
+    // Sort by original question number
+    pool = pool.filter(function(q){return wids.indexOf(q.id)>=0||dids.indexOf(q.id)>=0;});
+    pool.sort(function(a,b){return (a.num||0)-(b.num||0);});
+  } else {
+    pool = shuffle(pool);
+  }
+  if(count>0) pool=pool.slice(0,count);
   MK={qs:pool,ans:new Array(pool.length).fill(null),cur:0,start:Date.now(),interval:null}; renderMockQ();
 }
 function renderMockQ(){
