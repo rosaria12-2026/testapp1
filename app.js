@@ -1996,7 +1996,7 @@ function studyOpenPage(pgId){
     +'</div></div>'
 
     // Floating toolbar (appears on text selection)
-    +'<div id="study-float-toolbar" style="display:none;position:fixed;z-index:9999;background:#18180f;border-radius:10px;padding:6px 8px;box-shadow:0 4px 20px rgba(0,0,0,0.4);gap:4px;align-items:center;flex-wrap:wrap">'
+    +'<div id="study-float-toolbar" onmousedown="event.preventDefault()" style="display:none;position:fixed;z-index:9999;background:#18180f;border-radius:10px;padding:6px 8px;box-shadow:0 4px 20px rgba(0,0,0,0.4);gap:4px;align-items:center;flex-wrap:wrap">'
     +'<button data-cmd="hilite" data-val="#FFE066" onclick="studyFormat(this.dataset.cmd,this.dataset.val)" style="background:#FFE066;color:#333;border:none;border-radius:5px;padding:4px 8px;font-size:12px;cursor:pointer;font-weight:700">黄</button>'
     +'<button data-cmd="hilite" data-val="#FF6B6B" onclick="studyFormat(this.dataset.cmd,this.dataset.val)" style="background:#FF6B6B;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-size:12px;cursor:pointer;font-weight:700">红</button>'
     +'<button data-cmd="hilite" data-val="#90EE90" onclick="studyFormat(this.dataset.cmd,this.dataset.val)" style="background:#90EE90;color:#333;border:none;border-radius:5px;padding:4px 8px;font-size:12px;cursor:pointer;font-weight:700">绿</button>'
@@ -2033,11 +2033,14 @@ function studyOpenPage(pgId){
       if(!sel||sel.toString().trim()==='') studyHideFloatToolbar();
     });
   }
-  // Hide toolbar when clicking outside
+  // Hide toolbar only when clicking outside both editor AND toolbar
   document.addEventListener('mousedown', function(e){
     var tb=document.getElementById('study-float-toolbar');
-    if(tb&&!tb.contains(e.target)) studyHideFloatToolbar();
-  }, {once:false});
+    var ed=document.getElementById('study-editor');
+    if(tb&&!tb.contains(e.target)&&(!ed||!ed.contains(e.target))){
+      studyHideFloatToolbar();
+    }
+  });
   // Focus at end
   setTimeout(function(){
     var ed = document.getElementById('study-editor');
