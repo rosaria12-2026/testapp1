@@ -1995,8 +1995,8 @@ function studyOpenPage(pgId){
     +'<button class="btn small" style="background:#e8f0fe;color:#1a4fa0;border:1px solid #b8d0f0" onclick="studyInsertTable()">⊞ 插入表格</button>'
     +'</div></div>'
 
-    // Floating toolbar (appears on text selection)
-    +'<div id="study-float-toolbar" onmousedown="event.preventDefault()" style="display:none;position:fixed;z-index:9999;background:#18180f;border-radius:10px;padding:6px 8px;box-shadow:0 4px 20px rgba(0,0,0,0.4);gap:4px;align-items:center;flex-wrap:wrap">'
+    // Sticky mini toolbar - always visible while editing
+    +'<div id="study-float-toolbar" onmousedown="event.preventDefault()" style="position:sticky;top:0;z-index:99;background:#18180f;border-radius:0 0 10px 10px;padding:6px 10px;box-shadow:0 3px 12px rgba(0,0,0,0.3);display:flex;gap:4px;align-items:center;flex-wrap:wrap">'
     +'<button data-cmd="hilite" data-val="#FFE066" onclick="studyFormat(this.dataset.cmd,this.dataset.val)" style="background:#FFE066;color:#333;border:none;border-radius:5px;padding:4px 8px;font-size:12px;cursor:pointer;font-weight:700">黄</button>'
     +'<button data-cmd="hilite" data-val="#FF6B6B" onclick="studyFormat(this.dataset.cmd,this.dataset.val)" style="background:#FF6B6B;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-size:12px;cursor:pointer;font-weight:700">红</button>'
     +'<button data-cmd="hilite" data-val="#90EE90" onclick="studyFormat(this.dataset.cmd,this.dataset.val)" style="background:#90EE90;color:#333;border:none;border-radius:5px;padding:4px 8px;font-size:12px;cursor:pointer;font-weight:700">绿</button>'
@@ -2025,26 +2025,7 @@ function studyOpenPage(pgId){
   if(editor){
     editor.style.webkitUserModify = '';
     editor.innerHTML = pg.text || '';
-    // Show floating toolbar on text selection
-    editor.addEventListener('mouseup', studyShowFloatToolbar);
-    editor.addEventListener('touchend', studyShowFloatToolbar);
-    editor.addEventListener('keyup', function(){
-      var sel=window.getSelection();
-      if(!sel||sel.toString().trim()===''){
-        setTimeout(function(){ studyHideFloatToolbar(); }, 100);
-      } else {
-        studyShowFloatToolbar();
-      }
-    });
   }
-  // Hide toolbar only when clicking outside both editor AND toolbar
-  document.addEventListener('mousedown', function(e){
-    var tb=document.getElementById('study-float-toolbar');
-    var ed=document.getElementById('study-editor');
-    if(tb&&!tb.contains(e.target)&&(!ed||!ed.contains(e.target))){
-      studyHideFloatToolbar();
-    }
-  });
   // Focus at end
   setTimeout(function(){
     var ed = document.getElementById('study-editor');
@@ -2087,28 +2068,9 @@ function studySavePage(){
   showToast('✓ 已保存');
 }
 
-function studyShowFloatToolbar(){
-  // Delay to let selection settle after mouseup
-  setTimeout(function(){
-    var sel=window.getSelection();
-    if(!sel||sel.rangeCount===0||sel.toString().trim()===''){studyHideFloatToolbar();return;}
-    var tb=document.getElementById('study-float-toolbar'); if(!tb)return;
-    var range=sel.getRangeAt(0), rect=range.getBoundingClientRect();
-    if(!rect.width&&!rect.height){studyHideFloatToolbar();return;}
-    var top=rect.top+window.scrollY-52;
-    if(top<8) top=rect.bottom+window.scrollY+8; // show below if too close to top
-    var left=rect.left+window.scrollX+(rect.width/2)-130;
-    if(left<8) left=8;
-    if(left+260>window.innerWidth-8) left=window.innerWidth-268;
-    tb.style.top=top+'px';
-    tb.style.left=left+'px';
-    tb.style.display='flex';
-  }, 50);
-}
-
-function studyHideFloatToolbar(){
-  var tb=document.getElementById('study-float-toolbar'); if(tb) tb.style.display='none';
-}
+// Float toolbar functions (kept for compatibility)
+function studyShowFloatToolbar(){}
+function studyHideFloatToolbar(){}
 
 function studySaveTitleInline(pgId){
   var pg = DB.studyPages.find(function(p){return p.id===pgId;}); if(!pg) return;
