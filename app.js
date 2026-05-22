@@ -920,6 +920,27 @@ function openModal(qid,idx){
     ];
   }
   document.getElementById('modal-bg').style.display='flex';
+
+  // Auto-append selected text to annotation box on mouseup
+  var mc = document.getElementById('m-content');
+  if(mc){
+    mc._selHandler = function(){
+      var sel = window.getSelection();
+      if(!sel || sel.toString().trim()==='') return;
+      var selText = sel.toString().trim();
+      // Only if selection is within modal content
+      if(!mc.contains(sel.anchorNode)) return;
+      var ta = document.getElementById('modal-qnote');
+      if(ta){
+        ta.value = ta.value ? ta.value + ' / ' + selText : selText;
+        saveModalQNote();
+        showToast('✓ 已追加到标注框');
+      }
+    };
+    mc.addEventListener('mouseup', mc._selHandler);
+    // Touch support
+    mc.addEventListener('touchend', mc._selHandler);
+  }
 }
 function closeModal(){
   // Save current highlighted content before closing
@@ -1071,17 +1092,8 @@ function hlSelected(type){
     span.dataset.hlType = type;
     range.surroundContents(span);
     _hlUndo.push(span);
-    // Auto-append highlighted text to annotation box
-    var selText = span.textContent.trim();
-    if(selText){
-      var ta=document.getElementById('modal-qnote');
-      if(ta){
-        ta.value = ta.value ? ta.value+' / '+selText : selText;
-        saveModalQNote();
-      }
-    }
     sel.removeAllRanges();
-    showToast('已标注，文字已同步到标注框');
+    showToast('已标注，点「↩ 撤销」可取消');
   }catch(e){ showToast('选中跨越多个区域，请重新选择一段文字'); }
 }
 // Undo stack for highlights
