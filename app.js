@@ -158,7 +158,7 @@ function parseQ(raw) {
     .replace(/）/g,')').replace(/（/g,'(').replace(/。/g,'.').replace(/　/g,' ');
   var lines = raw.split('\n').map(function(l){return l.trim();});
   var qRe   = /^[(\[]?\s*(\d{1,4})\s*[).、]\s*(.*)/;
-  var optRe = /^([A-Ea-e])\s*[).、]\s*(.+)/;
+  var optRe = /^([A-Ea-e])\s*[).、：:]\s*(.+)/;
   var inRe  = /([A-Ea-e])\s*[).]\s*(.+?)(?=\s{2,}[A-Ea-e]\s*[).]|$)/g;
   var ansRe = /[\u3010\[]?[\u7b54\u6848Aa][\u6848nswer]*[\uff1a:]\s*([A-Ea-e])[\u3011\]]?/i;
   // Case keywords
@@ -239,6 +239,15 @@ function parseQ(raw) {
       continue;
     }
     if(!curQ) continue;
+    // Format: "A：xxx B：xxx C：xxx" with Chinese colon — check FIRST
+    if(/[A-Ea-e]\s*[：:][^A-Ea-e]{1,30}[A-Ea-e]\s*[：:]/.test(l)){
+      var cnOptRe=/([A-Ea-e])\s*[：:]\s*(.+?)(?=\s*[A-Ea-e]\s*[：:]|$)/g;
+      var found2=[],m3; cnOptRe.lastIndex=0;
+      while((m3=cnOptRe.exec(l))!==null){
+        var txt=m3[2].trim(); if(txt) found2.push({letter:m3[1].toUpperCase(),text:txt});
+      }
+      if(found2.length>=2){curQ.opts.push.apply(curQ.opts,found2);continue;}
+    }
     var om=l.match(optRe); if(om){curQ.opts.push({letter:om[1].toUpperCase(),text:om[2].trim()});continue;}
     if(/[A-Ea-e]\s*[).]/.test(l)){
       var found=[],m2; inRe.lastIndex=0;
