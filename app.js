@@ -721,6 +721,16 @@ function showResultPage(){
   document.getElementById('result-batch').textContent=batch.name;
   var withAns=QZ.qs.filter(function(q){return !!q.answer;}).length, correct=0, wrong=0, dkCount=0;
   var tbody=document.getElementById('result-table'); tbody.innerHTML='';
+  // Auto-fill correct answer text into qNotes for questions with answers
+  if(!DB.qNotes) DB.qNotes={};
+  QZ.qs.forEach(function(q){
+    if(q.answer && !DB.qNotes[q.id]){
+      var correctOpt = q.opts.find(function(o){return o.letter===q.answer.toUpperCase();});
+      if(correctOpt) DB.qNotes[q.id] = q.answer+'. '+correctOpt.text;
+    }
+  });
+  saveDB();
+
   QZ.qs.forEach(function(q,i){
     var my=QZ.ans[i], hasAns=!!q.answer;
     var ok=hasAns&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();
