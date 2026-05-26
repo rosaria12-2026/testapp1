@@ -933,23 +933,28 @@ function openModal(qid,idx){
   // Auto-append selected text to annotation box on mouseup
   var mc = document.getElementById('m-content');
   if(mc){
+    var _lastSel = '';
     mc._selHandler = function(){
-      var sel = window.getSelection();
-      if(!sel || sel.toString().trim()==='') return;
-      var selText = sel.toString().trim();
-      if(selText.length<2) return; // ignore single char
-      // Only if selection is within modal content
-      if(!mc.contains(sel.anchorNode)) return;
-      var ta = document.getElementById('modal-qnote');
-      if(ta){
-        // Avoid duplicate: don't add if already in box
-        var existing = ta.value;
-        var parts = existing ? existing.split(' / ') : [];
-        if(parts.indexOf(selText)>=0) return; // already exists
-        ta.value = existing ? existing + ' / ' + selText : selText;
-        saveModalQNote();
-        showToast('✓ 已追加到标注框');
-      }
+      setTimeout(function(){
+        var sel = window.getSelection();
+        if(!sel || sel.toString().trim()==='') return;
+        var selText = sel.toString().trim();
+        if(selText.length<2) return;
+        if(!mc.contains(sel.anchorNode)) return;
+        if(selText === _lastSel) return; // same selection, ignore
+        _lastSel = selText;
+        var ta = document.getElementById('modal-qnote');
+        if(ta){
+          var existing = ta.value;
+          var parts = existing ? existing.split(' / ') : [];
+          if(parts.indexOf(selText)>=0) return;
+          ta.value = existing ? existing + ' / ' + selText : selText;
+          saveModalQNote();
+          showToast('✓ 已追加到标注框');
+        }
+        // Reset after 1s so same text can be added again later if needed
+        setTimeout(function(){ _lastSel=''; }, 1000);
+      }, 200);
     };
     mc.addEventListener('mouseup', mc._selHandler);
     mc.addEventListener('touchend', mc._selHandler);
