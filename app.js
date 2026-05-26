@@ -937,17 +937,21 @@ function openModal(qid,idx){
       var sel = window.getSelection();
       if(!sel || sel.toString().trim()==='') return;
       var selText = sel.toString().trim();
+      if(selText.length<2) return; // ignore single char
       // Only if selection is within modal content
       if(!mc.contains(sel.anchorNode)) return;
       var ta = document.getElementById('modal-qnote');
       if(ta){
-        ta.value = ta.value ? ta.value + ' / ' + selText : selText;
+        // Avoid duplicate: don't add if already in box
+        var existing = ta.value;
+        var parts = existing ? existing.split(' / ') : [];
+        if(parts.indexOf(selText)>=0) return; // already exists
+        ta.value = existing ? existing + ' / ' + selText : selText;
         saveModalQNote();
         showToast('✓ 已追加到标注框');
       }
     };
     mc.addEventListener('mouseup', mc._selHandler);
-    // Touch support
     mc.addEventListener('touchend', mc._selHandler);
   }
 }
