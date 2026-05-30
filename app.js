@@ -1853,52 +1853,59 @@ function cloudDownload(){
   var col = firebase.firestore().collection('users').doc(user.uid).collection('data');
   showToast('下载中…',8000);
 
-  Promise.all([col.doc('main').get(), col.doc('analysis').get(), col.doc('study_index').get()])
-    .then(function(results){
-      var mainDoc=results[0], analysisDoc=results[1], indexDoc=results[2];
-      if(!mainDoc.exists){
-        // Fallback old single-doc format
-        return firebase.firestore().collection('users').doc(user.uid).get()
-          .then(function(oldDoc){
-            if(!oldDoc.exists){showToast('云端暂无数据');return;}
-            DB=JSON.parse(oldDoc.data().db);
-            ['analysisCache','notes','starMap','answerKeys','hlCache'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
-            if(!DB.studyPages) DB.studyPages=[];
-            if(DB.lastPos===undefined) DB.lastPos=null;
-            saveDB(); renderHome(); renderStudy();
-            showToast('✓ 已下载（旧格式）');
-          });
+  Promise.all([
+    col.doc('main').get(),
+    col.doc('analysis').get(),
+    col.doc('study_index').get(),
+    col.doc('batch_index').get()
+  ]).then(function(results){
+    var mainDoc=results[0], analysisDoc=results[1], studyIdxDoc=results[2], batchIdxDoc=results[3];
+    if(!mainDoc.exists){
+      // Fallback old single-doc format
+      return firebase.firestore().collection('users').doc(user.uid).get()
+        .then(function(oldDoc){
+          if(!oldDoc.exists){showToast('云端暂无数据');return;}
+          DB=JSON.parse(oldDoc.data().db);
+          ['analysisCache','notes','starMap','answerKeys','hlCache','qNotes'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
+          if(!DB.studyPages) DB.studyPages=[];
+          if(DB.lastPos===undefined) DB.lastPos=null;
+          saveDB(); renderHome(); renderStudy();
+          showToast('✓ 已下载（旧格式）');
+        });
+    }
+    var m=mainDoc.data();
+    DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{};
+    DB.stats=m.stats||{done:0,correct:0}; DB.starMap=m.starMap||{};
+    DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
+    DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{};
+    DB.analysisCache=analysisDoc.exists?(analysisDoc.data().analysisCache||{}):{};
+    DB.hlCache={};
+
+    // Download batches (new format: individual docs)
+    var batchIds = batchIdxDoc.exists?(batchIdxDoc.data().ids||[]):[];
+    var getBatches = batchIds.length>0
+      ? Promise.all(batchIds.map(function(id){return col.doc('batch_'+id).get();}))
+          .then(function(docs){return docs.filter(function(d){return d.exists;}).map(function(d){return d.data();});})
+      : Promise.resolve(m.batches||[]);
+
+    // Download study pages
+    var studyIds = studyIdxDoc.exists?(studyIdxDoc.data().ids||[]):[];
+    var getStudy = studyIds.length>0
+      ? Promise.all(studyIds.map(function(id){return col.doc('study_'+id).get();}))
+          .then(function(docs){return docs.filter(function(d){return d.exists;}).map(function(d){return d.data();});})
+      : col.doc('study').get().then(function(sd){return sd.exists?(sd.data().studyPages||[]):[];});
+
+    return Promise.all([getBatches, getStudy]).then(function(res){
+      DB.batches=res[0]; DB.studyPages=res[1];
+      saveDB(); renderHome(); renderStudy();
+      var bname='', qnum='';
+      if(DB.lastPos&&DB.lastPos.batchId){
+        var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
+        if(lb){bname=lb.name;qnum='第'+(DB.lastPos.idx+1)+'题';}
       }
-      var m=mainDoc.data();
-      DB.batches=m.batches||[]; DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{};
-      DB.stats=m.stats||{done:0,correct:0}; DB.starMap=m.starMap||{};
-      DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null; DB.notes=m.notes||[];
-      DB.qNotes=m.qNotes||{};
-      DB.analysisCache=analysisDoc.exists?(analysisDoc.data().analysisCache||{}):{};
-      DB.hlCache={};
-
-      // Download each study page individually
-      var ids = indexDoc.exists?(indexDoc.data().ids||[]):[];
-      var downloadStudyPages = ids.length>0
-        ? Promise.all(ids.map(function(id){return col.doc('study_'+id).get();}))
-            .then(function(pageDocs){
-              return pageDocs.filter(function(d){return d.exists;}).map(function(d){return d.data();});
-            })
-        : col.doc('study').get().then(function(sd){  // fallback old study doc
-            return sd.exists?(sd.data().studyPages||[]):[];
-          });
-
-      return downloadStudyPages.then(function(pages){
-        DB.studyPages = pages;
-        saveDB(); renderHome(); renderStudy();
-        var bname='', qnum='';
-        if(DB.lastPos && DB.lastPos.batchId){
-          var lb=DB.batches.find(function(b){return b.id===DB.lastPos.batchId;});
-          if(lb){ bname=lb.name; qnum='第'+(DB.lastPos.idx+1)+'题'; }
-        }
-        showToast('✓ 已下载'+(bname?' · 上次：'+bname+' '+qnum:''),5000);
-      });
-    }).catch(function(e){ showToast('下载失败：'+e.message); });
+      showToast('✓ 已下载 · '+DB.batches.length+'批次'+(bname?' · 上次：'+bname+' '+qnum:''),5000);
+    });
+  }).catch(function(e){ showToast('下载失败：'+e.message); });
 }
 
 // ═══════════════════════════════════════════════════════
