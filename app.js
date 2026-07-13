@@ -2314,36 +2314,51 @@ function parseFill(raw){
   var lines = raw.split('\n');
   var questions = [];
   var numRe = /^\s*\d{1,3}[.、．]\s*/;
-  // Answer block at end: （ans1｜ans2）or (ans1|ans2)
   var ansBlockRe = /[（(]([^（）()【】]+)[）)]\s*[.。]?\s*$/;
 
   lines.forEach(function(line){
     line = line.trim(); if(!line) return;
-    // Must have 【 】 blanks
-    if(line.indexOf('【')<0) return;
-    // Extract answer block from end
+    // Must have answer block at end
     var ansMatch = line.match(ansBlockRe);
     if(!ansMatch) return;
     var answers = ansMatch[1].split(/[|｜]/).map(function(a){return a.trim();}).filter(Boolean);
-    // Remove answer block and question number from body
     var body = line.replace(ansBlockRe,'').replace(numRe,'').trim();
-    // Extract candidates for each blank from 【A｜B｜C】
-    var blankRe = /【([^】]+)】/g;
+
     var blanks = [];
-    var m;
-    while((m=blankRe.exec(body))!==null){
-      var opts = m[1].split('｜').map(function(o){return o.trim();}).filter(Boolean);
-      blanks.push({opts:opts, pos:m.index});
+
+    // Format A: ________context【opts】 — blank followed by context then options
+    // e.g. 大肠经进入________齿中【上｜下】
+    var formatA = /_{4,}[^【】]*?【([^】]+)】/g;
+    var mA;
+    while((mA=formatA.exec(body))!==null){
+      var opts = mA[1].split('｜').map(function(o){return o.trim();}).filter(Boolean);
+      blanks.push(opts);
     }
+
+    // Format B: 【opts】 inline blanks (no underscores)
+    // e.g. 大肠经进入【上｜下】齿中
+    if(!blanks.length){
+      var formatB = /【([^】]+)】/g;
+      var mB;
+      while((mB=formatB.exec(body))!==null){
+        var opts = mB[1].split('｜').map(function(o){return o.trim();}).filter(Boolean);
+        if(opts.length>=2) blanks.push(opts);
+      }
+    }
+
     if(!blanks.length || !answers.length) return;
-    if(answers.length < blanks.length){
-      // pad
-      while(answers.length<blanks.length) answers.push('?');
+    while(answers.length<blanks.length) answers.push('?');
+
+    // Normalize body for display:
+    // Format A: replace ________xxx【opts】 → 【opts】xxx (so we show inline)
+    var displayBody = body;
+    if(body.match(/_{4,}/)){
+      // Replace each ________context【opts】 with just 【opts】context
+      displayBody = body.replace(/_{4,}([^【】]*?)(【[^】]+】)/g, '$2$1');
     }
+
     questions.push({
-      id:uid(), body:body, answers:answers,
-      blanks:blanks.map(function(b){return b.opts;}),
-      ts:Date.now()
+      id:uid(), body:displayBody, answers:answers, blanks:blanks, ts:Date.now()
     });
   });
   return questions;
