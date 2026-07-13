@@ -2677,7 +2677,7 @@ function showFillResultPage(session){
       }
       return r;
     });
-    html += '<div style="font-size:15px;line-height:2.4;margin-bottom:8px;user-select:text">'+rendered2+'</div>';
+    html += '<div id="fq-'+i+'" contenteditable="true" spellcheck="false" style="font-size:15px;line-height:2.4;margin-bottom:8px;outline:none">'+rendered2+'</div>';
 
     // Toolbar — always shown for all questions
     html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.05);border-radius:6px;align-items:center">'
@@ -2710,7 +2710,12 @@ function showFillResultPage(session){
 
 // Annotation for fill result page
 function fillFmt(cmd, val){
-  // execCommand works on current selection — call directly after mousedown+preventDefault
+  // Find focused contenteditable or last clicked fq- div
+  var active=document.activeElement;
+  if(!active||!active.contentEditable||active.contentEditable==='false'){
+    // fallback: find any fq- div
+    var fq=document.querySelector('[id^="fq-"]'); if(fq) fq.focus();
+  }
   if(cmd==='hilite') document.execCommand('hiliteColor',false,val);
   else document.execCommand(cmd,false,null);
 }
