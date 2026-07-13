@@ -10,13 +10,14 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[] };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
 // migrate old keys
 ['analysisCache','notes','starMap','answerKeys','hlCache','qNotes'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
 if(!DB.studyPages) DB.studyPages=[];
+if(!DB.fillBatches) DB.fillBatches=[];
 if(DB.lastPos===undefined) DB.lastPos=null;
 // Re-fix caseText for existing batches: clear wrong case assignments beyond range
 (function fixCaseRanges(){
@@ -1827,7 +1828,8 @@ function cloudUpload(){
   var meta = {
     wrongMap:DB.wrongMap, dkMap:DB.dkMap, stats:DB.stats,
     starMap:DB.starMap, answerKeys:DB.answerKeys,
-    lastPos:DB.lastPos, notes:DB.notes, qNotes:DB.qNotes||{}
+    lastPos:DB.lastPos, notes:DB.notes, qNotes:DB.qNotes||{},
+    fillBatches:DB.fillBatches||[]
   };
 
   // Each batch = its own small doc (only progress + answers, not full questions)
@@ -1899,6 +1901,7 @@ function cloudDownload(){
               DB=JSON.parse(oldDoc.data().db);
               ['analysisCache','notes','starMap','answerKeys','hlCache','qNotes'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
               if(!DB.studyPages) DB.studyPages=[];
+if(!DB.fillBatches) DB.fillBatches=[];
               saveDB(); renderHome(); renderStudy();
               showToast('✓ 已下载（旧格式）');
             });
@@ -1907,6 +1910,7 @@ function cloudDownload(){
         DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
         DB.starMap=m.starMap||{}; DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
         DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{}; DB.hlCache={};
+    DB.fillBatches=m.fillBatches||[];
         DB.batches=m.batches||[]; DB.analysisCache={}; DB.studyPages=[];
         saveDB(); renderHome(); renderStudy();
         showToast('✓ 已下载（旧格式，建议重新上传）');
@@ -1918,6 +1922,7 @@ function cloudDownload(){
     DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
     DB.starMap=m.starMap||{}; DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
     DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{}; DB.hlCache={};
+    DB.fillBatches=m.fillBatches||[];
 
     // Load batches
     var batchIds=batchIdxDoc.exists?(batchIdxDoc.data().ids||[]):[];
@@ -1987,6 +1992,7 @@ var _studyCurPage = null; // current page id being edited
 function renderStudy(){
   var area = document.getElementById('study-area'); if(!area) return;
   if(!DB.studyPages) DB.studyPages=[];
+if(!DB.fillBatches) DB.fillBatches=[];
 
   var html = '<div class="card">'
     +'<div class="row"><button class="btn" onclick="navBack()">← 返回</button>'
@@ -2291,6 +2297,289 @@ function studyInsertTable(){
   document.execCommand('insertHTML',false,html);
   studyAutoSave();
   showToast('✓ 表格已插入（可直接点击单元格编辑）');
+}
+
+// ═══════════════════════════════════════════════════════
+// 填空题 FILL-IN-THE-BLANK
+// ═══════════════════════════════════════════════════════
+
+// Parse fill-in questions
+// Format: 大肠经进入________齿中。（答案：下）
+// Or multi-blank: ________经过________穴。（答案：足阳明|足三里）
+function parseFill(raw){
+  raw = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  var lines = raw.split('\n');
+  var questions = [];
+  var numRe = /^[（(]?\s*(\d{1,3})\s*[)）.、]?\s*/;
+  var ansRe = /[（(]\s*答案[：::]?\s*(.+?)\s*[）)]/;
+  lines.forEach(function(line){
+    line = line.trim(); if(!line) return;
+    var ansMatch = line.match(ansRe);
+    if(!ansMatch) return;
+    var answers = ansMatch[1].split(/[|｜\/,，]/).map(function(a){return a.trim();}).filter(Boolean);
+    var body = line.replace(ansRe,'').replace(numRe,'').trim();
+    if(!body || body.indexOf('_')<0) return;
+    // Count blanks
+    var blanks = (body.match(/_{2,}/g)||[]).length;
+    if(blanks===0) return;
+    if(answers.length < blanks) {
+      // Pad answers if fewer than blanks
+      while(answers.length < blanks) answers.push(answers[answers.length-1]||'?');
+    }
+    // Generate distractors: mix of answer characters + common TCM words
+    questions.push({id:uid(), body:body, answers:answers, blanks:blanks, ts:Date.now()});
+  });
+  return questions;
+}
+
+// Generate candidate options for a blank
+function genCandidates(answer, allAnswers){
+  var pool = new Set();
+  pool.add(answer);
+  // Add other answers from same question as distractors
+  allAnswers.forEach(function(a){ if(a!==answer) pool.add(a); });
+  // Add character-level distractors from answer
+  var chars = answer.split('');
+  var distractors = ['上','下','左','右','内','外','前','后','大','小',
+    '手','足','阴','阳','气','血','热','寒','虚','实','表','里',
+    '心','肺','脾','胃','肝','肾','经','络','穴','骨','筋','脉'];
+  distractors.forEach(function(d){ if(!pool.has(d)) pool.add(d); });
+  // Shuffle and take 5 total (including correct)
+  var arr = Array.from(pool);
+  for(var si=arr.length-1;si>0;si--){var sj=Math.floor(Math.random()*(si+1));var st=arr[si];arr[si]=arr[sj];arr[sj]=st;}
+  // Ensure answer is in first 5
+  var result = arr.slice(0,5);
+  if(result.indexOf(answer)<0){ result[Math.floor(Math.random()*5)]=answer; }
+  // Shuffle again
+  for(var ri=result.length-1;ri>0;ri--){var rj=Math.floor(Math.random()*(ri+1));var rt=result[ri];result[ri]=result[rj];result[rj]=rt;}
+  return result;
+}
+
+var FQ = {batch:null, qs:[], cur:0, userAnswers:[], started:false};
+
+function renderFill(){
+  var fp = document.getElementById('fill'); if(!fp) return;
+  if(!DB.fillBatches) DB.fillBatches=[];
+  var html = '<div class="card">'
+    +'<div class="row"><button class="btn" onclick="navBack()">← 返回</button>'
+    +'<div class="title spacer" style="margin-left:10px">📝 填空题</div>'
+    +'<button class="btn primary" onclick="showFillImport()">+ 导入填空题</button>'
+    +'</div></div>';
+
+  if(!DB.fillBatches.length){
+    html += '<div class="card"><div class="sub">还没有填空题。点「+ 导入填空题」开始！</div></div>';
+  } else {
+    DB.fillBatches.slice().reverse().forEach(function(b){
+      var done = b.sessions ? b.sessions.length : 0;
+      html += '<div class="card" style="padding:12px 14px">'
+        +'<div class="row" style="flex-wrap:wrap;gap:8px">'
+        +'<span style="font-size:15px;font-weight:700;flex:1">'+esc(b.name)+'</span>'
+        +'<span style="font-size:12px;color:#888">'+b.questions.length+'题</span>'
+        +'<button class="btn small primary" data-bid="'+b.id+'" onclick="startFill(this.dataset.bid)">▶ 开始答题</button>'
+        +'<button class="btn small blue" data-bid="'+b.id+'" onclick="showFillImport(this.dataset.bid)">+ 追加题目</button>'
+        +'<button class="btn small" data-bid="'+b.id+'" onclick="showFillResults(this.dataset.bid)">📊 查看记录</button>'
+        +'<button class="btn small red" data-bid="'+b.id+'" onclick="deleteFillBatch(this.dataset.bid)">删除</button>'
+        +'</div>'
+        +'<div style="font-size:12px;color:#888;margin-top:4px">已做 '+done+' 次 · 点「追加」可在此批次加题</div>'
+        +'</div>';
+    });
+  }
+  html += backBtn();
+  fp.innerHTML = html;
+}
+
+function showFillImport(batchId){
+  var fp = document.getElementById('fill'); if(!fp) return;
+  var existBatch = batchId ? DB.fillBatches.find(function(b){return b.id===batchId;}) : null;
+  var html = '<div class="card">'
+    +'<div class="row"><button class="btn" onclick="renderFill()">← 返回</button>'
+    +'<div class="title spacer" style="margin-left:10px">'+(existBatch?'追加到「'+esc(existBatch.name)+'」':'导入新填空题批次')+'</div>'
+    +'</div>'
+    +'<input id="fill-batch-name" class="full" placeholder="批次名称（追加时可不填）" value="'+(existBatch?esc(existBatch.name):'')+'"/>'
+    +'<div class="hint" style="margin-bottom:8px"><b>格式：</b>每行一题<br>'
+    +'单空：大肠经进入________齿中。（答案：下）<br>'
+    +'多空：________经过________穴。（答案：足阳明|足三里）<br>'
+    +'多个答案用 | 分隔</div>'
+    +'<textarea id="fill-raw" style="width:100%;min-height:200px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px" placeholder="粘贴填空题..."></textarea>'
+    +'<div class="row mt" style="gap:8px">'
+    +'<button class="btn primary" data-bid="'+(batchId||'')+'" onclick="importFill(this.dataset.bid)">导入</button>'
+    +'<button class="btn" onclick="renderFill()">取消</button>'
+    +'</div>'
+    +'<div id="fill-import-msg" class="sub mt"></div>'
+    +'</div>';
+  fp.innerHTML = html;
+}
+
+function importFill(batchId){
+  var raw = document.getElementById('fill-raw').value.trim();
+  var name = document.getElementById('fill-batch-name').value.trim();
+  var msg = document.getElementById('fill-import-msg');
+  if(!raw){msg.textContent='请先粘贴题目';msg.style.color='red';return;}
+  var qs = parseFill(raw);
+  if(!qs.length){msg.textContent='未识别到填空题，请检查格式（需要含________和答案）';msg.style.color='red';return;}
+  if(batchId){
+    // Append to existing batch
+    var b = DB.fillBatches.find(function(x){return x.id===batchId;});
+    if(b){ b.questions = b.questions.concat(qs); saveDB(); msg.textContent='✓ 追加 '+qs.length+' 题到「'+b.name+'」'; msg.style.color='green'; setTimeout(renderFill,1200); return; }
+  }
+  // New batch
+  var bname = name || ('填空批次'+(DB.fillBatches.length+1)+' — '+new Date().toLocaleDateString('zh-CN'));
+  DB.fillBatches.push({id:uid(), name:bname, questions:qs, sessions:[], ts:Date.now()});
+  saveDB();
+  msg.textContent='✓ 导入 '+qs.length+' 题 → 「'+bname+'」'; msg.style.color='green';
+  setTimeout(renderFill, 1200);
+}
+
+function deleteFillBatch(batchId){
+  if(!confirm('确定删除此填空题批次？'))return;
+  DB.fillBatches = DB.fillBatches.filter(function(b){return b.id!==batchId;});
+  saveDB(); renderFill(); showToast('已删除');
+}
+
+function startFill(batchId){
+  var batch = DB.fillBatches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  FQ = {batch:batch, qs:batch.questions.slice(), cur:0, userAnswers:batch.questions.map(function(){return [];}), started:true};
+  renderFillQ();
+}
+
+function renderFillQ(){
+  var fp = document.getElementById('fill'); if(!fp) return;
+  var q = FQ.qs[FQ.cur];
+  var parts = q.body.split(/_{2,}/);
+  var progress = Math.round(FQ.cur/FQ.qs.length*100);
+
+  var html = '<div class="card">'
+    +'<div class="qtop">'
+    +'<div><div class="qcount">填空 <strong>'+(FQ.cur+1)+'</strong> / <span>'+FQ.qs.length+'</span></div></div>'
+    +'<div class="spacer"></div>'
+    +'</div>'
+    +'<div class="progress"><div class="bar" style="width:'+progress+'%"></div></div>'
+    +'<div style="font-size:16px;line-height:2;padding:16px;background:#f8f7f3;border-radius:10px;margin-bottom:16px">';
+
+  // Render question with blank slots
+  var userAns = FQ.userAnswers[FQ.cur];
+  parts.forEach(function(part, i){
+    html += esc(part);
+    if(i < q.answers.length){
+      var filled = userAns[i]||'';
+      var isCorrect = filled && filled===q.answers[i];
+      var isWrong = filled && filled!==q.answers[i];
+      html += '<span style="display:inline-block;min-width:60px;border-bottom:2px solid '+(isCorrect?'#2e7d52':isWrong?'#b83232':'#1a4fa0')+';text-align:center;padding:0 8px;font-weight:700;color:'+(isCorrect?'#2e7d52':isWrong?'#b83232':'#1a4fa0')+'">'+(filled||'&nbsp;&nbsp;&nbsp;&nbsp;')+'</span>';
+    }
+  });
+  html += '</div>';
+
+  // Show candidate buttons for each blank
+  for(var bi=0;bi<q.answers.length;bi++){
+    var candidates = genCandidates(q.answers[bi], q.answers);
+    var filled = userAns[bi]||'';
+    html += '<div style="margin-bottom:12px">'
+      +'<div style="font-size:12px;color:#888;margin-bottom:6px">第'+(bi+1)+'空：</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:8px">';
+    candidates.forEach(function(c){
+      var isSel = c===filled;
+      html += '<button style="padding:8px 16px;border-radius:8px;border:2px solid '+(isSel?'#1a4fa0':'#ddd')+';background:'+(isSel?'#e8effa':'#fff')+';font-size:15px;font-weight:'+(isSel?'700':'400')+';cursor:pointer" '
+        +'data-blank="'+bi+'" data-val="'+esc(c)+'" onclick="fillPick(parseInt(this.dataset.blank),this.dataset.val)">'+esc(c)+'</button>';
+    });
+    html += '</div></div>';
+  }
+
+  // Actions
+  html += '<div class="row actions" style="margin-top:16px">'
+    +'<button class="btn small" onclick="fillPrev()">← 上一题</button>'
+    +'<button class="btn small primary" onclick="fillNext()">下一题 →</button>'
+    +'<button class="btn small red spacer" onclick="finishFill()">结束</button>'
+    +'</div></div>'
+    + backBtn();
+
+  fp.innerHTML = html;
+}
+
+function fillPick(blankIdx, val){
+  FQ.userAnswers[FQ.cur][blankIdx] = val;
+  // Check if all blanks filled → auto advance after 600ms
+  var q = FQ.qs[FQ.cur];
+  var all = true;
+  for(var i=0;i<q.answers.length;i++){ if(!FQ.userAnswers[FQ.cur][i]){all=false;break;} }
+  renderFillQ();
+  if(all && FQ.cur+1 < FQ.qs.length){
+    setTimeout(function(){ FQ.cur++; renderFillQ(); }, 700);
+  } else if(all && FQ.cur+1 >= FQ.qs.length){
+    setTimeout(finishFill, 700);
+  }
+}
+
+function fillPrev(){ if(FQ.cur>0){FQ.cur--;renderFillQ();}else showToast('已是第一题'); }
+function fillNext(){
+  if(FQ.cur+1>=FQ.qs.length){finishFill();return;}
+  FQ.cur++; renderFillQ();
+}
+
+function finishFill(){
+  // Save session
+  var correct=0, total=0;
+  var sessionDetails = FQ.qs.map(function(q,i){
+    var ua = FQ.userAnswers[i]||[];
+    var allCorrect = q.answers.every(function(a,j){return ua[j]===a;});
+    if(allCorrect) correct++;
+    total++;
+    return {qid:q.id, body:q.body, answers:q.answers, userAnswers:ua, correct:allCorrect};
+  });
+  var session = {id:uid(), ts:Date.now(), correct:correct, total:total, details:sessionDetails};
+  if(!FQ.batch.sessions) FQ.batch.sessions=[];
+  FQ.batch.sessions.push(session);
+  saveDB();
+  showFillResultPage(session);
+}
+
+function showFillResultPage(session){
+  var fp = document.getElementById('fill'); if(!fp) return;
+  var rate = Math.round(session.correct/session.total*100);
+  var html = '<div class="card">'
+    +'<div class="row"><button class="btn" onclick="renderFill()">← 返回</button>'
+    +'<div class="title spacer" style="margin-left:10px">填空结果</div>'
+    +'</div>'
+    +'<div class="grid" style="margin-top:12px">'
+    +'<div class="stat"><div class="k">总题</div><div class="v">'+session.total+'</div></div>'
+    +'<div class="stat"><div class="k">全对</div><div class="v greentext">'+session.correct+'</div></div>'
+    +'<div class="stat"><div class="k">正确率</div><div class="v">'+rate+'%</div></div>'
+    +'</div></div>'
+    +'<div class="card"><div class="title" style="margin-bottom:12px">详细核对</div>';
+
+  session.details.forEach(function(d,i){
+    var allOk = d.correct;
+    html += '<div style="padding:12px;border-radius:8px;background:'+(allOk?'#f0fff4':'#fff5f5')+';border:1px solid '+(allOk?'#b8dfc8':'#f5c5c5')+';margin-bottom:10px">';
+    // Render question with answers shown
+    var parts = d.body.split(/_{2,}/);
+    html += '<div style="font-size:15px;line-height:2;margin-bottom:8px">';
+    parts.forEach(function(part,j){
+      html += esc(part);
+      if(j < d.answers.length){
+        var ua = d.userAnswers[j]||'（未填）';
+        var ok = ua===d.answers[j];
+        html += '<span style="display:inline-block;padding:0 6px;border-radius:4px;font-weight:700;background:'+(ok?'#e8f5ed':'#fdeaea')+';color:'+(ok?'#2e7d52':'#b83232')+'">'+esc(ua)+'</span>';
+        if(!ok) html += '<span style="font-size:12px;color:#2e7d52;margin-left:4px">→正确：'+esc(d.answers[j])+'</span>';
+      }
+    });
+    html += '</div></div>';
+  });
+
+  html += '</div>'
+    +'<div class="card"><div class="row">'
+    +'<button class="btn primary" data-bid="'+FQ.batch.id+'" onclick="startFill(this.dataset.bid)">🔄 再做一次</button>'
+    +'<button class="btn" onclick="renderFill()">返回列表</button>'
+    +'</div></div>'
+    + backBtn();
+
+  fp.innerHTML = html;
+}
+
+function showFillResults(batchId){
+  var b = DB.fillBatches.find(function(x){return x.id===batchId;}); if(!b)return;
+  if(!b.sessions||!b.sessions.length){showToast('还没有答题记录');return;}
+  var last = b.sessions[b.sessions.length-1];
+  showFillResultPage(last);
+  FQ.batch = b;
 }
 
 // ═══════════════════════════════════════════════════════
