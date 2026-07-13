@@ -10,7 +10,7 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[] };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
@@ -19,6 +19,7 @@ function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } cat
 if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
+if(!DB.fillProgress) DB.fillProgress={};
 if(DB.lastPos===undefined) DB.lastPos=null;
 // Re-fix caseText for existing batches: clear wrong case assignments beyond range
 (function fixCaseRanges(){
@@ -1904,6 +1905,7 @@ function cloudDownload(){
               if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
+if(!DB.fillProgress) DB.fillProgress={};
               saveDB(); renderHome(); renderStudy();
               showToast('✓ 已下载（旧格式）');
             });
@@ -1996,6 +1998,7 @@ function renderStudy(){
   if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
+if(!DB.fillProgress) DB.fillProgress={};
 
   var html = '<div class="card">'
     +'<div class="row"><button class="btn" onclick="navBack()">← 返回</button>'
@@ -2373,6 +2376,7 @@ function renderFill(){
   var fp = document.getElementById('fill'); if(!fp) return;
   if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
+if(!DB.fillProgress) DB.fillProgress={};
   var html = '<div class="card">'
     +'<div class="row"><button class="btn" onclick="navBack()">← 返回</button>'
     +'<div class="title spacer" style="margin-left:10px">📝 填空题</div>'
@@ -2452,7 +2456,38 @@ function deleteFillBatch(batchId){
 
 function startFill(batchId){
   var batch = DB.fillBatches.find(function(b){return b.id===batchId;}); if(!batch)return;
-  FQ = {batch:batch, qs:batch.questions.slice(), cur:0, userAnswers:batch.questions.map(function(){return [];}), started:true};
+  var prog = DB.fillProgress&&DB.fillProgress[batchId];
+  if(prog && prog.cur>0){
+    // Has saved progress — offer choice
+    var fp=document.getElementById('fill'); if(!fp)return;
+    fp.innerHTML='<div class="card">'
+      +'<div class="title" style="margin-bottom:12px">'+esc(batch.name)+'</div>'
+      +'<div class="sub" style="margin-bottom:16px">上次做到第'+(prog.cur+1)+'题（共'+batch.questions.length+'题）</div>'
+      +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+      +'<button class="btn primary" data-bid="'+batchId+'" onclick="continueFill(this.dataset.bid)">▶ 继续上次（第'+(prog.cur+1)+'题）</button>'
+      +'<button class="btn" data-bid="'+batchId+'" onclick="restartFill(this.dataset.bid)">🔄 从头重新开始</button>'
+      +'<button class="btn small" onclick="renderFill()">← 返回</button>'
+      +'</div></div>';
+    return;
+  }
+  // No progress — start fresh
+  restartFill(batchId);
+}
+
+function continueFill(batchId){
+  var batch=DB.fillBatches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  var prog=DB.fillProgress&&DB.fillProgress[batchId];
+  if(!prog){restartFill(batchId);return;}
+  FQ={batch:batch, qs:batch.questions.slice(), cur:prog.cur,
+    userAnswers:prog.userAnswers||batch.questions.map(function(){return [];}), started:true};
+  renderFillQ();
+}
+
+function restartFill(batchId){
+  var batch=DB.fillBatches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  if(DB.fillProgress) delete DB.fillProgress[batchId];
+  saveDB();
+  FQ={batch:batch, qs:batch.questions.slice(), cur:0, userAnswers:batch.questions.map(function(){return [];}), started:true};
   renderFillQ();
 }
 
@@ -2517,6 +2552,7 @@ function fillPick(blankIdx, val){
   var all = true;
   for(var i=0;i<q.blanks.length;i++){ if(!FQ.userAnswers[FQ.cur][i]){all=false;break;} }
   if(all){
+    saveFillProgress();
     if(FQ.cur+1 < FQ.qs.length){
       setTimeout(function(){ FQ.cur++; renderFillQ(); }, 800);
     } else {
@@ -2527,8 +2563,16 @@ function fillPick(blankIdx, val){
 
 function fillPrev(){ if(FQ.cur>0){FQ.cur--;renderFillQ();}else showToast('已是第一题'); }
 function fillNext(){
+  saveFillProgress();
   if(FQ.cur+1>=FQ.qs.length){finishFill();return;}
   FQ.cur++; renderFillQ();
+}
+
+function saveFillProgress(){
+  if(!FQ.batch||!FQ.started) return;
+  if(!DB.fillProgress) DB.fillProgress={};
+  DB.fillProgress[FQ.batch.id]={cur:FQ.cur, userAnswers:FQ.userAnswers, ts:Date.now()};
+  saveDB();
 }
 
 function finishFill(){
@@ -2544,6 +2588,8 @@ function finishFill(){
   var session = {id:uid(), ts:Date.now(), correct:correct, total:total, details:sessionDetails};
   if(!FQ.batch.sessions) FQ.batch.sessions=[];
   FQ.batch.sessions.push(session);
+  // Clear saved progress on completion
+  if(DB.fillProgress) delete DB.fillProgress[FQ.batch.id];
   saveDB();
   showFillResultPage(session);
 }
@@ -2584,8 +2630,14 @@ function showFillResultPage(session){
       var j=bi2++;
       var ua=d.userAnswers[j]||'（未填）';
       var ok2=ua===d.answers[j];
-      var r='<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;background:'+(ok2?'#e8f5ed':'#fdeaea')+';color:'+(ok2?'#2e7d52':'#b83232')+'">'+esc(ua)+'</span>';
-      if(!ok2) r+='<span style="font-size:12px;color:#2e7d52;font-weight:700;margin-left:4px">→✓'+esc(d.answers[j])+'</span>';
+      if(ok2){
+        // Correct: green background
+        var r='<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;background:#e8f5ed;color:#2e7d52">'+esc(ua)+'</span>';
+      } else {
+        // Wrong: show my answer struck through + correct in red bold
+        var r='<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;background:#fdeaea;color:#b83232;text-decoration:line-through;margin-right:4px">'+esc(ua||'未填')+'</span>'
+          +'<span style="display:inline-block;padding:2px 10px;border-radius:4px;font-weight:900;background:#b83232;color:#fff;font-size:15px">'+esc(d.answers[j])+'</span>';
+      }
       return r;
     });
     html += '<div style="font-size:15px;line-height:2.4;margin-bottom:8px;user-select:text">'+rendered2+'</div>';
