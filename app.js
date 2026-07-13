@@ -2304,55 +2304,49 @@ function studyInsertTable(){
 // ═══════════════════════════════════════════════════════
 
 // Parse fill-in questions
-// Format: 大肠经进入________齿中。（答案：下）
-// Or multi-blank: ________经过________穴。（答案：足阳明|足三里）
+// Format: 1. 大肠经进入【上｜下】齿中。（下）
+// Blanks are marked as 【option1｜option2】
+// Answers at end in （ans1｜ans2｜ans3）
 function parseFill(raw){
-  raw = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  raw = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
+    .replace(/\u3010/g,'【').replace(/\u3011/g,'】')
+    .replace(/\uff5c/g,'｜');
   var lines = raw.split('\n');
   var questions = [];
-  var numRe = /^[（(]?\s*(\d{1,3})\s*[)）.、]?\s*/;
-  var ansRe = /[（(]\s*答案[：::]?\s*(.+?)\s*[）)]/;
+  var numRe = /^\s*\d{1,3}[.、．]\s*/;
+  // Answer block at end: （ans1｜ans2）or (ans1|ans2)
+  var ansBlockRe = /[（(]([^（）()【】]+)[）)]\s*[.。]?\s*$/;
+
   lines.forEach(function(line){
     line = line.trim(); if(!line) return;
-    var ansMatch = line.match(ansRe);
+    // Must have 【 】 blanks
+    if(line.indexOf('【')<0) return;
+    // Extract answer block from end
+    var ansMatch = line.match(ansBlockRe);
     if(!ansMatch) return;
-    var answers = ansMatch[1].split(/[|｜\/,，]/).map(function(a){return a.trim();}).filter(Boolean);
-    var body = line.replace(ansRe,'').replace(numRe,'').trim();
-    if(!body || body.indexOf('_')<0) return;
-    // Count blanks
-    var blanks = (body.match(/_{2,}/g)||[]).length;
-    if(blanks===0) return;
-    if(answers.length < blanks) {
-      // Pad answers if fewer than blanks
-      while(answers.length < blanks) answers.push(answers[answers.length-1]||'?');
+    var answers = ansMatch[1].split(/[|｜]/).map(function(a){return a.trim();}).filter(Boolean);
+    // Remove answer block and question number from body
+    var body = line.replace(ansBlockRe,'').replace(numRe,'').trim();
+    // Extract candidates for each blank from 【A｜B｜C】
+    var blankRe = /【([^】]+)】/g;
+    var blanks = [];
+    var m;
+    while((m=blankRe.exec(body))!==null){
+      var opts = m[1].split('｜').map(function(o){return o.trim();}).filter(Boolean);
+      blanks.push({opts:opts, pos:m.index});
     }
-    // Generate distractors: mix of answer characters + common TCM words
-    questions.push({id:uid(), body:body, answers:answers, blanks:blanks, ts:Date.now()});
+    if(!blanks.length || !answers.length) return;
+    if(answers.length < blanks.length){
+      // pad
+      while(answers.length<blanks.length) answers.push('?');
+    }
+    questions.push({
+      id:uid(), body:body, answers:answers,
+      blanks:blanks.map(function(b){return b.opts;}),
+      ts:Date.now()
+    });
   });
   return questions;
-}
-
-// Generate candidate options for a blank
-function genCandidates(answer, allAnswers){
-  var pool = new Set();
-  pool.add(answer);
-  // Add other answers from same question as distractors
-  allAnswers.forEach(function(a){ if(a!==answer) pool.add(a); });
-  // Add character-level distractors from answer
-  var chars = answer.split('');
-  var distractors = ['上','下','左','右','内','外','前','后','大','小',
-    '手','足','阴','阳','气','血','热','寒','虚','实','表','里',
-    '心','肺','脾','胃','肝','肾','经','络','穴','骨','筋','脉'];
-  distractors.forEach(function(d){ if(!pool.has(d)) pool.add(d); });
-  // Shuffle and take 5 total (including correct)
-  var arr = Array.from(pool);
-  for(var si=arr.length-1;si>0;si--){var sj=Math.floor(Math.random()*(si+1));var st=arr[si];arr[si]=arr[sj];arr[sj]=st;}
-  // Ensure answer is in first 5
-  var result = arr.slice(0,5);
-  if(result.indexOf(answer)<0){ result[Math.floor(Math.random()*5)]=answer; }
-  // Shuffle again
-  for(var ri=result.length-1;ri>0;ri--){var rj=Math.floor(Math.random()*(ri+1));var rt=result[ri];result[ri]=result[rj];result[rj]=rt;}
-  return result;
 }
 
 var FQ = {batch:null, qs:[], cur:0, userAnswers:[], started:false};
@@ -2445,46 +2439,45 @@ function startFill(batchId){
 function renderFillQ(){
   var fp = document.getElementById('fill'); if(!fp) return;
   var q = FQ.qs[FQ.cur];
-  var parts = q.body.split(/_{2,}/);
   var progress = Math.round(FQ.cur/FQ.qs.length*100);
+  var userAns = FQ.userAnswers[FQ.cur]||[];
 
   var html = '<div class="card">'
     +'<div class="qtop">'
     +'<div><div class="qcount">填空 <strong>'+(FQ.cur+1)+'</strong> / <span>'+FQ.qs.length+'</span></div></div>'
     +'<div class="spacer"></div>'
     +'</div>'
-    +'<div class="progress"><div class="bar" style="width:'+progress+'%"></div></div>'
-    +'<div style="font-size:16px;line-height:2;padding:16px;background:#f8f7f3;border-radius:10px;margin-bottom:16px">';
+    +'<div class="progress"><div class="bar" style="width:'+progress+'%"></div></div>';
 
-  // Render question with blank slots
-  var userAns = FQ.userAnswers[FQ.cur];
-  parts.forEach(function(part, i){
-    html += esc(part);
-    if(i < q.answers.length){
-      var filled = userAns[i]||'';
-      var isCorrect = filled && filled===q.answers[i];
-      var isWrong = filled && filled!==q.answers[i];
-      html += '<span style="display:inline-block;min-width:60px;border-bottom:2px solid '+(isCorrect?'#2e7d52':isWrong?'#b83232':'#1a4fa0')+';text-align:center;padding:0 8px;font-weight:700;color:'+(isCorrect?'#2e7d52':isWrong?'#b83232':'#1a4fa0')+'">'+(filled||'&nbsp;&nbsp;&nbsp;&nbsp;')+'</span>';
-    }
-  });
-  html += '</div>';
-
-  // Show candidate buttons for each blank
-  for(var bi=0;bi<q.answers.length;bi++){
-    var candidates = genCandidates(q.answers[bi], q.answers);
+  // Render body: replace 【opts】 with filled/unfilled slots
+  var blankIdx = 0;
+  var rendered = q.body.replace(/【[^】]+】/g, function(){
+    var bi = blankIdx++;
     var filled = userAns[bi]||'';
-    html += '<div style="margin-bottom:12px">'
-      +'<div style="font-size:12px;color:#888;margin-bottom:6px">第'+(bi+1)+'空：</div>'
-      +'<div style="display:flex;flex-wrap:wrap;gap:8px">';
-    candidates.forEach(function(c){
-      var isSel = c===filled;
-      html += '<button style="padding:8px 16px;border-radius:8px;border:2px solid '+(isSel?'#1a4fa0':'#ddd')+';background:'+(isSel?'#e8effa':'#fff')+';font-size:15px;font-weight:'+(isSel?'700':'400')+';cursor:pointer" '
-        +'data-blank="'+bi+'" data-val="'+esc(c)+'" onclick="fillPick(parseInt(this.dataset.blank),this.dataset.val)">'+esc(c)+'</button>';
+    var isCorrect = filled && filled===q.answers[bi];
+    var isWrong = filled && filled!==q.answers[bi];
+    var color = isCorrect?'#2e7d52':isWrong?'#b83232':'#1a4fa0';
+    var bg = isCorrect?'#e8f5ed':isWrong?'#fdeaea':'#e8effa';
+    return '<span style="display:inline-block;min-width:50px;padding:2px 10px;border-radius:6px;border:2px solid '+color+';background:'+bg+';font-weight:700;color:'+color+';text-align:center">'+(filled||'？')+'</span>';
+  });
+  html += '<div style="font-size:16px;line-height:2.2;padding:16px;background:#f8f7f3;border-radius:10px;margin-bottom:16px">'+rendered+'</div>';
+
+  // Show candidate buttons for each blank inline
+  for(var bi=0;bi<q.blanks.length;bi++){
+    var opts = q.blanks[bi];
+    var filled = userAns[bi]||'';
+    var isCorrect = filled && filled===q.answers[bi];
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+      +'<span style="font-size:12px;color:#888;min-width:30px">第'+(bi+1)+'空</span>';
+    opts.forEach(function(opt){
+      var isSel = opt===filled;
+      var selColor = isSel?(isCorrect?'#2e7d52':'#1a4fa0'):'#888';
+      html += '<button style="padding:7px 14px;border-radius:8px;border:2px solid '+(isSel?selColor:'#ddd')+';background:'+(isSel?(isCorrect?'#e8f5ed':'#e8effa'):'#fff')+';font-size:15px;font-weight:'+(isSel?'700':'400')+';cursor:pointer;color:'+(isSel?selColor:'#333')+'" '
+        +'data-blank="'+bi+'" data-val="'+esc(opt)+'" onclick="fillPick(parseInt(this.dataset.blank),this.dataset.val)">'+esc(opt)+'</button>';
     });
-    html += '</div></div>';
+    html += '</div>';
   }
 
-  // Actions
   html += '<div class="row actions" style="margin-top:16px">'
     +'<button class="btn small" onclick="fillPrev()">← 上一题</button>'
     +'<button class="btn small primary" onclick="fillNext()">下一题 →</button>'
@@ -2496,16 +2489,19 @@ function renderFillQ(){
 }
 
 function fillPick(blankIdx, val){
+  if(!FQ.userAnswers[FQ.cur]) FQ.userAnswers[FQ.cur]=[];
   FQ.userAnswers[FQ.cur][blankIdx] = val;
-  // Check if all blanks filled → auto advance after 600ms
+  renderFillQ();
+  // Auto-advance only when all blanks filled
   var q = FQ.qs[FQ.cur];
   var all = true;
-  for(var i=0;i<q.answers.length;i++){ if(!FQ.userAnswers[FQ.cur][i]){all=false;break;} }
-  renderFillQ();
-  if(all && FQ.cur+1 < FQ.qs.length){
-    setTimeout(function(){ FQ.cur++; renderFillQ(); }, 700);
-  } else if(all && FQ.cur+1 >= FQ.qs.length){
-    setTimeout(finishFill, 700);
+  for(var i=0;i<q.blanks.length;i++){ if(!FQ.userAnswers[FQ.cur][i]){all=false;break;} }
+  if(all){
+    if(FQ.cur+1 < FQ.qs.length){
+      setTimeout(function(){ FQ.cur++; renderFillQ(); }, 800);
+    } else {
+      setTimeout(finishFill, 800);
+    }
   }
 }
 
@@ -2520,7 +2516,7 @@ function finishFill(){
   var correct=0, total=0;
   var sessionDetails = FQ.qs.map(function(q,i){
     var ua = FQ.userAnswers[i]||[];
-    var allCorrect = q.answers.every(function(a,j){return ua[j]===a;});
+    var allCorrect = q.answers.every(function(a,j){return (ua[j]||'')===(a||'');});
     if(allCorrect) correct++;
     total++;
     return {qid:q.id, body:q.body, answers:q.answers, userAnswers:ua, correct:allCorrect};
@@ -2550,18 +2546,16 @@ function showFillResultPage(session){
     var allOk = d.correct;
     html += '<div style="padding:12px;border-radius:8px;background:'+(allOk?'#f0fff4':'#fff5f5')+';border:1px solid '+(allOk?'#b8dfc8':'#f5c5c5')+';margin-bottom:10px">';
     // Render question with answers shown
-    var parts = d.body.split(/_{2,}/);
-    html += '<div style="font-size:15px;line-height:2;margin-bottom:8px">';
-    parts.forEach(function(part,j){
-      html += esc(part);
-      if(j < d.answers.length){
-        var ua = d.userAnswers[j]||'（未填）';
-        var ok = ua===d.answers[j];
-        html += '<span style="display:inline-block;padding:0 6px;border-radius:4px;font-weight:700;background:'+(ok?'#e8f5ed':'#fdeaea')+';color:'+(ok?'#2e7d52':'#b83232')+'">'+esc(ua)+'</span>';
-        if(!ok) html += '<span style="font-size:12px;color:#2e7d52;margin-left:4px">→正确：'+esc(d.answers[j])+'</span>';
-      }
+    var bi2=0;
+    var rendered2 = d.body.replace(/【[^】]+】/g,function(){
+      var j=bi2++;
+      var ua=d.userAnswers[j]||'（未填）';
+      var ok=ua===d.answers[j];
+      var r='<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;background:'+(ok?'#e8f5ed':'#fdeaea')+';color:'+(ok?'#2e7d52':'#b83232')+'">'+esc(ua)+'</span>';
+      if(!ok) r+='<span style="font-size:12px;color:#2e7d52;margin-left:4px">✓'+esc(d.answers[j])+'</span>';
+      return r;
     });
-    html += '</div></div>';
+    html += '<div style="font-size:15px;line-height:2.2;margin-bottom:4px">'+rendered2+'</div></div>';
   });
 
   html += '</div>'
