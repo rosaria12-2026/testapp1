@@ -2642,19 +2642,16 @@ function showFillResultPage(session){
     });
     html += '<div style="font-size:15px;line-height:2.4;margin-bottom:8px;user-select:text">'+rendered2+'</div>';
 
-    // Mini edit toolbar for wrong answers
-    if(!allOk){
-      html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.04);border-radius:6px">'
-        +'<span style="font-size:11px;color:#888;align-self:center">标注：</span>'
-        +'<button data-c="#FFE066" onclick="fillHL(this.dataset.c)" style="background:#FFE066;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">黄</button>'
-        +'<button data-c="#FF6B6B" onclick="fillHL(this.dataset.c)" style="background:#FF6B6B;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">红</button>'
-        +'<button data-c="#90EE90" onclick="fillHL(this.dataset.c)" style="background:#90EE90;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">绿</button>'
-        +'<button onclick="document.execCommand(\'bold\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">B</button>'
-        +'<button onclick="document.execCommand(\'underline\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;text-decoration:underline">U</button>'
-        +'<button class="btn small red" style="font-size:11px;padding:3px 8px;margin-left:auto" '
-        +'data-qidx="'+i+'" onclick="addOneFillWrong(parseInt(this.dataset.qidx))">📕 收入错题本</button>'
-        +'</div>';
-    }
+    // Toolbar — always shown for all questions
+    html += '<div onmousedown="event.preventDefault()" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.05);border-radius:6px;align-items:center">'
+      +'<span style="font-size:11px;color:#888">标注：</span>'
+      +'<button data-c="#FFE066" data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'hilite\',this.dataset.c)" style="background:#FFE066;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">黄</button>'
+      +'<button data-c="#FF6B6B" data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'hilite\',this.dataset.c)" style="background:#FF6B6B;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">红</button>'
+      +'<button data-c="#90EE90" data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'hilite\',this.dataset.c)" style="background:#90EE90;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">绿</button>'
+      +'<button data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'bold\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">B</button>'
+      +'<button data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'underline\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;text-decoration:underline">U</button>'
+      +(!allOk?'<button class="btn small red" style="font-size:11px;padding:3px 8px;margin-left:auto" data-qidx="'+i+'" onclick="addOneFillWrong(parseInt(this.dataset.qidx))">📕 收入错题本</button>':'')
+      +'</div>';
 
     // Note / annotation section
     html += '<div style="margin-top:6px">'
@@ -2673,9 +2670,18 @@ function showFillResultPage(session){
   fp._session = session;
 }
 
-function fillHL(color){
-  document.execCommand('hiliteColor',false,color);
+function fillFmt(qi, cmd, val){
+  var el=document.getElementById('fill-q-'+qi); if(!el)return;
+  el.focus();
+  var sel=window.getSelection();
+  if(!sel||sel.rangeCount===0||!el.contains(sel.anchorNode)){
+    var range=document.createRange(); range.selectNodeContents(el);
+    sel.removeAllRanges(); sel.addRange(range);
+  }
+  if(cmd==='hilite') document.execCommand('hiliteColor',false,val);
+  else document.execCommand(cmd,false,null);
 }
+function fillHL(color){ document.execCommand('hiliteColor',false,color); }
 
 function saveFillNote(sessionId, idx, val){
   if(!DB.qNotes) DB.qNotes={};
