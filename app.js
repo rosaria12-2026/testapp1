@@ -2588,8 +2588,8 @@ function fillPick(blankIdx, val){
   var q = FQ.qs[FQ.cur];
   var all = true;
   for(var i=0;i<q.blanks.length;i++){ if(!FQ.userAnswers[FQ.cur][i]){all=false;break;} }
+  saveFillProgress(); // save on every pick
   if(all){
-    saveFillProgress();
     if(FQ.cur+1 < FQ.qs.length){
       setTimeout(function(){ FQ.cur++; renderFillQ(); }, 800);
     } else {
@@ -2608,7 +2608,14 @@ function fillNext(){
 function saveFillProgress(){
   if(!FQ.batch||!FQ.started) return;
   if(!DB.fillProgress) DB.fillProgress={};
-  DB.fillProgress[FQ.batch.id]={cur:FQ.cur, userAnswers:FQ.userAnswers, ts:Date.now()};
+  // Find first unanswered question for resume point
+  var resumeAt = FQ.cur;
+  var q = FQ.qs[FQ.cur];
+  if(q){
+    var allFilled = q.blanks.every(function(b,j){return !!FQ.userAnswers[FQ.cur][j];});
+    if(allFilled && FQ.cur+1 < FQ.qs.length) resumeAt = FQ.cur+1;
+  }
+  DB.fillProgress[FQ.batch.id]={cur:resumeAt, userAnswers:FQ.userAnswers, ts:Date.now()};
   saveDB();
 }
 
@@ -2679,16 +2686,12 @@ function showFillResultPage(session){
     });
     html += '<div id="fq-'+i+'" contenteditable="true" spellcheck="false" style="font-size:15px;line-height:2.4;margin-bottom:8px;outline:none">'+rendered2+'</div>';
 
-    // Toolbar — always shown for all questions
-    html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.05);border-radius:6px;align-items:center">'
-      +'<span style="font-size:11px;color:#888">标注：</span>'
-      +'<button data-c="#FFE066" onmousedown="event.preventDefault();fillFmt(\'hilite\',this.dataset.c)" style="background:#FFE066;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">黄</button>'
-      +'<button data-c="#FF6B6B" onmousedown="event.preventDefault();fillFmt(\'hilite\',this.dataset.c)" style="background:#FF6B6B;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">红</button>'
-      +'<button data-c="#90EE90" onmousedown="event.preventDefault();fillFmt(\'hilite\',this.dataset.c)" style="background:#90EE90;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">绿</button>'
-      +'<button onmousedown="event.preventDefault();fillFmt(\'bold\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">B</button>'
-      +'<button onmousedown="event.preventDefault();fillFmt(\'underline\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;text-decoration:underline">U</button>'
-      +(!allOk?'<button class="btn small red" style="font-size:11px;padding:3px 8px;margin-left:auto" data-qidx="'+i+'" onclick="addOneFillWrong(parseInt(this.dataset.qidx))">📕 收入错题本</button>':'')
-      +'</div>';
+    // Wrong answer actions only
+    if(!allOk){
+      html += '<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">'
+        +'<button class="btn small red" data-qidx="'+i+'" onclick="addOneFillWrong(parseInt(this.dataset.qidx))">📕 收入错题本</button>'
+        +'</div>';
+    }
 
     // Note / annotation section
     html += '<div style="margin-top:6px">'
