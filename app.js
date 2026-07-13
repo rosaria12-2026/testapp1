@@ -10,7 +10,7 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[] };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[] };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
@@ -18,6 +18,7 @@ function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } cat
 ['analysisCache','notes','starMap','answerKeys','hlCache','qNotes'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
 if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
+if(!DB.fillWrong) DB.fillWrong=[];
 if(DB.lastPos===undefined) DB.lastPos=null;
 // Re-fix caseText for existing batches: clear wrong case assignments beyond range
 (function fixCaseRanges(){
@@ -1829,7 +1830,7 @@ function cloudUpload(){
     wrongMap:DB.wrongMap, dkMap:DB.dkMap, stats:DB.stats,
     starMap:DB.starMap, answerKeys:DB.answerKeys,
     lastPos:DB.lastPos, notes:DB.notes, qNotes:DB.qNotes||{},
-    fillBatches:DB.fillBatches||[]
+    fillBatches:DB.fillBatches||[], fillWrong:DB.fillWrong||[]
   };
 
   // Each batch = its own small doc (only progress + answers, not full questions)
@@ -1902,6 +1903,7 @@ function cloudDownload(){
               ['analysisCache','notes','starMap','answerKeys','hlCache','qNotes'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
               if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
+if(!DB.fillWrong) DB.fillWrong=[];
               saveDB(); renderHome(); renderStudy();
               showToast('✓ 已下载（旧格式）');
             });
@@ -1910,7 +1912,7 @@ if(!DB.fillBatches) DB.fillBatches=[];
         DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
         DB.starMap=m.starMap||{}; DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
         DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{}; DB.hlCache={};
-    DB.fillBatches=m.fillBatches||[];
+    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[];
         DB.batches=m.batches||[]; DB.analysisCache={}; DB.studyPages=[];
         saveDB(); renderHome(); renderStudy();
         showToast('✓ 已下载（旧格式，建议重新上传）');
@@ -1922,7 +1924,7 @@ if(!DB.fillBatches) DB.fillBatches=[];
     DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
     DB.starMap=m.starMap||{}; DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
     DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{}; DB.hlCache={};
-    DB.fillBatches=m.fillBatches||[];
+    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[];
 
     // Load batches
     var batchIds=batchIdxDoc.exists?(batchIdxDoc.data().ids||[]):[];
@@ -1993,6 +1995,7 @@ function renderStudy(){
   var area = document.getElementById('study-area'); if(!area) return;
   if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
+if(!DB.fillWrong) DB.fillWrong=[];
 
   var html = '<div class="card">'
     +'<div class="row"><button class="btn" onclick="navBack()">← 返回</button>'
@@ -2369,9 +2372,11 @@ var FQ = {batch:null, qs:[], cur:0, userAnswers:[], started:false};
 function renderFill(){
   var fp = document.getElementById('fill'); if(!fp) return;
   if(!DB.fillBatches) DB.fillBatches=[];
+if(!DB.fillWrong) DB.fillWrong=[];
   var html = '<div class="card">'
     +'<div class="row"><button class="btn" onclick="navBack()">← 返回</button>'
     +'<div class="title spacer" style="margin-left:10px">📝 填空题</div>'
+    +'<button class="btn red small" onclick="showFillWrongBook()">📕 错题本('+(DB.fillWrong?DB.fillWrong.length:0)+')</button>'
     +'<button class="btn primary" onclick="showFillImport()">+ 导入填空题</button>'
     +'</div></div>';
 
@@ -2546,6 +2551,8 @@ function finishFill(){
 function showFillResultPage(session){
   var fp = document.getElementById('fill'); if(!fp) return;
   var rate = Math.round(session.correct/session.total*100);
+  if(!DB.fillWrong) DB.fillWrong=[];
+
   var html = '<div class="card">'
     +'<div class="row"><button class="btn" onclick="renderFill()">← 返回</button>'
     +'<div class="title spacer" style="margin-left:10px">填空结果</div>'
@@ -2554,33 +2561,99 @@ function showFillResultPage(session){
     +'<div class="stat"><div class="k">总题</div><div class="v">'+session.total+'</div></div>'
     +'<div class="stat"><div class="k">全对</div><div class="v greentext">'+session.correct+'</div></div>'
     +'<div class="stat"><div class="k">正确率</div><div class="v">'+rate+'%</div></div>'
+    +'</div>'
+    +'<div class="row" style="margin-top:10px;gap:8px">'
+    +'<button class="btn primary" data-bid="'+(FQ.batch?FQ.batch.id:'')+'" onclick="startFill(this.dataset.bid)">🔄 再做一次</button>'
+    +'<button class="btn red" onclick="addAllWrongToFillBook()">📕 错题全收入错题本</button>'
+    +'<button class="btn" onclick="renderFill()">返回列表</button>'
     +'</div></div>'
-    +'<div class="card"><div class="title" style="margin-bottom:12px">详细核对</div>';
+
+    +'<div class="card"><div class="title" style="margin-bottom:8px">详细核对</div>'
+    +'<div class="sub" style="margin-bottom:12px">点每题的「📝 附注」可添加笔记；错题背景已高亮，可选中文字编辑标注</div>';
 
   session.details.forEach(function(d,i){
     var allOk = d.correct;
-    html += '<div style="padding:12px;border-radius:8px;background:'+(allOk?'#f0fff4':'#fff5f5')+';border:1px solid '+(allOk?'#b8dfc8':'#f5c5c5')+';margin-bottom:10px">';
-    // Render question with answers shown
+    var noteKey = 'fill_'+session.id+'_'+i;
+    var existNote = (DB.qNotes&&DB.qNotes[noteKey])||'';
+
+    html += '<div id="fill-item-'+i+'" style="padding:14px;border-radius:10px;background:'+(allOk?'#f0fff4':'#fff5f5')+';border:1.5px solid '+(allOk?'#b8dfc8':'#f5c5c5')+';margin-bottom:12px">';
+
+    // Question with answers
     var bi2=0;
     var rendered2 = d.body.replace(/【[^】]+】/g,function(){
       var j=bi2++;
       var ua=d.userAnswers[j]||'（未填）';
-      var ok=ua===d.answers[j];
-      var r='<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;background:'+(ok?'#e8f5ed':'#fdeaea')+';color:'+(ok?'#2e7d52':'#b83232')+'">'+esc(ua)+'</span>';
-      if(!ok) r+='<span style="font-size:12px;color:#2e7d52;margin-left:4px">✓'+esc(d.answers[j])+'</span>';
+      var ok2=ua===d.answers[j];
+      var r='<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;background:'+(ok2?'#e8f5ed':'#fdeaea')+';color:'+(ok2?'#2e7d52':'#b83232')+'">'+esc(ua)+'</span>';
+      if(!ok2) r+='<span style="font-size:12px;color:#2e7d52;font-weight:700;margin-left:4px">→✓'+esc(d.answers[j])+'</span>';
       return r;
     });
-    html += '<div style="font-size:15px;line-height:2.2;margin-bottom:4px">'+rendered2+'</div></div>';
+    html += '<div style="font-size:15px;line-height:2.4;margin-bottom:8px;user-select:text">'+rendered2+'</div>';
+
+    // Mini edit toolbar for wrong answers
+    if(!allOk){
+      html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.04);border-radius:6px">'
+        +'<span style="font-size:11px;color:#888;align-self:center">标注：</span>'
+        +'<button data-c="#FFE066" onclick="fillHL(this.dataset.c)" style="background:#FFE066;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">黄</button>'
+        +'<button data-c="#FF6B6B" onclick="fillHL(this.dataset.c)" style="background:#FF6B6B;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">红</button>'
+        +'<button data-c="#90EE90" onclick="fillHL(this.dataset.c)" style="background:#90EE90;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">绿</button>'
+        +'<button onclick="document.execCommand(\'bold\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">B</button>'
+        +'<button onclick="document.execCommand(\'underline\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;text-decoration:underline">U</button>'
+        +'<button class="btn small red" style="font-size:11px;padding:3px 8px;margin-left:auto" '
+        +'data-qidx="'+i+'" onclick="addOneFillWrong(parseInt(this.dataset.qidx))">📕 收入错题本</button>'
+        +'</div>';
+    }
+
+    // Note / annotation section
+    html += '<div style="margin-top:6px">'
+      +'<div style="font-size:12px;color:#888;margin-bottom:4px">📝 附注：</div>'
+      +'<textarea id="fill-note-'+i+'" placeholder="添加笔记、记忆口诀…" '
+      +'style="width:100%;min-height:50px;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box" '
+      +'oninput="saveFillNote(\''+session.id+'\','+i+',this.value)">'+esc(existNote)+'</textarea>'
+      +'</div>';
+
+    html += '</div>';
   });
 
-  html += '</div>'
-    +'<div class="card"><div class="row">'
-    +'<button class="btn primary" data-bid="'+FQ.batch.id+'" onclick="startFill(this.dataset.bid)">🔄 再做一次</button>'
-    +'<button class="btn" onclick="renderFill()">返回列表</button>'
-    +'</div></div>'
-    + backBtn();
-
+  html += '</div>'+ backBtn();
   fp.innerHTML = html;
+  // Store session ref for wrong book functions
+  fp._session = session;
+}
+
+function fillHL(color){
+  document.execCommand('hiliteColor',false,color);
+}
+
+function saveFillNote(sessionId, idx, val){
+  if(!DB.qNotes) DB.qNotes={};
+  var key='fill_'+sessionId+'_'+idx;
+  if(val.trim()) DB.qNotes[key]=val.trim();
+  else delete DB.qNotes[key];
+  saveDB();
+}
+
+function addOneFillWrong(idx){
+  var fp=document.getElementById('fill'); if(!fp||!fp._session)return;
+  var d=fp._session.details[parseInt(idx)]; if(!d)return;
+  if(!DB.fillWrong) DB.fillWrong=[];
+  // Avoid duplicate
+  if(DB.fillWrong.some(function(w){return w.body===d.body;})){showToast('已在错题本中');return;}
+  DB.fillWrong.push({id:uid(),body:d.body,answers:d.answers,blanks:d.blanks||[],batchName:FQ.batch?FQ.batch.name:'',ts:Date.now()});
+  saveDB(); showToast('✓ 已收入填空错题本');
+}
+
+function addAllWrongToFillBook(){
+  var fp=document.getElementById('fill'); if(!fp||!fp._session)return;
+  if(!DB.fillWrong) DB.fillWrong=[];
+  var added=0;
+  fp._session.details.forEach(function(d){
+    if(d.correct) return;
+    if(DB.fillWrong.some(function(w){return w.body===d.body;})) return;
+    DB.fillWrong.push({id:uid(),body:d.body,answers:d.answers,blanks:d.blanks||[],batchName:FQ.batch?FQ.batch.name:'',ts:Date.now()});
+    added++;
+  });
+  saveDB(); showToast('✓ 已收入 '+added+' 道错题');
 }
 
 function showFillResults(batchId){
@@ -2589,6 +2662,53 @@ function showFillResults(batchId){
   var last = b.sessions[b.sessions.length-1];
   showFillResultPage(last);
   FQ.batch = b;
+}
+
+function showFillWrongBook(){
+  var fp=document.getElementById('fill'); if(!fp)return;
+  if(!DB.fillWrong) DB.fillWrong=[];
+  var html='<div class="card">'
+    +'<div class="row"><button class="btn" onclick="renderFill()">← 返回</button>'
+    +'<div class="title spacer" style="margin-left:10px">📕 填空错题本</div>'
+    +'<button class="btn red small" onclick="clearFillWrong()">清空</button>'
+    +'</div>'
+    +'<div class="sub">共 '+DB.fillWrong.length+' 道错题 · 点「练习」可重做</div></div>';
+
+  if(!DB.fillWrong.length){
+    html+='<div class="card"><div class="sub">错题本是空的，做题后点「收入错题本」添加。</div></div>';
+  } else {
+    DB.fillWrong.forEach(function(w,i){
+      var bi=0;
+      var rendered=w.body.replace(/【[^】]+】/g,function(){
+        var j=bi++;
+        return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#fffbe6;border:1px solid #f0d060;font-weight:700;color:#8a6000">'+esc(w.answers[j]||'?')+'</span>';
+      });
+      html+='<div class="card" style="padding:12px 14px">'
+        +'<div style="font-size:13px;color:#888;margin-bottom:6px">'+esc(w.batchName||'')+'</div>'
+        +'<div style="font-size:15px;line-height:2.2">'+rendered+'</div>'
+        +'<div class="row" style="margin-top:8px;gap:6px">'
+        +'<button class="btn small primary" data-idx="'+i+'" onclick="practiceFillWrong(parseInt(this.dataset.idx))">▶ 练习此题</button>'
+        +'<button class="btn small red" data-idx="'+i+'" onclick="removeFillWrong(parseInt(this.dataset.idx))">删除</button>'
+        +'</div></div>';
+    });
+  }
+  html+=backBtn();
+  fp.innerHTML=html;
+}
+
+function clearFillWrong(){
+  if(!confirm('清空填空错题本？')) return;
+  DB.fillWrong=[]; saveDB(); showFillWrongBook();
+}
+function removeFillWrong(idx){
+  if(!confirm('删除此错题？'))return;
+  DB.fillWrong.splice(idx,1); saveDB(); showFillWrongBook(); showToast('已删除');
+}
+
+function practiceFillWrong(idx){
+  var w=DB.fillWrong[idx]; if(!w)return;
+  FQ={batch:{id:'wrong',name:'填空错题本'},qs:[{id:w.id,body:w.body,answers:w.answers,blanks:w.blanks}],cur:0,userAnswers:[[]],started:true};
+  renderFillQ();
 }
 
 // ═══════════════════════════════════════════════════════
