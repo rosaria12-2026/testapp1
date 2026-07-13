@@ -2486,6 +2486,7 @@ function startFill(batchId){
         +'<span style="font-size:13px;flex:1;color:#666">'+d+'</span>'
         +'<span style="font-size:14px;font-weight:700;color:'+(rate>=60?'#2e7d52':'#b83232')+'">'+rate+'% ('+s.correct+'/'+s.total+')</span>'
         +'<button class="btn small blue" data-sid="'+s.id+'" data-bid="'+batchId+'" onclick="viewFillSession(this.dataset.bid,this.dataset.sid)">查看</button>'
+        +'<button class="btn small red" data-sid="'+s.id+'" data-bid="'+batchId+'" onclick="deleteFillSession(this.dataset.bid,this.dataset.sid)">删除</button>'
         +'</div>';
     });
     html+='</div>';
@@ -2501,6 +2502,13 @@ function viewFillSession(batchId, sessionId){
   var s=b.sessions.find(function(x){return x.id===sessionId;}); if(!s)return;
   FQ.batch=b;
   showFillResultPage(s);
+}
+
+function deleteFillSession(batchId, sessionId){
+  if(!confirm('删除这次记录？')) return;
+  var b=DB.fillBatches.find(function(x){return x.id===batchId;}); if(!b)return;
+  b.sessions=b.sessions.filter(function(s){return s.id!==sessionId;});
+  saveDB(); startFill(batchId); showToast('已删除');
 }
 
 function continueFill(batchId){
@@ -2674,11 +2682,11 @@ function showFillResultPage(session){
     // Toolbar — always shown for all questions
     html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.05);border-radius:6px;align-items:center">'
       +'<span style="font-size:11px;color:#888">标注：</span>'
-      +'<button data-c="#FFE066" data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'hilite\',this.dataset.c)" style="background:#FFE066;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">黄</button>'
-      +'<button data-c="#FF6B6B" data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'hilite\',this.dataset.c)" style="background:#FF6B6B;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">红</button>'
-      +'<button data-c="#90EE90" data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'hilite\',this.dataset.c)" style="background:#90EE90;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">绿</button>'
-      +'<button data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'bold\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">B</button>'
-      +'<button data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'underline\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;text-decoration:underline">U</button>'
+      +'<button data-c="#FFE066" onmousedown="event.preventDefault();fillFmt(\'hilite\',this.dataset.c)" style="background:#FFE066;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">黄</button>'
+      +'<button data-c="#FF6B6B" onmousedown="event.preventDefault();fillFmt(\'hilite\',this.dataset.c)" style="background:#FF6B6B;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">红</button>'
+      +'<button data-c="#90EE90" onmousedown="event.preventDefault();fillFmt(\'hilite\',this.dataset.c)" style="background:#90EE90;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">绿</button>'
+      +'<button onmousedown="event.preventDefault();fillFmt(\'bold\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">B</button>'
+      +'<button onmousedown="event.preventDefault();fillFmt(\'underline\')" style="background:#333;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;text-decoration:underline">U</button>'
       +(!allOk?'<button class="btn small red" style="font-size:11px;padding:3px 8px;margin-left:auto" data-qidx="'+i+'" onclick="addOneFillWrong(parseInt(this.dataset.qidx))">📕 收入错题本</button>':'')
       +'</div>';
 
@@ -2697,37 +2705,14 @@ function showFillResultPage(session){
   fp.innerHTML = html;
   // Store session ref for wrong book functions
   fp._session = session;
-  // Save selection on mouseup for fillFmt
-  fp.addEventListener('mouseup', fillSaveSelection);
-  fp.addEventListener('keyup', fillSaveSelection);
+
 }
 
-var _fillSavedRange = null; // save selection before toolbar click
-
-function fillSaveSelection(){
-  var sel=window.getSelection();
-  if(sel&&sel.rangeCount>0) _fillSavedRange=sel.getRangeAt(0).cloneRange();
-}
-
-function fillFmt(qi, cmd, val){
-  var el=document.getElementById('fill-q-'+qi); if(!el)return;
-  // Restore saved selection if available
-  if(_fillSavedRange){
-    el.focus();
-    var sel=window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(_fillSavedRange);
-  } else {
-    el.focus();
-    var sel=window.getSelection();
-    if(!sel||sel.rangeCount===0||!el.contains(sel.anchorNode)){
-      var range=document.createRange(); range.selectNodeContents(el);
-      sel.removeAllRanges(); sel.addRange(range);
-    }
-  }
+// Annotation for fill result page
+function fillFmt(cmd, val){
+  // execCommand works on current selection — call directly after mousedown+preventDefault
   if(cmd==='hilite') document.execCommand('hiliteColor',false,val);
   else document.execCommand(cmd,false,null);
-  _fillSavedRange=null;
 }
 function fillHL(color){ document.execCommand('hiliteColor',false,color); }
 
