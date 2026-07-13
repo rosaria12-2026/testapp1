@@ -2398,7 +2398,7 @@ if(!DB.fillProgress) DB.fillProgress={};
         +'<button class="btn small" data-bid="'+b.id+'" onclick="showFillResults(this.dataset.bid)">📊 查看记录</button>'
         +'<button class="btn small red" data-bid="'+b.id+'" onclick="deleteFillBatch(this.dataset.bid)">删除</button>'
         +'</div>'
-        +'<div style="font-size:12px;color:#888;margin-top:4px">已做 '+done+' 次 · 点「追加」可在此批次加题</div>'
+        +'<div style="font-size:12px;color:#888;margin-top:4px">点「追加」可在此批次加题</div>'
         +'</div>';
     });
   }
@@ -2454,24 +2454,53 @@ function deleteFillBatch(batchId){
   saveDB(); renderFill(); showToast('已删除');
 }
 
+
 function startFill(batchId){
   var batch = DB.fillBatches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  var fp=document.getElementById('fill'); if(!fp)return;
   var prog = DB.fillProgress&&DB.fillProgress[batchId];
-  if(prog && prog.cur>0){
-    // Has saved progress — offer choice
-    var fp=document.getElementById('fill'); if(!fp)return;
-    fp.innerHTML='<div class="card">'
-      +'<div class="title" style="margin-bottom:12px">'+esc(batch.name)+'</div>'
-      +'<div class="sub" style="margin-bottom:16px">上次做到第'+(prog.cur+1)+'题（共'+batch.questions.length+'题）</div>'
-      +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
-      +'<button class="btn primary" data-bid="'+batchId+'" onclick="continueFill(this.dataset.bid)">▶ 继续上次（第'+(prog.cur+1)+'题）</button>'
-      +'<button class="btn" data-bid="'+batchId+'" onclick="restartFill(this.dataset.bid)">🔄 从头重新开始</button>'
-      +'<button class="btn small" onclick="renderFill()">← 返回</button>'
-      +'</div></div>';
-    return;
+  var sessions = batch.sessions||[];
+
+  var html='<div class="card">'
+    +'<div class="row"><button class="btn" onclick="renderFill()">← 返回</button>'
+    +'<div class="title spacer" style="margin-left:10px">'+esc(batch.name)+'</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">';
+
+  // Continue button (if mid-quiz progress exists)
+  if(prog && prog.cur>0 && prog.cur < batch.questions.length){
+    html+='<button class="btn primary" data-bid="'+batchId+'" onclick="continueFill(this.dataset.bid)">▶ 继续上次（第'+(prog.cur+1)+'/'+batch.questions.length+'题）</button>';
   }
-  // No progress — start fresh
-  restartFill(batchId);
+  html+='<button class="btn" data-bid="'+batchId+'" onclick="restartFill(this.dataset.bid)">🔄 从第1题重新开始</button>';
+  html+='</div>';
+
+  // Past sessions
+  if(sessions.length){
+    html+='<div style="margin-top:16px"><div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#555">历次记录：</div>';
+    sessions.slice().reverse().forEach(function(s,ri){
+      var idx=sessions.length-1-ri;
+      var rate=Math.round(s.correct/s.total*100);
+      var d=new Date(s.ts).toLocaleDateString('zh-CN');
+      html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid #ddd;border-radius:8px;margin-bottom:6px;background:#f8f7f3">'
+        +'<span style="font-size:13px;color:#888;min-width:40px">第'+(idx+1)+'次</span>'
+        +'<span style="font-size:13px;flex:1;color:#666">'+d+'</span>'
+        +'<span style="font-size:14px;font-weight:700;color:'+(rate>=60?'#2e7d52':'#b83232')+'">'+rate+'% ('+s.correct+'/'+s.total+')</span>'
+        +'<button class="btn small blue" data-sid="'+s.id+'" data-bid="'+batchId+'" onclick="viewFillSession(this.dataset.bid,this.dataset.sid)">查看</button>'
+        +'</div>';
+    });
+    html+='</div>';
+  } else {
+    html+='<div style="margin-top:12px;font-size:13px;color:#aaa">还没有答题记录</div>';
+  }
+  html+='</div>'+backBtn();
+  fp.innerHTML=html;
+}
+
+function viewFillSession(batchId, sessionId){
+  var b=DB.fillBatches.find(function(x){return x.id===batchId;}); if(!b)return;
+  var s=b.sessions.find(function(x){return x.id===sessionId;}); if(!s)return;
+  FQ.batch=b;
+  showFillResultPage(s);
 }
 
 function continueFill(batchId){
@@ -2643,7 +2672,7 @@ function showFillResultPage(session){
     html += '<div style="font-size:15px;line-height:2.4;margin-bottom:8px;user-select:text">'+rendered2+'</div>';
 
     // Toolbar — always shown for all questions
-    html += '<div onmousedown="event.preventDefault()" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.05);border-radius:6px;align-items:center">'
+    html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.05);border-radius:6px;align-items:center">'
       +'<span style="font-size:11px;color:#888">标注：</span>'
       +'<button data-c="#FFE066" data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'hilite\',this.dataset.c)" style="background:#FFE066;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700">黄</button>'
       +'<button data-c="#FF6B6B" data-qi="'+i+'" onclick="fillFmt(this.dataset.qi,\'hilite\',this.dataset.c)" style="background:#FF6B6B;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer">红</button>'
@@ -2668,18 +2697,37 @@ function showFillResultPage(session){
   fp.innerHTML = html;
   // Store session ref for wrong book functions
   fp._session = session;
+  // Save selection on mouseup for fillFmt
+  fp.addEventListener('mouseup', fillSaveSelection);
+  fp.addEventListener('keyup', fillSaveSelection);
+}
+
+var _fillSavedRange = null; // save selection before toolbar click
+
+function fillSaveSelection(){
+  var sel=window.getSelection();
+  if(sel&&sel.rangeCount>0) _fillSavedRange=sel.getRangeAt(0).cloneRange();
 }
 
 function fillFmt(qi, cmd, val){
   var el=document.getElementById('fill-q-'+qi); if(!el)return;
-  el.focus();
-  var sel=window.getSelection();
-  if(!sel||sel.rangeCount===0||!el.contains(sel.anchorNode)){
-    var range=document.createRange(); range.selectNodeContents(el);
-    sel.removeAllRanges(); sel.addRange(range);
+  // Restore saved selection if available
+  if(_fillSavedRange){
+    el.focus();
+    var sel=window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(_fillSavedRange);
+  } else {
+    el.focus();
+    var sel=window.getSelection();
+    if(!sel||sel.rangeCount===0||!el.contains(sel.anchorNode)){
+      var range=document.createRange(); range.selectNodeContents(el);
+      sel.removeAllRanges(); sel.addRange(range);
+    }
   }
   if(cmd==='hilite') document.execCommand('hiliteColor',false,val);
   else document.execCommand(cmd,false,null);
+  _fillSavedRange=null;
 }
 function fillHL(color){ document.execCommand('hiliteColor',false,color); }
 
