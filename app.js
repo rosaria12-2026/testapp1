@@ -2382,7 +2382,7 @@ if(!DB.fillProgress) DB.fillProgress={};
   var html = '<div class="card">'
     +'<div class="row"><button class="btn" onclick="navBack()">← 返回</button>'
     +'<div class="title spacer" style="margin-left:10px">📝 填空题</div>'
-    +'<button class="btn red small" onclick="showFillWrongBook()">📕 错题本('+(DB.fillWrong?DB.fillWrong.length:0)+')</button>'
+    +'<button class="btn red small" onclick="showFillWrongBook()">📕 错题本 '+(DB.fillWrong&&DB.fillWrong.length?'('+DB.fillWrong.length+'题)':'(空)')+' </button>'
     +'<button class="btn primary" onclick="showFillImport()">+ 导入填空题</button>'
     +'</div></div>';
 
@@ -2538,6 +2538,29 @@ function deleteFillSession(batchId, sessionId){
   saveDB(); startFill(batchId); showToast('已删除');
 }
 
+function startFillFrom(batchId, fromIdx){
+  var batch=DB.fillBatches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  var prog=DB.fillProgress&&DB.fillProgress[batchId];
+  var savedAnswers=(prog&&prog.userAnswers)||batch.questions.map(function(){return [];});
+  FQ={batch:batch, qs:batch.questions.slice(), cur:fromIdx, userAnswers:savedAnswers, started:true};
+  renderFillQ();
+}
+
+function startFillSub(batchId, subBatch){
+  var batch=DB.fillBatches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  var qs=subBatch?batch.questions.filter(function(q){return q.subBatch===subBatch;}):batch.questions.slice();
+  if(!qs.length){showToast('该子类没有题目');return;}
+  FQ={batch:batch, qs:qs, cur:0, userAnswers:qs.map(function(){return [];}), started:true};
+  renderFillQ();
+}
+
+function renameFillBatch(batchId, newName){
+  newName=(newName||'').trim(); if(!newName)return;
+  var b=DB.fillBatches.find(function(x){return x.id===batchId;}); if(!b)return;
+  if(b.name===newName)return;
+  b.name=newName; saveDB(); showToast('✓ 已改名');
+}
+
 function continueFill(batchId){
   var batch=DB.fillBatches.find(function(b){return b.id===batchId;}); if(!batch)return;
   var prog=DB.fillProgress&&DB.fillProgress[batchId];
@@ -2658,10 +2681,13 @@ function finishFill(){
   });
   var session = {id:uid(), ts:Date.now(), correct:correct, total:total, details:sessionDetails};
   if(!FQ.batch.sessions) FQ.batch.sessions=[];
-  FQ.batch.sessions.push(session);
-  // Clear saved progress on completion
-  if(DB.fillProgress) delete DB.fillProgress[FQ.batch.id];
-  saveDB();
+  // Only save session if this was a real quiz run (not just viewing)
+  if(FQ.started){
+    FQ.batch.sessions.push(session);
+    if(DB.fillProgress) delete DB.fillProgress[FQ.batch.id];
+    FQ.started=false; // prevent duplicate on re-render
+    saveDB();
+  }
   showFillResultPage(session);
 }
 
