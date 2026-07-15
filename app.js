@@ -2736,6 +2736,7 @@ function showFillResultPage(session){
   fp.innerHTML = html;
   // Store session ref for wrong book functions
   var fp2=document.getElementById('fill-area'); if(fp2) fp2._session=session;
+  setTimeout(function(){ var tb=document.getElementById('fill-tbody'); if(tb) tb.innerHTML=tbody; },50);
 
 }
 
