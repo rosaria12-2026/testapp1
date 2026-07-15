@@ -2693,7 +2693,8 @@ function showFillResultPage(session){
     var noteKey = 'fill_'+session.id+'_'+i;
     var existNote = (DB.qNotes&&DB.qNotes[noteKey])||'';
 
-    html += '<div id="fill-item-'+i+'" style="padding:14px;border-radius:10px;background:'+(allOk?'#f0fff4':'#fff5f5')+';border:1.5px solid '+(allOk?'#b8dfc8':'#f5c5c5')+';margin-bottom:12px">';
+    html += '<div id="fill-item-'+i+'" style="padding:14px;border-radius:10px;background:'+(allOk?'#f0fff4':'#fff5f5')+';border:1.5px solid '+(allOk?'#b8dfc8':'#f5c5c5')+';margin-bottom:12px">'
+      +'<div style="font-size:12px;font-weight:700;color:#888;margin-bottom:6px">第'+(i+1)+'题 '+(allOk?'<span style="color:#2e7d52">✓ 全对</span>':'<span style="color:#b83232">✗ 有错</span>')+'</div>';
 
     // Question with answers
     var bi2=0;
