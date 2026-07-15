@@ -2493,6 +2493,30 @@ function startFill(batchId){
   } else {
     html+='<div style="margin-top:12px;font-size:13px;color:#aaa">还没有答题记录</div>';
   }
+  // Question list — select which question to start from
+  html+='<div style="margin-top:16px"><div style="font-size:13px;font-weight:700;color:#555;margin-bottom:8px">选择从哪题开始：</div>';
+  var subBatches=batch.subBatches||[];
+  if(subBatches.length){
+    html+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
+      +'<button class="btn small" data-bid="'+batchId+'" onclick="startFillSub(this.dataset.bid,\'\')">全部('+batch.questions.length+')</button>';
+    subBatches.forEach(function(sb){
+      var cnt=batch.questions.filter(function(q){return q.subBatch===sb;}).length;
+      html+='<button class="btn small blue" data-bid="'+batchId+'" data-sb="'+esc(sb)+'" onclick="startFillSub(this.dataset.bid,this.dataset.sb)">'+esc(sb)+'('+cnt+')</button>';
+    });
+    html+='</div>';
+  }
+  html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  batch.questions.forEach(function(q,qi){
+    var isResume=qi===resumeAt;
+    var body20=q.body.replace(/【[^】]+】/g,'＿').slice(0,30).replace(/_{4,}/g,'＿');
+    html+='<button data-bid="'+batchId+'" data-qi="'+qi+'" onclick="startFillFrom(this.dataset.bid,parseInt(this.dataset.qi))" '
+      +'title="'+esc(body20)+'" '
+      +'style="padding:5px 10px;border-radius:6px;border:1.5px solid '+(isResume?'#1a4fa0':'#ddd')+';background:'+(isResume?'#e8effa':'#f8f7f3')+';font-size:13px;font-weight:'+(isResume?'700':'400')+';cursor:pointer;color:'+(isResume?'#1a4fa0':'#333')+'">'
+      +(isResume?'▶ ':'')+(q.subBatch?'['+q.subBatch+'] ':'')+'第'+(qi+1)+'题'
+      +'</button>';
+  });
+  html+='</div></div>';
+
   html+='</div>'+backBtn();
   fp.innerHTML=html;
 }
