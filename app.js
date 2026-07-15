@@ -2373,7 +2373,7 @@ function parseFill(raw){
 var FQ = {batch:null, qs:[], cur:0, userAnswers:[], started:false};
 
 function renderFill(){
-  var fp = document.getElementById('fill'); if(!fp) return;
+  var fp = document.getElementById('fill-area'); if(!fp) return;
   if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
 if(!DB.fillProgress) DB.fillProgress={};
@@ -2407,7 +2407,7 @@ if(!DB.fillProgress) DB.fillProgress={};
 }
 
 function showFillImport(batchId){
-  var fp = document.getElementById('fill'); if(!fp) return;
+  var fp = document.getElementById('fill-area'); if(!fp) return;
   var existBatch = batchId ? DB.fillBatches.find(function(b){return b.id===batchId;}) : null;
   var html = '<div class="card">'
     +'<div class="row"><button class="btn" onclick="renderFill()">← 返回</button>'
@@ -2457,7 +2457,7 @@ function deleteFillBatch(batchId){
 
 function startFill(batchId){
   var batch = DB.fillBatches.find(function(b){return b.id===batchId;}); if(!batch)return;
-  var fp=document.getElementById('fill'); if(!fp)return;
+  var fp=document.getElementById('fill-area'); if(!fp)return;
   var prog = DB.fillProgress&&DB.fillProgress[batchId];
   var sessions = batch.sessions||[];
 
@@ -2553,7 +2553,7 @@ function restartFill(batchId){
 }
 
 function renderFillQ(){
-  var fp = document.getElementById('fill'); if(!fp) return;
+  var fp = document.getElementById('fill-area'); if(!fp) return;
   var q = FQ.qs[FQ.cur];
   var progress = Math.round(FQ.cur/FQ.qs.length*100);
   var userAns = FQ.userAnswers[FQ.cur]||[];
@@ -2663,7 +2663,7 @@ function finishFill(){
 }
 
 function showFillResultPage(session){
-  var fp = document.getElementById('fill'); if(!fp) return;
+  var fp = document.getElementById('fill-area'); if(!fp) return;
   var rate = Math.round(session.correct/session.total*100);
   if(!DB.fillWrong) DB.fillWrong=[];
 
@@ -2731,7 +2731,7 @@ function showFillResultPage(session){
   html += '</div>'+ backBtn();
   fp.innerHTML = html;
   // Store session ref for wrong book functions
-  fp._session = session;
+  var fp2=document.getElementById('fill-area'); if(fp2) fp2._session=session;
 
 }
 
@@ -2757,7 +2757,7 @@ function saveFillNote(sessionId, idx, val){
 }
 
 function addOneFillWrong(idx){
-  var fp=document.getElementById('fill'); if(!fp||!fp._session)return;
+  var fp=document.getElementById('fill-area'); if(!fp||!fp._session)return;
   var d=fp._session.details[parseInt(idx)]; if(!d)return;
   if(!DB.fillWrong) DB.fillWrong=[];
   // Avoid duplicate
@@ -2767,7 +2767,7 @@ function addOneFillWrong(idx){
 }
 
 function addAllWrongToFillBook(){
-  var fp=document.getElementById('fill'); if(!fp||!fp._session)return;
+  var fp=document.getElementById('fill-area'); if(!fp||!fp._session)return;
   if(!DB.fillWrong) DB.fillWrong=[];
   var added=0;
   fp._session.details.forEach(function(d){
@@ -2788,7 +2788,7 @@ function showFillResults(batchId){
 }
 
 function showFillWrongBook(){
-  var fp=document.getElementById('fill'); if(!fp)return;
+  var fp=document.getElementById('fill-area'); if(!fp)return;
   if(!DB.fillWrong) DB.fillWrong=[];
   var html='<div class="card">'
     +'<div class="row"><button class="btn" onclick="renderFill()">← 返回</button>'
