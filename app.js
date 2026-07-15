@@ -2846,7 +2846,7 @@ function showFillWrongBook(){
         +'</div></div>';
     });
   }
-  html+=backBtn();
+  html+='<div style="margin-top:16px;text-align:center"><button onclick="renderFill()" style="padding:10px 30px;font-size:14px;font-weight:700;background:#f0efe9;border:2px solid #ccc;border-radius:10px;cursor:pointer">⬆ 返回填空题</button></div>';
   fp.innerHTML=html;
 }
 
