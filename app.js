@@ -123,6 +123,8 @@ document.querySelectorAll('.tab').forEach(function(t){
     if (t.dataset.page === 'notes') renderNotes();
     if (t.dataset.page === 'review') renderReview();
     if (t.dataset.page === 'mock') renderMockSetup();
+    if (t.dataset.page === 'study') renderStudy();
+    if (t.dataset.page === 'fill') renderFill();
   });
 });
 
