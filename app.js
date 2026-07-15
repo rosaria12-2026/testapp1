@@ -2584,10 +2584,13 @@ function renderFillQ(){
   var progress = Math.round(FQ.cur/FQ.qs.length*100);
   var userAns = FQ.userAnswers[FQ.cur]||[];
 
+  var studyMode=FQ.studyMode||false;
   var html = '<div class="card">'
     +'<div class="qtop">'
     +'<div><div class="qcount">填空 <strong>'+(FQ.cur+1)+'</strong> / <span>'+FQ.qs.length+'</span></div></div>'
     +'<div class="spacer"></div>'
+    +'<button onclick="FQ.studyMode=!FQ.studyMode;renderFillQ()" style="padding:5px 12px;border-radius:8px;border:1.5px solid '+(studyMode?'#2e7d52':'#aaa')+';background:'+(studyMode?'#e8f5ed':'#f5f5f5')+';font-size:13px;font-weight:700;cursor:pointer;color:'+(studyMode?'#2e7d52':'#555')+'">📖 '+(studyMode?'背题中(点关)':'背题模式')+'</button>'
+    +'<button onclick="startFill(FQ.batch&&FQ.batch.id)" style="padding:5px 12px;border-radius:8px;border:1.5px solid #aaa;background:#f5f5f5;font-size:13px;cursor:pointer;margin-left:6px">← 返回</button>'
     +'</div>'
     +'<div class="progress"><div class="bar" style="width:'+progress+'%"></div></div>';
 
@@ -2596,6 +2599,7 @@ function renderFillQ(){
   var rendered = q.body.replace(/【[^】]+】/g, function(){
     var bi = blankIdx++;
     var filled = userAns[bi]||'';
+    if(studyMode) return '<span style="display:inline-block;min-width:50px;padding:2px 10px;border-radius:6px;border:2px solid #2e7d52;background:#e8f5ed;font-weight:700;color:#2e7d52;text-align:center">'+esc(q.answers[bi])+'</span>';
     var isCorrect = filled && filled===q.answers[bi];
     var isWrong = filled && filled!==q.answers[bi];
     var color = isCorrect?'#2e7d52':isWrong?'#b83232':'#1a4fa0';
@@ -2604,8 +2608,8 @@ function renderFillQ(){
   });
   html += '<div style="font-size:16px;line-height:2.2;padding:16px;background:#f8f7f3;border-radius:10px;margin-bottom:16px">'+rendered+'</div>';
 
-  // Show candidate buttons for each blank inline
-  for(var bi=0;bi<q.blanks.length;bi++){
+  // Show candidate buttons
+  if(!studyMode){ for(var bi=0;bi<q.blanks.length;bi++){
     var opts = q.blanks[bi];
     var filled = userAns[bi]||'';
     var isCorrect = filled && filled===q.answers[bi];
@@ -2618,14 +2622,13 @@ function renderFillQ(){
         +'data-blank="'+bi+'" data-val="'+esc(opt)+'" onclick="fillPick(parseInt(this.dataset.blank),this.dataset.val)">'+esc(opt)+'</button>';
     });
     html += '</div>';
-  }
+  } }
 
   html += '<div class="row actions" style="margin-top:16px">'
     +'<button class="btn small" onclick="fillPrev()">← 上一题</button>'
     +'<button class="btn small primary" onclick="fillNext()">下一题 →</button>'
     +'<button class="btn small red spacer" onclick="finishFill()">结束</button>'
     +'</div></div>'
-    + backBtn();
 
   fp.innerHTML = html;
 }
