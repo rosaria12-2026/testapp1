@@ -2507,6 +2507,7 @@ function startFill(batchId){
     });
     html+='</div>';
   }
+  var resumeAt = (prog && prog.cur>0 && prog.cur < batch.questions.length) ? prog.cur : -1;
   html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
   batch.questions.forEach(function(q,qi){
     var isResume=qi===resumeAt;
