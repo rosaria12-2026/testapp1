@@ -2407,6 +2407,8 @@ if(!DB.fillProgress) DB.fillProgress={};
         +'<button class="btn small primary" data-bid="'+b.id+'" onclick="startFill(this.dataset.bid)">▶ 开始答题</button>'
         +'<button class="btn small blue" data-bid="'+b.id+'" onclick="showFillImport(this.dataset.bid)">+ 追加题目</button>'
         +'<button class="btn small" data-bid="'+b.id+'" onclick="showFillResults(this.dataset.bid)">📊 查看记录</button>'
+        +'<button class="btn small" data-bid="'+b.id+'" onclick="fillRenameBatch(this.dataset.bid)">✏️ 改名</button>'
+        +'<button class="btn small" data-bid="'+b.id+'" onclick="showFillManage(this.dataset.bid)">📋 管理题目</button>'
         +'<button class="btn small red" data-bid="'+b.id+'" onclick="deleteFillBatch(this.dataset.bid)">删除</button>'
         +'</div>'
         +'<div style="font-size:12px;color:#888;margin-top:4px">点「追加」可在此批次加题</div>'
@@ -2457,6 +2459,77 @@ function importFill(batchId){
   saveDB();
   msg.textContent='✓ 导入 '+qs.length+' 题 → 「'+bname+'」'; msg.style.color='green';
   setTimeout(renderFill, 1200);
+}
+
+function fillRenameBatch(batchId){
+  var b=DB.fillBatches.find(function(x){return x.id===batchId;}); if(!b)return;
+  var n=prompt('修改批次名称：',b.name); if(!n||!n.trim())return;
+  b.name=n.trim(); saveDB(); renderFill(); showToast('✓ 已改名');
+}
+
+function showFillManage(batchId){
+  var b=DB.fillBatches.find(function(x){return x.id===batchId;}); if(!b)return;
+  var fp=document.getElementById('fill-area'); if(!fp)return;
+  var html='<div class="card">'
+    +'<div class="row"><button class="btn" onclick="renderFill()">← 返回</button>'
+    +'<div class="title spacer" style="margin-left:10px">📋 管理题目 — '+esc(b.name)+'</div>'
+    +'<span style="font-size:13px;color:#888">共'+b.questions.length+'题</span>'
+    +'</div></div>'
+    +'<div class="card">';
+
+  b.questions.forEach(function(q,qi){
+    var preview=q.body.replace(/【[^】]+】/g,'＿').replace(/_{4,}/g,'＿').slice(0,50);
+    html+='<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 0;border-bottom:1px solid #eee">'
+      +'<span style="font-size:12px;color:#aaa;min-width:28px;margin-top:2px">'+(qi+1)+'.</span>'
+      +'<div style="flex:1;font-size:13px;line-height:1.6">'+esc(preview)+'</div>'
+      +'<button class="btn small" data-bid="'+batchId+'" data-qi="'+qi+'" onclick="fillEditQ(this.dataset.bid,parseInt(this.dataset.qi))" style="font-size:11px;padding:3px 8px">✏️ 改</button>'
+      +'<button class="btn small red" data-bid="'+batchId+'" data-qi="'+qi+'" onclick="fillDeleteQ(this.dataset.bid,parseInt(this.dataset.qi))" style="font-size:11px;padding:3px 8px">删</button>'
+      +'</div>';
+  });
+  html+='</div>'
+    +'<div style="margin-top:12px;text-align:center"><button onclick="renderFill()" style="padding:10px 30px;font-size:14px;font-weight:700;background:#f0efe9;border:2px solid #aaa;border-radius:10px;cursor:pointer">← 返回列表</button></div>';
+  fp.innerHTML=html;
+}
+
+function fillDeleteQ(batchId, qi){
+  var b=DB.fillBatches.find(function(x){return x.id===batchId;}); if(!b)return;
+  if(!confirm('删除第'+(qi+1)+'题？'))return;
+  b.questions.splice(qi,1); saveDB(); showFillManage(batchId); showToast('已删除');
+}
+
+function fillEditQ(batchId, qi){
+  var b=DB.fillBatches.find(function(x){return x.id===batchId;}); if(!b)return;
+  var q=b.questions[qi]; if(!q)return;
+  var fp=document.getElementById('fill-area'); if(!fp)return;
+  // Show edit form
+  var html='<div class="card">'
+    +'<div class="row"><button class="btn" data-bid="'+batchId+'" onclick="showFillManage(this.dataset.bid)">← 返回</button>'
+    +'<div class="title spacer" style="margin-left:10px">✏️ 修改第'+(qi+1)+'题</div>'
+    +'</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:8px">题目格式：含________（选项1｜选项2）或【选项1｜选项2】，末尾（正确答案｜...）</div>'
+    +'<div style="font-size:12px;color:#666;margin-bottom:6px">现有答案：'+esc(q.answers.join(' | '))+'</div>'
+    +'<textarea id="fill-edit-raw" style="width:100%;min-height:120px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box">'
+    +esc(q.body.replace(/【([^】]+)】/g,function(m,g){return '【'+g+'】';}))+' （'+esc(q.answers.join('｜'))+'）'
+    +'</textarea>'
+    +'<div class="row mt" style="gap:8px">'
+    +'<button class="btn primary" data-bid="'+batchId+'" data-qi="'+qi+'" onclick="fillSaveEditQ(this.dataset.bid,parseInt(this.dataset.qi))">💾 保存</button>'
+    +'<button class="btn" data-bid="'+batchId+'" onclick="showFillManage(this.dataset.bid)">取消</button>'
+    +'</div>'
+    +'<div id="fill-edit-msg" class="sub mt"></div>'
+    +'</div>';
+  fp.innerHTML=html;
+}
+
+function fillSaveEditQ(batchId, qi){
+  var b=DB.fillBatches.find(function(x){return x.id===batchId;}); if(!b)return;
+  var raw=document.getElementById('fill-edit-raw'); if(!raw)return;
+  var parsed=parseFill(raw.value);
+  var msg=document.getElementById('fill-edit-msg');
+  if(!parsed.length){
+    msg.textContent='格式有误，请检查'; msg.style.color='red'; return;
+  }
+  b.questions[qi]=parsed[0]; b.questions[qi].id=b.questions[qi].id||uid();
+  saveDB(); showFillManage(batchId); showToast('✓ 已修改');
 }
 
 function deleteFillBatch(batchId){
