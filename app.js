@@ -2333,37 +2333,46 @@ function parseFill(raw){
     var body = line.replace(ansBlockRe,'').replace(numRe,'').trim();
 
     var blanks = [];
+    var displayBody = body;
 
-    // Format A: ________context【opts】 — blank followed by context then options
-    // e.g. 大肠经进入________齿中【上｜下】
-    var formatA = /_{4,}[^【】]*?【([^】]+)】/g;
-    var mA;
-    while((mA=formatA.exec(body))!==null){
-      var opts = mA[1].split('｜').map(function(o){return o.trim();}).filter(Boolean);
-      blanks.push(opts);
+    // Format A: ________context【opts】
+    if(/_{4,}/.test(body) && /【/.test(body)){
+      var fA = /_{4,}([^【】]*?)(【([^】]+)】)/g, mA;
+      while((mA=fA.exec(body))!==null){
+        var opts=mA[3].split('｜').map(function(o){return o.trim();}).filter(Boolean);
+        blanks.push(opts);
+      }
+      if(blanks.length) displayBody=body.replace(/_{4,}([^【】]*?)(【[^】]+】)/g,'$2$1');
     }
 
-    // Format B: 【opts】 inline blanks (no underscores)
-    // e.g. 大肠经进入【上｜下】齿中
+    // Format C: ________（opts1｜opts2） — underscore then Chinese parens with pipe options
+    if(!blanks.length && /_{4,}/.test(body)){
+      var fC = /_{4,}\s*[（(]([^（）()\d【】][^（）()]*)[）)]/g, mC;
+      var tempBlanks = [];
+      while((mC=fC.exec(body))!==null){
+        var opts=mC[1].split(/[|｜]/).map(function(o){return o.trim();}).filter(Boolean);
+        if(opts.length>=2) tempBlanks.push(opts);
+      }
+      if(tempBlanks.length){
+        blanks = tempBlanks;
+        // Replace ________（opts）with 【opts】 for display
+        displayBody = body.replace(/_{4,}\s*[（(]([^（）()\d【】][^（）()]*)[）)]/g, function(m,g1){
+          return '【'+g1+'】';
+        });
+      }
+    }
+
+    // Format B: 【opts】 inline (no underscores)
     if(!blanks.length){
-      var formatB = /【([^】]+)】/g;
-      var mB;
-      while((mB=formatB.exec(body))!==null){
-        var opts = mB[1].split('｜').map(function(o){return o.trim();}).filter(Boolean);
+      var fB=/【([^】]+)】/g,mB;
+      while((mB=fB.exec(body))!==null){
+        var opts=mB[1].split('｜').map(function(o){return o.trim();}).filter(Boolean);
         if(opts.length>=2) blanks.push(opts);
       }
     }
 
     if(!blanks.length || !answers.length) return;
     while(answers.length<blanks.length) answers.push('?');
-
-    // Normalize body for display:
-    // Format A: replace ________xxx【opts】 → 【opts】xxx (so we show inline)
-    var displayBody = body;
-    if(body.match(/_{4,}/)){
-      // Replace each ________context【opts】 with just 【opts】context
-      displayBody = body.replace(/_{4,}([^【】]*?)(【[^】]+】)/g, '$2$1');
-    }
 
     questions.push({
       id:uid(), body:displayBody, answers:answers, blanks:blanks, ts:Date.now()
