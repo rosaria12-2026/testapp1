@@ -105,7 +105,7 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
         <textarea id="q-annotation-input" placeholder="添加题目注释（例如：案例题补充文字、考点说明…）" style="width:100%;min-height:60px;padding:8px;border:1px solid #f0d060;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box;background:#fffdf5" oninput="saveAnnotation()"></textarea>
         <div style="font-size:11px;color:#aaa;margin-top:2px">输入后自动保存，点题目注释区域收起</div>
       </div>
-      <button id="q-annotation-btn" onclick="toggleAnnotationEdit()" style="font-size:12px;color:#888;background:none;border:none;cursor:pointer;padding:2px 0;margin-bottom:4px">＋ 添加注释</button>
+      <button id="q-annotation-btn" onclick="toggleAnnotationEdit()" style="font-size:13px;color:#6040b0;background:#f0ebff;border:1px solid #d4c9f5;border-radius:6px;cursor:pointer;padding:5px 12px;margin-bottom:6px">📝 添加题目注释</button>
       <div class="opts" id="opts"></div>
       <div class="row actions" id="quiz-actions">
         <button class="btn small" onclick="prevQ()">← 上一题</button>
@@ -233,7 +233,7 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 </div>
 <div id="toast"></div>
 
-<script src="app.js?v=56"></script>
+<script src="app.js?v=57"></script>
 <script>
   // Init notes page when tab clicked
   document.querySelector('.tab[data-page="notes"]').addEventListener('click', function(){ renderNotes(); });
