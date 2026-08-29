@@ -816,6 +816,16 @@ function showResultPage(){
       +'<td>'+(hasAns&&my&&my!=='skip'?(ok?'<span style="color:#2e7d52;font-size:16px">✓</span>':'<span style="color:#b83232;font-size:16px">✗</span>'):'<span style="color:#bbb">—</span>')+'</td>'
       +'<td onclick="event.stopPropagation()" data-qid="'+q.id+'" style="min-width:160px;max-width:280px">'+'<div style="display:flex;flex-direction:column;gap:4px">'+'<button class="btn small blue" style="padding:2px 6px;font-size:11px" onclick="event.stopPropagation();openModal(\''+q.id+'\','+i+')">解析</button>'+'<div class="qnote-display" style="font-size:12px;color:#b83232;background:#fff3cd;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:pre-wrap;word-break:break-all;line-height:1.5;border:1px solid #f0d060;display:'+(DB.qNotes&&DB.qNotes[q.id]?'block':'none')+'" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">📌 '+(DB.qNotes&&DB.qNotes[q.id]?esc(DB.qNotes[q.id]):'')+'</div>'+'<button class="btn small qnote-btn" style="padding:2px 5px;font-size:10px;color:#888;align-self:flex-start" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">'+(DB.qNotes&&DB.qNotes[q.id]?'✏️ 改':'＋ 标注')+'</button>'+'</div></td>';
     tbody.appendChild(tr);
+    // Show annotation as a sub-row if exists
+    var annNote = DB.qNotes&&DB.qNotes['ann_'+q.id];
+    if(annNote){
+      var annTr=document.createElement('tr');
+      annTr.style.background=rowBg;
+      annTr.innerHTML='<td colspan="6" style="padding:3px 12px 8px 36px">'
+        +'<div style="font-size:12px;color:#555;background:#fffbe6;border:1px solid #f0d060;border-radius:6px;padding:5px 10px;white-space:pre-wrap">📝 '+esc(annNote)+'</div>'
+        +'</td>';
+      tbody.appendChild(annTr);
+    }
   });
   document.getElementById('rs-total').textContent=QZ.qs.length;
   document.getElementById('rs-ok').textContent=correct;
@@ -3111,6 +3121,7 @@ function renderSearchResults(kw){
     +'<div class="spacer"></div>'
     +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
     +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
+    +'<button class="btn blue" onclick="searchAddToBatch()">➕ 加入已有批次</button>'
     +'</div>';
 
   _searchResults.forEach(function(r,ri){
@@ -3132,12 +3143,57 @@ function searchToggleAll(checked){
   document.querySelectorAll('.search-cb').forEach(function(cb){ cb.checked=checked; });
 }
 
-function searchSaveBatch(){
+function searchGetSelected(){
   var selected=[];
   document.querySelectorAll('.search-cb:checked').forEach(function(cb){
     var ri=parseInt(cb.dataset.ri);
     if(_searchResults[ri]) selected.push(_searchResults[ri].q);
   });
+  return selected;
+}
+
+function searchAddToBatch(){
+  var selected=searchGetSelected();
+  if(!selected.length){ showToast('请先勾选题目'); return; }
+  if(!DB.batches.length){ showToast('还没有批次，请先新建一个'); return; }
+  // Show batch selector
+  var area=document.getElementById('search-results'); if(!area)return;
+  var opts=DB.batches.map(function(b,i){
+    return '<option value="'+i+'">'+esc(b.name)+' ('+b.questions.length+'题)</option>';
+  }).join('');
+  var sel=document.createElement('div');
+  sel.style.cssText='padding:12px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px;margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  sel.innerHTML='<span style="font-size:13px;font-weight:700;color:#6040b0">选择目标批次：</span>'
+    +'<select id="search-target-batch" style="padding:6px 10px;border:1px solid #d4c9f5;border-radius:6px;font-size:13px">'+opts+'</select>'
+    +'<button class="btn primary" onclick="searchDoAddToBatch()">确认加入</button>'
+    +'<button class="btn small" onclick="this.parentNode.remove()">取消</button>';
+  area.insertBefore(sel, area.firstChild);
+}
+
+function searchDoAddToBatch(){
+  var sel=document.getElementById('search-target-batch'); if(!sel)return;
+  var batch=DB.batches[parseInt(sel.value)]; if(!batch)return;
+  var selected=searchGetSelected();
+  if(!selected.length){ showToast('请先勾选题目'); return; }
+  // Avoid duplicates by question id
+  var existIds=new Set(batch.questions.map(function(q){return q.id;}));
+  var added=0;
+  selected.forEach(function(q){
+    if(!existIds.has(q.id)){
+      batch.questions.push(q);
+      if(batch.progress&&batch.progress.answers) batch.progress.answers.push(null);
+      added++;
+    }
+  });
+  saveDB();
+  showToast('✓ 已加入「'+batch.name+'」'+added+'题（重复跳过'+(selected.length-added)+'题）');
+  // Remove the selector UI
+  var sel2=document.getElementById('search-target-batch');
+  if(sel2&&sel2.parentNode) sel2.parentNode.remove();
+}
+
+function searchSaveBatch(){
+  var selected=searchGetSelected();
   if(!selected.length){ showToast('请先勾选题目'); return; }
   var name=prompt('新批次名称：','搜索结果 — '+new Date().toLocaleDateString('zh-CN'));
   if(!name||!name.trim()) return;
