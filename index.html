@@ -16,6 +16,7 @@
     <div class="brand"><div class="logo">P</div><span>PCE 针灸答题器</span></div>
     <button class="tab active" data-page="home">主页</button>
     <button class="tab" data-page="import">导入</button>
+    <button class="tab" data-page="search">🔍搜题</button>
     <button class="tab" data-page="quiz">答题</button>
     <button class="tab" data-page="review">复习库</button>
     <button class="tab" data-page="mock">模拟考</button>
@@ -59,6 +60,11 @@
   </section>
 
   <!-- IMPORT -->
+  <!-- SEARCH -->
+  <section id="search" class="page">
+    <div id="search-area"></div>
+  </section>
+
   <section id="import" class="page">
     <div class="card">
       <div class="row"><button class="btn small" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">导入题目</div></div>
@@ -233,7 +239,7 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 </div>
 <div id="toast"></div>
 
-<script src="app.js?v=58"></script>
+<script src="app.js?v=59"></script>
 <script>
   // Init notes page when tab clicked
   document.querySelector('.tab[data-page="notes"]').addEventListener('click', function(){ renderNotes(); });
