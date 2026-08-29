@@ -630,15 +630,17 @@ function loadQAnnotation(qid){
   var btn = document.getElementById('q-annotation-btn');
   var editBox = document.getElementById('q-annotation-edit');
   if(!wrap) return;
+  // Always close edit box when loading new question
+  if(editBox) editBox.style.display='none';
   if(note){
     wrap.style.display='block';
+    display.style.display='block';
     display.textContent=note;
     if(btn) btn.style.display='none';
-    if(editBox) editBox.style.display='none';
   } else {
     wrap.style.display='none';
+    display.style.display='none';
     if(btn) btn.style.display='inline';
-    if(editBox) editBox.style.display='none';
   }
   if(input) input.value=note;
 }
@@ -651,11 +653,13 @@ function toggleAnnotationEdit(){
   var isOpen = editBox.style.display!=='none';
   if(isOpen){
     editBox.style.display='none';
-    // show display or btn depending on content
     var q=QZ.qs&&QZ.qs[QZ.cur];
     if(q) loadQAnnotation(q.id);
   } else {
     editBox.style.display='block';
+    // Hide the display div to avoid duplication
+    var display=document.getElementById('q-annotation-display');
+    if(display) display.style.display='none';
     wrap.style.display='block';
     if(btn) btn.style.display='none';
     var inp=document.getElementById('q-annotation-input');
