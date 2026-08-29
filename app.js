@@ -3034,38 +3034,84 @@ function practiceFillWrong(idx){
 // ═══════════════════════════════════════════════════════
 var _searchResults = []; // [{batchId, batchName, q, qIdx, matchedIn:[]}]
 
+var HF_KEYWORDS = [
+  {name:"一、安全/感控/法规", words:["针刺意外","晕针","滞针","弯针","断针","血肿","气胸","脏器损伤","神经损伤","感染","无菌技术","手卫生","知情同意","知情拒绝","病历保存","隐私","保密","转诊","急诊","执业范围","利益冲突","性关系","性虐待","性剥削","骚扰"]},
+  {name:"二、针刺禁忌", words:["气胸","肺尖","胸膜","肝脏","脾脏","肾脏","膀胱","眼球","颈动脉","孕妇","妊娠禁针","腹部禁针","腰骶部禁针","深刺","斜刺","平刺","直刺"]},
+  {name:"三、腧穴定位", words:["肋间隙","锁骨","胸骨","肚脐","耻骨联合","髂前上棘","肩峰","肘横纹","腕横纹","膝眼","髌骨","胫骨","腓骨","内踝","外踝","骨度分寸","横指同身寸"]},
+  {name:"四、特定穴", words:["五输穴","井穴","荥穴","输穴","经穴","合穴","原穴","络穴","郄穴","募穴","背俞穴","八会穴","八脉交会穴","下合穴","交会穴","四总穴","母穴","子穴"]},
+  {name:"五、经络循行", words:["起点","终点","入耳","绕耳","入脑","络心","属脏","络腑","经过眼","经过咽喉","经过乳房","经过腹部","经脉循行","任脉","督脉","冲脉","带脉","阴跷","阳跷","阴维","阳维"]},
+  {name:"六、中医基础", words:["阴阳","五行","木火土金水","相生","相克","乘侮","藏象","气血津液","元气","宗气","营气","卫气","正气","邪气","气滞","气逆","气陷","血虚","血瘀","血热","津亏","痰湿"]},
+  {name:"七、脏腑功能", words:["心主血脉","心藏神","肺主气","肺主宣发肃降","脾主运化","脾统血","肝主疏泄","肝藏血","肾藏精","肾主骨","肾纳气","肾主水","胆主决断","小肠泌别清浊","大肠传导","膀胱气化"]},
+  {name:"八、六淫/病因", words:["风","寒","暑","湿","燥","火","疫疠","七情","喜怒忧思悲恐惊","饮食不节","劳倦","外伤","瘀血","痰饮"]},
+  {name:"九、八纲辨证", words:["表证","里证","寒证","热证","虚证","实证","阴证","阳证","表寒","表热","里寒","里热","虚寒","虚热"]},
+  {name:"十、脏腑辨证", words:["心气虚","心阳虚","心血虚","心阴虚","心火亢盛","心血瘀阻","痰火扰心","肺气虚","肺阴虚","风寒犯肺","风热犯肺","燥邪犯肺","痰湿阻肺","脾气虚","脾阳虚","中气下陷","脾不统血","寒湿困脾","湿热蕴脾","肝气郁结","肝火上炎","肝阳上亢","肝阴虚","肝血虚","肝风内动","寒滞肝脉","肾气虚","肾阳虚","肾阴虚","肾精不足","肾不纳气","胃气虚","胃阴虚","食积","大肠湿热","膀胱湿热"]},
+  {name:"十一、六经辨证", words:["太阳病","阳明病","少阳病","太阴病","少阴病","厥阴病","太阳中风","太阳伤寒","蓄水","蓄血","阳明经证","阳明腑实","少阳证","太阴虚寒","少阴寒化","少阴热化","厥阴寒热错杂"]},
+  {name:"十二、卫气营血/三焦", words:["卫分","气分","营分","血分","上焦","中焦","下焦","湿温","热入营血"]},
+  {name:"十三、舌诊", words:["舌淡","舌红","舌绛","舌紫","舌暗","舌胖","舌瘦","齿痕","裂纹","无苔","少苔","厚苔","薄苔","黄苔","白苔","腻苔","燥苔","剥苔"]},
+  {name:"十四、脉诊", words:["浮","沉","迟","数","虚","实","滑","涩","弦","紧","细","弱","微","洪","濡","缓","促","结","代","寸关尺","左寸","左关","左尺","右寸","右关","右尺"]},
+  {name:"十五、常见症状", words:["畏寒","恶寒","发热","潮热","午后低热","五心烦热","盗汗","自汗","口渴","口苦","咽干","头晕","耳鸣","失眠","心悸","健忘","烦躁","易怒","胸闷","胁痛","腹胀","腹痛","腰膝酸软","乏力","困重","浮肿","便秘","腹泻","尿频","遗精","阳痿","痛经","闭经","崩漏","带下"]},
+  {name:"十六、针刺手法", words:["补法","泻法","平补平泻","提插补泻","捻转补泻","迎随补泻","徐疾补泻","呼吸补泻","开阖补泻","烧山火","透天凉","得气","行针","留针","透刺","围刺"]},
+  {name:"十七、其他疗法", words:["拔罐","留罐","走罐","闪罐","刺络拔罐","三棱针","放血","梅花针","火针","艾灸","直接灸","间接灸","温针灸","隔姜灸","隔蒜灸","隔盐灸","耳针","耳穴","头皮针","电针"]},
+  {name:"十八、急救/西医", words:["高血压","低血压","休克","晕厥","心肌梗死","心绞痛","中风","癫痫","哮喘","过敏反应","过敏性休克","低血糖","高血糖","心衰","肺水肿","急性腹痛","深静脉血栓"]},
+  {name:"十九、药理", words:["抗生素","抗病毒药","抗凝药","华法林","肝素","阿司匹林","糖皮质激素","胰岛素","降压药","利尿剂","雌激素","甲状腺激素","双膦酸盐","Alendronate","Risedronate"]},
+  {name:"二十、解剖", words:["面神经","三叉神经","尺神经","桡神经","正中神经","坐骨神经","腓总神经","股神经","膈神经","迷走神经","颈动脉","股动脉","桡动脉","肺尖","胸膜","肝","脾","肾","膀胱","脊髓"]},
+];
+
 function renderSearch(){
   var area = document.getElementById('search-area'); if(!area) return;
   var html = '<div class="card">'
     +'<div class="row"><div class="title">🔍 搜题</div></div>'
-    +'<div style="font-size:13px;color:#888;margin-bottom:10px">从所有批次的题目、选项、答案、AI解析、注释中搜索</div>'
-
-    // Search input
     +'<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
-    +'<input id="search-kw" class="full" style="flex:1;min-width:180px" placeholder="输入关键词，例如：胫骨、八纲辨证…" onkeydown="if(event.key===\'Enter\')doSearch()"/>'
+    +'<input id="search-kw" class="full" style="flex:1;min-width:180px" placeholder="输入关键词，或点下方高频词…" onkeydown="if(event.key===\'Enter\')doSearch()"/>'
     +'<button class="btn primary" onclick="doSearch()">搜索</button>'
     +'</div>'
+    +'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:13px">'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="search-exact"> 精确匹配</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="search-in-body" checked> 题目</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="search-in-opts" checked> 选项</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="search-in-ans" checked> 答案</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="search-in-ai" checked> AI解析</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="search-in-note" checked> 注释</label>'
+    +'</div></div>'
 
-    // Options
-    +'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:13px">'
-    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
-    +'<input type="checkbox" id="search-exact"> 精确匹配（必须包含该词）</label>'
-    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
-    +'<input type="checkbox" id="search-in-body" checked> 题目</label>'
-    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
-    +'<input type="checkbox" id="search-in-opts" checked> 选项</label>'
-    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
-    +'<input type="checkbox" id="search-in-ans" checked> 答案</label>'
-    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
-    +'<input type="checkbox" id="search-in-ai" checked> AI解析</label>'
-    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
-    +'<input type="checkbox" id="search-in-note" checked> 注释</label>'
-    +'</div>'
-    +'</div>'
+    // High frequency keyword panel
+    +'<div class="card" style="padding:12px 14px">'
+    +'<div style="font-size:13px;font-weight:700;color:#555;margin-bottom:10px">📚 高频核心词库 — 点词即搜</div>';
 
-    +'<div id="search-results"></div>';
-
+  HF_KEYWORDS.forEach(function(cat, ci){
+    html+='<div style="margin-bottom:10px">'
+      +'<div style="font-size:11px;font-weight:700;color:#888;margin-bottom:5px">'+esc(cat.name)+'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
+    cat.words.forEach(function(w){
+      html+='<button onclick="hfSearch(this)" data-word="'+esc(w)+'" '
+        +'style="padding:3px 10px;border-radius:20px;border:1px solid #ddd;background:#f8f7f3;font-size:13px;cursor:pointer;color:#333;transition:background .15s"'
+        +' onmouseover="this.style.background=\'#e8effa\';this.style.color=\'#1a4fa0\';this.style.borderColor=\'#b8d0f0\'"'
+        +' onmouseout="this.style.background=this.dataset.active?\'#e8effa\':\'#f8f7f3\';this.style.color=this.dataset.active?\'#1a4fa0\':\'#333\';this.style.borderColor=this.dataset.active?\'#b8d0f0\':\'#ddd\'"'
+        +'>'+esc(w)+'</button>';
+    });
+    html+='</div></div>';
+  });
+  html+='</div><div id="search-results"></div>';
   area.innerHTML = html;
+}
+
+function hfSearch(btn){
+  var word = btn.dataset.word;
+  // Highlight selected button
+  document.querySelectorAll('[data-word]').forEach(function(b){
+    b.dataset.active=''; b.style.background='#f8f7f3'; b.style.color='#333'; b.style.borderColor='#ddd';
+  });
+  btn.dataset.active='1'; btn.style.background='#e8effa'; btn.style.color='#1a4fa0'; btn.style.borderColor='#b8d0f0';
+  // Set search input and search
+  var inp=document.getElementById('search-kw'); if(inp) inp.value=word;
+  // Set exact match for short precise terms
+  var exact=document.getElementById('search-exact'); if(exact) exact.checked=(word.length<=4);
+  doSearch();
+  // Scroll to results
+  setTimeout(function(){
+    var res=document.getElementById('search-results');
+    if(res) res.scrollIntoView({behavior:'smooth',block:'start'});
+  },100);
 }
 
 function doSearch(){
@@ -3131,17 +3177,36 @@ function renderSearchResults(kw){
 
   _searchResults.forEach(function(r,ri){
     var preview = (r.q.body||'').replace(/\n/g,' ').slice(0,60);
-    html+='<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 0;border-bottom:1px solid #eee">'
-      +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:3px;flex-shrink:0">'
-      +'<div style="flex:1">'
-      +'<div style="font-size:12px;color:#888;margin-bottom:2px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题 · 匹配：'+r.matchedIn.join('、')+'</div>'
-      +'<div style="font-size:14px;line-height:1.6">'+esc(preview)+'</div>'
-      +(r.q.answer?'<div style="font-size:12px;color:#2e7d52;margin-top:2px">答案：'+esc(r.q.answer)+'</div>':'')
+    var annNote = DB.qNotes&&DB.qNotes['ann_'+r.q.id]||'';
+    html+='<div style="padding:10px 0;border-bottom:1px solid #eee">'
+      +'<div style="display:flex;align-items:flex-start;gap:8px">'
+      +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:4px;flex-shrink:0">'
+      +'<div style="flex:1;cursor:pointer" onclick="toggleSearchDetail('+ri+')">'
+      +'<div style="font-size:11px;color:#888;margin-bottom:2px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题 · 匹配：'+r.matchedIn.join('、')+'</div>'
+      +'<div style="font-size:14px;line-height:1.6;color:#333">'+esc(preview)+'…</div>'
+      +(r.q.answer?'<div style="font-size:12px;color:#2e7d52;margin-top:2px;font-weight:700">答案：'+esc(r.q.answer)+'</div>':'')
+      +(annNote?'<div style="font-size:12px;color:#555;background:#fffbe6;padding:3px 7px;border-radius:4px;margin-top:4px">📝 '+esc(annNote)+'</div>':'')
+      +'</div>'
+      +'<span style="font-size:11px;color:#aaa;flex-shrink:0;cursor:pointer" onclick="toggleSearchDetail('+ri+')">▼ 展开</span>'
+      +'</div>'
+      // Detail (hidden by default)
+      +'<div id="sr-detail-'+ri+'" style="display:none;margin-top:8px;padding:10px;background:#f8f7f3;border-radius:8px;font-size:13px;line-height:1.8">'
+      +esc(r.q.body||'')
+      +(r.q.opts&&r.q.opts.length?'<div style="margin-top:6px">'+r.q.opts.map(function(o){
+        var isAns=o.letter===r.q.answer;
+        return '<div style="padding:2px 0;color:'+(isAns?'#2e7d52':'#333')+';font-weight:'+(isAns?'700':'400')+'">'+esc(o.letter+'. '+o.text)+(isAns?' ✓':'')+'</div>';
+      }).join('')+'</div>':'')
+      +(DB.analysisCache&&DB.analysisCache[r.q.id]?'<div style="margin-top:8px;padding:8px;background:#f0ebff;border-radius:6px;font-size:12px;white-space:pre-wrap">🤖 '+esc((DB.analysisCache[r.q.id]||'').slice(0,300))+'</div>':'')
       +'</div>'
       +'</div>';
   });
   html+='</div>';
   area.innerHTML=html;
+}
+
+function toggleSearchDetail(ri){
+  var el=document.getElementById('sr-detail-'+ri); if(!el)return;
+  el.style.display=el.style.display==='none'?'block':'none';
 }
 
 function searchToggleAll(checked){
