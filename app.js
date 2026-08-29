@@ -617,6 +617,63 @@ function loadQ(i){
     optsEl.appendChild(btn);
   });
   rebuildActions(); startTimer();
+  // Load annotation for this question
+  loadQAnnotation(q.id);
+}
+
+function loadQAnnotation(qid){
+  if(!DB.qNotes) DB.qNotes={};
+  var note = DB.qNotes['ann_'+qid]||'';
+  var wrap = document.getElementById('q-annotation-wrap');
+  var display = document.getElementById('q-annotation-display');
+  var input = document.getElementById('q-annotation-input');
+  var btn = document.getElementById('q-annotation-btn');
+  var editBox = document.getElementById('q-annotation-edit');
+  if(!wrap) return;
+  if(note){
+    wrap.style.display='block';
+    display.textContent=note;
+    if(btn) btn.style.display='none';
+    if(editBox) editBox.style.display='none';
+  } else {
+    wrap.style.display='none';
+    if(btn) btn.style.display='inline';
+    if(editBox) editBox.style.display='none';
+  }
+  if(input) input.value=note;
+}
+
+function toggleAnnotationEdit(){
+  var editBox=document.getElementById('q-annotation-edit');
+  var wrap=document.getElementById('q-annotation-wrap');
+  var btn=document.getElementById('q-annotation-btn');
+  if(!editBox) return;
+  var isOpen = editBox.style.display!=='none';
+  if(isOpen){
+    editBox.style.display='none';
+    // show display or btn depending on content
+    var q=QZ.qs&&QZ.qs[QZ.cur];
+    if(q) loadQAnnotation(q.id);
+  } else {
+    editBox.style.display='block';
+    wrap.style.display='block';
+    if(btn) btn.style.display='none';
+    var inp=document.getElementById('q-annotation-input');
+    if(inp) inp.focus();
+  }
+}
+
+function saveAnnotation(){
+  var q=QZ.qs&&QZ.qs[QZ.cur]; if(!q)return;
+  var inp=document.getElementById('q-annotation-input'); if(!inp)return;
+  if(!DB.qNotes) DB.qNotes={};
+  var val=inp.value.trim();
+  if(val) DB.qNotes['ann_'+q.id]=val;
+  else delete DB.qNotes['ann_'+q.id];
+  saveDB();
+  // Update display
+  var display=document.getElementById('q-annotation-display');
+  if(display) display.textContent=val;
 }
 
 function rebuildActions(){
@@ -870,7 +927,9 @@ function openModal(qid,idx){
   if(q.caseText) html+='<div style="background:#fffbe6;border:1px solid #f0d060;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;white-space:pre-wrap;user-select:text">📋 病例资料<br>'+esc(q.caseText)+'</div>';
 
   // Selectable question body
-  html+='<div id="modal-qbody" style="font-size:15px;line-height:1.9;margin-bottom:12px;white-space:pre-wrap;user-select:text;cursor:text;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(q.body)+'</div>';
+  var annNote = (DB.qNotes&&DB.qNotes['ann_'+qid])||'';
+  html+='<div id="modal-qbody" style="font-size:15px;line-height:1.9;margin-bottom:8px;white-space:pre-wrap;user-select:text;cursor:text;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(q.body)+'</div>';
+  if(annNote) html+='<div style="font-size:13px;color:#555;background:#fffbe6;border:1px solid #f0d060;border-radius:6px;padding:7px 10px;margin-bottom:8px;white-space:pre-wrap">📝 注释：'+esc(annNote)+'</div>';
 
   // Options (also selectable text)
   html+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
