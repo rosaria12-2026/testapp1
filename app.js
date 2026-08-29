@@ -125,6 +125,7 @@ document.querySelectorAll('.tab').forEach(function(t){
     if (t.dataset.page === 'mock') renderMockSetup();
     if (t.dataset.page === 'study') renderStudy();
     if (t.dataset.page === 'fill') renderFill();
+    if (t.dataset.page === 'search') renderSearch();
   });
 });
 
@@ -3011,6 +3012,145 @@ function practiceFillWrong(idx){
   var w=DB.fillWrong[idx]; if(!w)return;
   FQ={batch:{id:'wrong',name:'填空错题本'},qs:[{id:w.id,body:w.body,answers:w.answers,blanks:w.blanks}],cur:0,userAnswers:[[]],started:true};
   renderFillQ();
+}
+
+// ═══════════════════════════════════════════════════════
+// 搜题 SEARCH
+// ═══════════════════════════════════════════════════════
+var _searchResults = []; // [{batchId, batchName, q, qIdx, matchedIn:[]}]
+
+function renderSearch(){
+  var area = document.getElementById('search-area'); if(!area) return;
+  var html = '<div class="card">'
+    +'<div class="row"><div class="title">🔍 搜题</div></div>'
+    +'<div style="font-size:13px;color:#888;margin-bottom:10px">从所有批次的题目、选项、答案、AI解析、注释中搜索</div>'
+
+    // Search input
+    +'<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+    +'<input id="search-kw" class="full" style="flex:1;min-width:180px" placeholder="输入关键词，例如：胫骨、八纲辨证…" onkeydown="if(event.key===\'Enter\')doSearch()"/>'
+    +'<button class="btn primary" onclick="doSearch()">搜索</button>'
+    +'</div>'
+
+    // Options
+    +'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:13px">'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
+    +'<input type="checkbox" id="search-exact"> 精确匹配（必须包含该词）</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
+    +'<input type="checkbox" id="search-in-body" checked> 题目</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
+    +'<input type="checkbox" id="search-in-opts" checked> 选项</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
+    +'<input type="checkbox" id="search-in-ans" checked> 答案</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
+    +'<input type="checkbox" id="search-in-ai" checked> AI解析</label>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer">'
+    +'<input type="checkbox" id="search-in-note" checked> 注释</label>'
+    +'</div>'
+    +'</div>'
+
+    +'<div id="search-results"></div>';
+
+  area.innerHTML = html;
+}
+
+function doSearch(){
+  var kw = (document.getElementById('search-kw')||{}).value||'';
+  kw = kw.trim();
+  if(!kw){ showToast('请输入关键词'); return; }
+
+  var exact = document.getElementById('search-exact')&&document.getElementById('search-exact').checked;
+  var inBody = document.getElementById('search-in-body')&&document.getElementById('search-in-body').checked;
+  var inOpts = document.getElementById('search-in-opts')&&document.getElementById('search-in-opts').checked;
+  var inAns  = document.getElementById('search-in-ans')&&document.getElementById('search-in-ans').checked;
+  var inAI   = document.getElementById('search-in-ai')&&document.getElementById('search-in-ai').checked;
+  var inNote = document.getElementById('search-in-note')&&document.getElementById('search-in-note').checked;
+
+  function matches(text){
+    if(!text) return false;
+    if(exact) return text.indexOf(kw)>=0;
+    // Fuzzy: all chars of kw appear in text (for 2 chars or less, use exact)
+    if(kw.length<=2) return text.indexOf(kw)>=0;
+    var t=text.toLowerCase(), k=kw.toLowerCase();
+    var pos=0;
+    for(var i=0;i<k.length;i++){
+      var found=t.indexOf(k[i],pos);
+      if(found<0) return false;
+      pos=found+1;
+    }
+    return true;
+  }
+
+  _searchResults = [];
+  DB.batches.forEach(function(batch){
+    (batch.questions||[]).forEach(function(q, qi){
+      var matchedIn = [];
+      if(inBody && matches(q.body)) matchedIn.push('题目');
+      if(inOpts && q.opts) q.opts.forEach(function(o){ if(matches(o.text)&&matchedIn.indexOf('选项')<0) matchedIn.push('选项'); });
+      if(inAns  && matches(q.answer)) matchedIn.push('答案');
+      if(inAI   && matches(DB.analysisCache&&DB.analysisCache[q.id])) matchedIn.push('AI解析');
+      if(inNote && matches(DB.qNotes&&DB.qNotes['ann_'+q.id])) matchedIn.push('注释');
+      if(matchedIn.length){
+        _searchResults.push({batchId:batch.id, batchName:batch.name, q:q, qIdx:qi, matchedIn:matchedIn});
+      }
+    });
+  });
+
+  renderSearchResults(kw);
+}
+
+function renderSearchResults(kw){
+  var area = document.getElementById('search-results'); if(!area) return;
+  if(!_searchResults.length){
+    area.innerHTML='<div class="card"><div class="sub">未找到匹配题目</div></div>';
+    return;
+  }
+
+  var html='<div class="card">'
+    +'<div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">'
+    +'<div>找到 <b>'+_searchResults.length+'</b> 道题</div>'
+    +'<div class="spacer"></div>'
+    +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
+    +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
+    +'</div>';
+
+  _searchResults.forEach(function(r,ri){
+    var preview = (r.q.body||'').replace(/\n/g,' ').slice(0,60);
+    html+='<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 0;border-bottom:1px solid #eee">'
+      +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:3px;flex-shrink:0">'
+      +'<div style="flex:1">'
+      +'<div style="font-size:12px;color:#888;margin-bottom:2px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题 · 匹配：'+r.matchedIn.join('、')+'</div>'
+      +'<div style="font-size:14px;line-height:1.6">'+esc(preview)+'</div>'
+      +(r.q.answer?'<div style="font-size:12px;color:#2e7d52;margin-top:2px">答案：'+esc(r.q.answer)+'</div>':'')
+      +'</div>'
+      +'</div>';
+  });
+  html+='</div>';
+  area.innerHTML=html;
+}
+
+function searchToggleAll(checked){
+  document.querySelectorAll('.search-cb').forEach(function(cb){ cb.checked=checked; });
+}
+
+function searchSaveBatch(){
+  var selected=[];
+  document.querySelectorAll('.search-cb:checked').forEach(function(cb){
+    var ri=parseInt(cb.dataset.ri);
+    if(_searchResults[ri]) selected.push(_searchResults[ri].q);
+  });
+  if(!selected.length){ showToast('请先勾选题目'); return; }
+  var name=prompt('新批次名称：','搜索结果 — '+new Date().toLocaleDateString('zh-CN'));
+  if(!name||!name.trim()) return;
+  var batch={
+    id:uid(), name:name.trim(),
+    questions:selected,
+    progress:{idx:0, answers:new Array(selected.length).fill(null), dk:{}},
+    date:Date.now()
+  };
+  DB.batches.push(batch); saveDB();
+  showToast('✓ 已保存「'+batch.name+'」('+selected.length+'题) → 去「主页」或「答题」找到它');
+  // Navigate to home
+  setTimeout(function(){ navTo('home'); renderHome(); }, 1500);
 }
 
 // ═══════════════════════════════════════════════════════
