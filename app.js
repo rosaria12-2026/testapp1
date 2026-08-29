@@ -118,8 +118,13 @@ function navBack() {
 }
 document.querySelectorAll('.tab').forEach(function(t){
   t.addEventListener('click', function(){
+    // Fully reset page stack and force hide all pages before switching
     _pageStack = [t.dataset.page];
-    showPage(t.dataset.page);
+    document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+    var pg=document.getElementById(t.dataset.page); if(pg) pg.classList.add('active');
+    document.querySelectorAll('.tab').forEach(function(x){ x.classList.remove('active'); });
+    t.classList.add('active');
+    window.scrollTo({top:0,behavior:'smooth'});
     if (t.dataset.page === 'notes') renderNotes();
     if (t.dataset.page === 'review') renderReview();
     if (t.dataset.page === 'mock') renderMockSetup();
