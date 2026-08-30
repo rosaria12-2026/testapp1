@@ -837,11 +837,11 @@ function showResultPage(){
     if(annNote){
       var annTr=document.createElement('tr');
       annTr.style.background=rowBg;
-      annTr.innerHTML='<td colspan="6" style="padding:2px 10px 8px 48px">'
-        +'<div style="display:flex;align-items:flex-start;gap:6px">'
-        +'<div style="flex:1;font-size:12px;color:#555;background:#fffbe6;border:1px solid #f0d060;border-radius:6px;padding:4px 9px;white-space:pre-wrap">📝 '+esc(annNote)+'</div>'
-        +'<button onclick="editResultAnnotation(\''+q.id+'\');" style="font-size:10px;padding:2px 5px;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:#fff;flex-shrink:0">✏️</button>'
-        +'<button onclick="deleteResultAnnotation(\''+q.id+'\');" style="font-size:10px;padding:2px 5px;border:1px solid #fcc;border-radius:4px;cursor:pointer;background:#fff;color:#b83232;flex-shrink:0">✕</button>'
+      annTr.innerHTML='<td colspan="6" style="padding:1px 10px 5px 48px">'
+        +'<div style="display:inline-flex;align-items:center;gap:4px;max-width:100%">'
+        +'<span style="font-size:11px;color:#555;background:#fffbe6;border:1px solid #f0d060;border-radius:4px;padding:2px 7px;white-space:normal;word-break:break-all;max-width:320px">📝 '+esc(annNote)+'</span>'
+        +'<button onclick="editResultAnnotation(\''+q.id+'\');" style="font-size:10px;padding:1px 4px;border:1px solid #ddd;border-radius:3px;cursor:pointer;background:#fff;flex-shrink:0">✏️</button>'
+        +'<button onclick="deleteResultAnnotation(\''+q.id+'\');" style="font-size:10px;padding:1px 4px;border:1px solid #fcc;border-radius:3px;cursor:pointer;background:#fff;color:#b83232;flex-shrink:0">✕</button>'
         +'</div>'
         +'</td>';
       tbody.appendChild(annTr);
@@ -1054,12 +1054,15 @@ function openModal(qid,idx){
     var _lastSel = '';
     mc._selHandler = function(){
       setTimeout(function(){
+        // Check autocopy checkbox FIRST
+        var ac = document.getElementById('modal-autocopy');
+        if(ac && !ac.checked) return;
         var sel = window.getSelection();
         if(!sel || sel.toString().trim()==='') return;
         var selText = sel.toString().trim();
         if(selText.length<2) return;
         if(!mc.contains(sel.anchorNode)) return;
-        if(selText === _lastSel) return; // same selection, ignore
+        if(selText === _lastSel) return;
         _lastSel = selText;
         var ta = document.getElementById('modal-qnote');
         if(ta){
@@ -1070,7 +1073,6 @@ function openModal(qid,idx){
           saveModalQNote();
           showToast('✓ 已追加到标注框');
         }
-        // Reset after 1s so same text can be added again later if needed
         setTimeout(function(){ _lastSel=''; }, 1000);
       }, 200);
     };
@@ -3225,9 +3227,11 @@ function renderSearchResults(kw){
     +'<div>找到 <b>'+_searchResults.length+'</b> 道题</div>'
     +'<div class="spacer"></div>'
     +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
+    +'<button class="btn" style="background:#6040b0;color:#fff" onclick="genKeywordCard(document.getElementById(\'search-kw\').value)">🧠 考点归纳卡片</button>'
     +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
     +'<button class="btn blue" onclick="searchAddToBatch()">➕ 加入已有批次</button>'
-    +'</div>';
+    +'</div>'
+    +'<div id="keyword-card-area"></div>';
 
   _searchResults.forEach(function(r,ri){
     var preview = (r.q.body||'').replace(/\n/g,' ').slice(0,60);
@@ -3256,6 +3260,46 @@ function renderSearchResults(kw){
   });
   html+='</div>';
   area.innerHTML=html;
+}
+
+function genKeywordCard(kw){
+  var area = document.getElementById('keyword-card-area'); if(!area) return;
+  area.innerHTML='<div style="padding:12px;background:#f0ebff;border-radius:8px;color:#6040b0;font-size:13px;margin-bottom:10px">🧠 AI 正在分析「'+esc(kw)+'」相关题目，生成考点归纳…</div>';
+  
+  // Build context from search results
+  var qs = _searchResults.slice(0,20); // max 20 questions for context
+  var context = qs.map(function(r,i){
+    var opts = r.q.opts ? r.q.opts.map(function(o){return o.letter+'. '+o.text;}).join('\n') : '';
+    var ai = DB.analysisCache && DB.analysisCache[r.q.id] ? '\nAI解析：'+DB.analysisCache[r.q.id].slice(0,150) : '';
+    return '题'+(i+1)+': '+r.q.body+'\n'+opts+'\n正确答案：'+(r.q.answer||'?')+ai;
+  }).join('\n\n---\n\n');
+
+  var prompt = '以下是PCE针灸考试中关于「'+kw+'」的'+qs.length+'道题目及答案。\n\n'
+    + context
+    + '\n\n请生成一份简洁的「'+kw+'」考点归纳，帮助考生一眼看出如何回答此类题目，格式如下：'
+    + '\n\n**核心要点**（1-3句，最关键的判断依据）'
+    + '\n\n**鉴别对比表**（Markdown表格，对比容易混淆的概念）'
+    + '\n\n**答题口诀**（见到XXX关键词→选XXX，简洁易记）'
+    + '\n\n**高频陷阱**（常错点，一句话说明）';
+
+  callClaude(prompt, 2000).then(function(txt){
+    area.innerHTML = '<div style="background:#f0ebff;border:1px solid #d4c9f5;border-radius:10px;padding:14px 16px;margin-bottom:12px">'
+      +'<div style="font-size:13px;font-weight:700;color:#6040b0;margin-bottom:10px">🧠 「'+esc(kw)+'」考点归纳卡片 <span style="font-weight:400;font-size:11px;color:#aaa">（基于你的'+qs.length+'道题）</span></div>'
+      +'<div style="font-size:13px;line-height:1.8;white-space:pre-wrap;color:#18180f">'+esc(txt)+'</div>'
+      +'<div style="margin-top:10px;display:flex;gap:8px">'
+      +'<button class="btn small" data-kw="'+esc(kw)+'" onclick="saveCardToNotes(this.dataset.kw, this.parentNode.previousElementSibling.textContent)">📝 存入笔记本</button>'
+      +'<button class="btn small" onclick="document.getElementById(\'keyword-card-area\').innerHTML=\'\'" style="color:#888">收起</button>'
+      +'</div>'
+      +'</div>';
+  }).catch(function(e){
+    area.innerHTML='<div style="padding:10px;background:#fdeaea;border-radius:8px;color:#b83232;font-size:13px">❌ '+esc(e.message)+'<button class="btn small" onclick="genKeywordCard(document.getElementById(\'search-kw\').value)" style="margin-left:8px">重试</button></div>';
+  });
+}
+
+function saveCardToNotes(kw, content){
+  if(!DB.notes) DB.notes=[];
+  DB.notes.push({id:uid(), type:'ai-summary', title:'考点归纳：'+kw, content:content, ts:Date.now()});
+  saveDB(); showToast('✓ 已存入笔记本');
 }
 
 function toggleSearchDetail(ri){
