@@ -775,12 +775,30 @@ function finishQuiz(){
 }
 function commitResults(){
   var batch=QZ.batch;
+  // Only count questions answered in THIS session (not previously recorded)
+  var prevAnswered = batch.progress && batch.progress._committed
+    ? batch.progress._committed : {};
   for(var i=0;i<QZ.qs.length;i++){
     var q=QZ.qs[i],my=QZ.ans[i]; if(!my||my==='skip') continue;
-    DB.stats.done=(DB.stats.done||0)+1;
-    if(q.answer){ var ok=my.toUpperCase()===q.answer.toUpperCase(); if(ok){DB.stats.correct=(DB.stats.correct||0)+1;delete DB.wrongMap[q.id];}else DB.wrongMap[q.id]={q:q,batchId:batch.id,batchName:batch.name,myAns:my}; }
+    var isNew = !prevAnswered[q.id]; // not counted before
+    if(isNew){
+      DB.stats.done=(DB.stats.done||0)+1;
+      if(q.answer){
+        var ok=my.toUpperCase()===q.answer.toUpperCase();
+        if(ok) DB.stats.correct=(DB.stats.correct||0)+1;
+      }
+    }
+    // Always update wrong/dk maps regardless
+    if(q.answer){
+      var ok2=my.toUpperCase()===(q.answer||'').toUpperCase();
+      if(ok2){delete DB.wrongMap[q.id];}
+      else DB.wrongMap[q.id]={q:q,batchId:batch.id,batchName:batch.name,myAns:my};
+    }
     if(QZ.dk[i]) DB.dkMap[q.id]={q:q,batchId:batch.id,batchName:batch.name};
     else if(q.answer&&my.toUpperCase()===(q.answer||'').toUpperCase()) delete DB.dkMap[q.id];
+    // Mark as committed
+    if(!batch.progress._committed) batch.progress._committed={};
+    batch.progress._committed[q.id]=true;
   }
   saveDB(); renderHome();
 }
@@ -3276,29 +3294,56 @@ function genKeywordCard(kw){
 
   var prompt = '以下是PCE针灸考试中关于「'+kw+'」的'+qs.length+'道题目及答案。\n\n'
     + context
-    + '\n\n请生成一份简洁的「'+kw+'」考点归纳，帮助考生一眼看出如何回答此类题目，格式如下：'
-    + '\n\n**核心要点**（1-3句，最关键的判断依据）'
-    + '\n\n**鉴别对比表**（Markdown表格，对比容易混淆的概念）'
-    + '\n\n**答题口诀**（见到XXX关键词→选XXX，简洁易记）'
-    + '\n\n**高频陷阱**（常错点，一句话说明）';
+    + '\n\n请生成「'+kw+'」考点归纳卡片，严格使用以下格式（【】标签必须完整）：'
+    + '\n\n【核心要点】'
+    + '\n1-3句，最关键的判断依据，关键词用**加粗**'
+    + '\n\n【鉴别对比表】'
+    + '\n用Markdown表格对比容易混淆的概念，第一列是概念，后面列是症状/选穴/特征，内容要具体'
+    + '\n\n【一句话记忆】'
+    + '\n见到___→想到___→选___，最精简的答题口诀'
+    + '\n\n【高频陷阱】'
+    + '\n考生常错点，说明为什么错，一句话';
 
   callClaude(prompt, 2000).then(function(txt){
-    area.innerHTML = '<div style="background:#f0ebff;border:1px solid #d4c9f5;border-radius:10px;padding:14px 16px;margin-bottom:12px">'
-      +'<div style="font-size:13px;font-weight:700;color:#6040b0;margin-bottom:10px">🧠 「'+esc(kw)+'」考点归纳卡片 <span style="font-weight:400;font-size:11px;color:#aaa">（基于你的'+qs.length+'道题）</span></div>'
-      +'<div style="font-size:13px;line-height:1.8;white-space:pre-wrap;color:#18180f">'+esc(txt)+'</div>'
-      +'<div style="margin-top:10px;display:flex;gap:8px">'
-      +'<button class="btn small" data-kw="'+esc(kw)+'" onclick="saveCardToNotes(this.dataset.kw, this.parentNode.previousElementSibling.textContent)">📝 存入笔记本</button>'
-      +'<button class="btn small" onclick="document.getElementById(\'keyword-card-area\').innerHTML=\'\'" style="color:#888">收起</button>'
-      +'</div>'
-      +'</div>';
+    var cardDiv = document.createElement('div');
+    cardDiv.style.cssText='background:#f0ebff;border:1px solid #d4c9f5;border-radius:10px;padding:14px 16px;margin-bottom:12px';
+    var titleDiv = document.createElement('div');
+    titleDiv.style.cssText='font-size:14px;font-weight:700;color:#6040b0;margin-bottom:10px';
+    titleDiv.textContent='🧠 「'+kw+'」考点归纳卡片';
+    var subDiv = document.createElement('span');
+    subDiv.style.cssText='font-weight:400;font-size:11px;color:#aaa;margin-left:6px';
+    subDiv.textContent='（基于你的'+qs.length+'道题）';
+    titleDiv.appendChild(subDiv);
+    var contentDiv = document.createElement('div');
+    contentDiv.style.cssText='margin-bottom:10px';
+    var btnDiv = document.createElement('div');
+    btnDiv.style.cssText='display:flex;gap:8px;margin-top:10px';
+    var saveBtn = document.createElement('button');
+    saveBtn.className='btn small';
+    saveBtn.textContent='📝 存入笔记本';
+    saveBtn.onclick = function(){ saveCardToNotes(kw, txt); };
+    var hideBtn = document.createElement('button');
+    hideBtn.className='btn small';
+    hideBtn.style.color='#888';
+    hideBtn.textContent='收起';
+    hideBtn.onclick = function(){ area.innerHTML=''; };
+    btnDiv.appendChild(saveBtn);
+    btnDiv.appendChild(hideBtn);
+    cardDiv.appendChild(titleDiv);
+    cardDiv.appendChild(contentDiv);
+    cardDiv.appendChild(btnDiv);
+    area.innerHTML='';
+    area.appendChild(cardDiv);
+    // Render with full AI formatter
+    renderAI(contentDiv, txt);
   }).catch(function(e){
     area.innerHTML='<div style="padding:10px;background:#fdeaea;border-radius:8px;color:#b83232;font-size:13px">❌ '+esc(e.message)+'<button class="btn small" onclick="genKeywordCard(document.getElementById(\'search-kw\').value)" style="margin-left:8px">重试</button></div>';
   });
 }
 
-function saveCardToNotes(kw, content){
+function saveCardToNotes(kw, txt){
   if(!DB.notes) DB.notes=[];
-  DB.notes.push({id:uid(), type:'ai-summary', title:'考点归纳：'+kw, content:content, ts:Date.now()});
+  DB.notes.push({id:uid(), type:'ai-summary', title:'考点归纳：'+kw, content:txt, ts:Date.now()});
   saveDB(); showToast('✓ 已存入笔记本');
 }
 
