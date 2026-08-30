@@ -809,7 +809,7 @@ function showResultPage(){
     var dk=!!QZ.dk[i];
     if(ok)correct++; if(hasAns&&my&&my!=='skip'&&!ok)wrong++; if(dk)dkCount++;
     var firstAns = (QZ.batch&&QZ.batch.progress&&QZ.batch.progress.firstAnswers) ? QZ.batch.progress.firstAnswers[i] : null;
-    var tr=document.createElement('tr'); tr.style.cursor='pointer';
+    var tr=document.createElement('tr'); tr.style.cursor='pointer'; tr.dataset.qid=q.id;
     var rowBg = dk?'#fff3cd' : (hasAns&&my&&my!=='skip'?(ok?'#f0fff4':'#fff5f5'):'');
     tr.style.background=rowBg;
     (function(qid,idx){ tr.addEventListener('click',function(){openModal(qid,idx);}); })(q.id,i);
@@ -1092,8 +1092,16 @@ function editModalQBody(qid){
   var q=null; DB.batches.forEach(function(b){b.questions.forEach(function(bq){if(bq.id===qid)q=bq;});});
   if(!q)return;
   var v=prompt('修改题目文字：',q.body); if(v===null||!v.trim())return;
-  q.body=v.trim(); saveDB();
-  var el=document.getElementById('modal-qbody'); if(el)el.textContent=q.body;
+  v=v.trim(); q.body=v; saveDB();
+  var el=document.getElementById('modal-qbody'); if(el) el.textContent=v;
+  // Update result table row text without full re-render
+  var rows=document.querySelectorAll('tr[data-qid]');
+  rows.forEach(function(tr){
+    if(tr.getAttribute('data-qid')===qid){
+      var td=tr.cells[1];
+      if(td&&td.firstChild&&td.firstChild.nodeType===3) td.firstChild.nodeValue=v.slice(0,38);
+    }
+  });
   showToast('✓ 题目已修改');
 }
 function saveModalQNote(){
