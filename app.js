@@ -820,14 +820,29 @@ function showResultPage(){
       +'<td style="font-weight:700">'+(hasAns?'<span style="color:'+(ok?'#2e7d52':'#b83232')+'">'+q.answer+'</span>':'<span style="color:#bbb">—</span>')+'</td>'
       +'<td>'+(hasAns&&my&&my!=='skip'?(ok?'<span style="color:#2e7d52;font-size:16px">✓</span>':'<span style="color:#b83232;font-size:16px">✗</span>'):'<span style="color:#bbb">—</span>')+'</td>'
       +'<td onclick="event.stopPropagation()" data-qid="'+q.id+'" style="min-width:160px;max-width:280px">'+'<div style="display:flex;flex-direction:column;gap:4px">'+'<button class="btn small blue" style="padding:2px 6px;font-size:11px" onclick="event.stopPropagation();openModal(\''+q.id+'\','+i+')">解析</button>'+'<div class="qnote-display" style="font-size:12px;color:#b83232;background:#fff3cd;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:pre-wrap;word-break:break-all;line-height:1.5;border:1px solid #f0d060;display:'+(DB.qNotes&&DB.qNotes[q.id]?'block':'none')+'" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">📌 '+(DB.qNotes&&DB.qNotes[q.id]?esc(DB.qNotes[q.id]):'')+'</div>'+'<button class="btn small qnote-btn" style="padding:2px 5px;font-size:10px;color:#888;align-self:flex-start" onclick="event.stopPropagation();editQNote(\''+q.id+'\')">'+(DB.qNotes&&DB.qNotes[q.id]?'✏️ 改':'＋ 标注')+'</button>'+'</div></td>';
+    // Add + 注释 button in question td if no annotation
+    var qTd2=tr.cells[1];
+    if(qTd2 && !(DB.qNotes&&DB.qNotes['ann_'+q.id])){
+      var addBtn2=document.createElement('button');
+      addBtn2.textContent='+ 注释';
+      addBtn2.setAttribute('data-qid2',q.id);
+      addBtn2.style.cssText='font-size:10px;padding:1px 5px;border:1px solid #f0d060;border-radius:4px;background:#fffbe6;cursor:pointer;margin-top:3px;display:inline-block;color:#8a6000';
+      addBtn2.onclick=function(e){e.stopPropagation();addResultAnnotation(this.getAttribute('data-qid2'));};
+      qTd2.appendChild(document.createElement('br'));
+      qTd2.appendChild(addBtn2);
+    }
     tbody.appendChild(tr);
     // Show annotation as a sub-row if exists
     var annNote = DB.qNotes&&DB.qNotes['ann_'+q.id];
     if(annNote){
       var annTr=document.createElement('tr');
       annTr.style.background=rowBg;
-      annTr.innerHTML='<td colspan="6" style="padding:3px 12px 8px 36px">'
-        +'<div style="font-size:12px;color:#555;background:#fffbe6;border:1px solid #f0d060;border-radius:6px;padding:5px 10px;white-space:pre-wrap">📝 '+esc(annNote)+'</div>'
+      annTr.innerHTML='<td colspan="6" style="padding:2px 10px 8px 48px">'
+        +'<div style="display:flex;align-items:flex-start;gap:6px">'
+        +'<div style="flex:1;font-size:12px;color:#555;background:#fffbe6;border:1px solid #f0d060;border-radius:6px;padding:4px 9px;white-space:pre-wrap">📝 '+esc(annNote)+'</div>'
+        +'<button onclick="editResultAnnotation(\''+q.id+'\');" style="font-size:10px;padding:2px 5px;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:#fff;flex-shrink:0">✏️</button>'
+        +'<button onclick="deleteResultAnnotation(\''+q.id+'\');" style="font-size:10px;padding:2px 5px;border:1px solid #fcc;border-radius:4px;cursor:pointer;background:#fff;color:#b83232;flex-shrink:0">✕</button>'
+        +'</div>'
         +'</td>';
       tbody.appendChild(annTr);
     }
@@ -948,7 +963,16 @@ function openModal(qid,idx){
 
   // Selectable question body
   var annNote = (DB.qNotes&&DB.qNotes['ann_'+qid])||'';
-  html+='<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:8px"><div id="modal-qbody" style="flex:1;font-size:15px;line-height:1.9;white-space:pre-wrap;user-select:text;cursor:text;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(q.body)+'</div><button onclick="editModalQBody(\"'+qid+'\")" style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;flex-shrink:0">✏️ 改题目</button></div>';
+  var editBtnId = 'edit-qbody-'+qid;
+  html+='<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:8px">'
+    +'<div id="modal-qbody" style="flex:1;font-size:15px;line-height:1.9;white-space:pre-wrap;user-select:text;cursor:text;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(q.body)+'</div>'
+    +'<button id="'+editBtnId+'" style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;flex-shrink:0;margin-top:2px">✏️ 改题目</button>'
+    +'</div>';
+  // Attach click handler after html is set (avoids quote escaping issues)
+  setTimeout(function(){
+    var editBtn=document.getElementById(editBtnId);
+    if(editBtn) editBtn.onclick=function(){ editModalQBody(qid); };
+  },30);
   if(annNote) html+='<div style="font-size:13px;color:#555;background:#fffbe6;border:1px solid #f0d060;border-radius:6px;padding:7px 10px;margin-bottom:8px;white-space:pre-wrap">📝 注释：'+esc(annNote)+'</div>';
 
   // Options (also selectable text)
