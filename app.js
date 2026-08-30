@@ -948,7 +948,7 @@ function openModal(qid,idx){
 
   // Selectable question body
   var annNote = (DB.qNotes&&DB.qNotes['ann_'+qid])||'';
-  html+='<div id="modal-qbody" style="font-size:15px;line-height:1.9;margin-bottom:8px;white-space:pre-wrap;user-select:text;cursor:text;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(q.body)+'</div>';
+  html+='<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:8px"><div id="modal-qbody" style="flex:1;font-size:15px;line-height:1.9;white-space:pre-wrap;user-select:text;cursor:text;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(q.body)+'</div><button onclick="editModalQBody(\"'+qid+'\")" style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;flex-shrink:0">✏️ 改题目</button></div>';
   if(annNote) html+='<div style="font-size:13px;color:#555;background:#fffbe6;border:1px solid #f0d060;border-radius:6px;padding:7px 10px;margin-bottom:8px;white-space:pre-wrap">📝 注释：'+esc(annNote)+'</div>';
 
   // Options (also selectable text)
@@ -983,7 +983,7 @@ function openModal(qid,idx){
 
   // Annotation box — syncs with result table
   html+='<div style="margin-top:12px;padding:10px 12px;background:#fffbe6;border:1px solid #f0d060;border-radius:8px">'
-    +'<div style="font-size:12px;font-weight:700;color:#8a6000;margin-bottom:6px">📌 我的标注（与总表同步）</div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:12px;font-weight:700;color:#8a6000">📌 我的标注（与总表同步）</div><label style="font-size:11px;color:#888;margin-left:auto;display:flex;align-items:center;gap:4px"><input type="checkbox" id="modal-autocopy" checked> 选字自动追加</label></div>'
     +'<textarea id="modal-qnote" placeholder="例如：更正为C / 答案有疑问 / 考点备注…" '
     +'style="width:100%;min-height:60px;padding:8px;border:1px solid #f0d060;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box;background:#fffdf5"'
     +'oninput="saveModalQNote()"></textarea>'
@@ -1064,6 +1064,14 @@ function closeModal(){
 }
 
 // Save annotation from modal — syncs to result table WITHOUT re-rendering page
+function editModalQBody(qid){
+  var q=null; DB.batches.forEach(function(b){b.questions.forEach(function(bq){if(bq.id===qid)q=bq;});});
+  if(!q)return;
+  var v=prompt('修改题目文字：',q.body); if(v===null||!v.trim())return;
+  q.body=v.trim(); saveDB();
+  var el=document.getElementById('modal-qbody'); if(el)el.textContent=q.body;
+  showToast('✓ 题目已修改');
+}
 function saveModalQNote(){
   if(!_mQid) return;
   var ta=document.getElementById('modal-qnote'); if(!ta) return;
@@ -1076,6 +1084,20 @@ function saveModalQNote(){
   updateQNoteInTable(_mQid);
 }
 
+function addResultAnnotation(qid){
+  var v=prompt('添加注释：',''); if(!v||!v.trim())return;
+  if(!DB.qNotes)DB.qNotes={}; DB.qNotes['ann_'+qid]=v.trim(); saveDB(); showResultPage();
+}
+function editResultAnnotation(qid){
+  if(!DB.qNotes)DB.qNotes={};
+  var v=prompt('修改注释：',DB.qNotes['ann_'+qid]||''); if(v===null)return;
+  if(v.trim())DB.qNotes['ann_'+qid]=v.trim(); else delete DB.qNotes['ann_'+qid];
+  saveDB(); showResultPage();
+}
+function deleteResultAnnotation(qid){
+  if(!confirm('删除注释？'))return;
+  if(DB.qNotes)delete DB.qNotes['ann_'+qid]; saveDB(); showResultPage();
+}
 function updateQNoteInTable(qid){
   // Find all note cells in result table and update just the annotation part
   var rows = document.querySelectorAll('#result-table tr');
