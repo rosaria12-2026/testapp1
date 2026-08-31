@@ -3172,7 +3172,10 @@ function renderSearch(){
     html+='</div></div>';
   });
   html+='</div><div id="kw-cards-list"></div><div id="search-results"></div>';
-  setTimeout(function(){var cl=document.getElementById('kw-cards-list');if(cl)cl.innerHTML=renderKwCardsList();},50);
+  setTimeout(function(){
+    var cl=document.getElementById('kw-cards-list'); if(cl) mountKwCardsList(cl);
+    refreshHfHighlights();
+  },80);
   area.innerHTML = html;
 }
 
@@ -3499,17 +3502,49 @@ function showKwCard(kw, txt, ts, count){
   wrap.appendChild(titleDiv); wrap.appendChild(contentDiv); wrap.appendChild(btnDiv);
   area.innerHTML=''; area.appendChild(wrap);
   renderAI(contentDiv, txt);
+  setTimeout(function(){var cl=document.getElementById('kw-cards-list');if(cl)mountKwCardsList(cl);},100);
 }
 
 function renderKwCardsList(){
-  if(!DB.kwCards) return '';
-  var keys=Object.keys(DB.kwCards); if(!keys.length) return '';
-  var html='<div class="card" style="padding:10px 14px;margin-bottom:0"><div style="font-size:12px;font-weight:700;color:#888;margin-bottom:6px">📁 已缓存的考点卡片（'+keys.length+'个）</div><div style="display:flex;flex-wrap:wrap;gap:5px">';
+  // Returns nothing - use mountKwCardsList(el) instead
+  return '';
+}
+
+function mountKwCardsList(el){
+  if(!el) return;
+  el.innerHTML='';
+  if(!DB.kwCards) return;
+  var keys=Object.keys(DB.kwCards);
+  if(!keys.length) return;
+  var card=document.createElement('div');
+  card.className='card';
+  card.style.cssText='padding:10px 14px;margin-bottom:0';
+  var title=document.createElement('div');
+  title.style.cssText='font-size:12px;font-weight:700;color:#888;margin-bottom:6px';
+  title.textContent='📁 已缓存的考点卡片（'+keys.length+'个，点击展开）';
+  card.appendChild(title);
+  var row=document.createElement('div');
+  row.style.cssText='display:flex;flex-wrap:wrap;gap:5px';
   keys.forEach(function(k){
     var d=new Date(DB.kwCards[k].ts).toLocaleDateString('zh-CN');
-    html+='<button data-kw="'+esc(k)+'" onclick="genKeywordCard(this.dataset.kw)" style="padding:3px 10px;border-radius:20px;border:1.5px solid #d4c9f5;background:#f0ebff;font-size:12px;cursor:pointer;color:#6040b0">'+esc(k)+'<span style="font-size:10px;color:#aaa;margin-left:4px">'+d+'</span></button>';
+    var btn=document.createElement('button');
+    btn.style.cssText='padding:4px 12px;border-radius:20px;border:1.5px solid #d4c9f5;background:#f0ebff;font-size:12px;cursor:pointer;color:#6040b0';
+    var label=document.createElement('span'); label.textContent=k;
+    var date=document.createElement('span');
+    date.style.cssText='font-size:10px;color:#aaa;margin-left:4px';
+    date.textContent=d;
+    btn.appendChild(label); btn.appendChild(date);
+    btn.onclick=(function(kw){ return function(){
+      genKeywordCard(kw);
+      setTimeout(function(){
+        var ca=document.getElementById('keyword-card-area');
+        if(ca) ca.scrollIntoView({behavior:'smooth',block:'nearest'});
+      },300);
+    }; })(k);
+    row.appendChild(btn);
   });
-  html+='</div></div>'; return html;
+  card.appendChild(row);
+  el.appendChild(card);
 }
 
 function saveCardToNotes(kw, txt){
