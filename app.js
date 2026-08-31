@@ -10,7 +10,7 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
@@ -19,6 +19,7 @@ function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } cat
 if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
+if(!DB.kwCards) DB.kwCards={};
 if(!DB.fillProgress) DB.fillProgress={};
 if(DB.lastPos===undefined) DB.lastPos=null;
 // Re-fix caseText for existing batches: clear wrong case assignments beyond range
@@ -1986,7 +1987,7 @@ function cloudUpload(){
     wrongMap:DB.wrongMap, dkMap:DB.dkMap, stats:DB.stats,
     starMap:DB.starMap, answerKeys:DB.answerKeys,
     lastPos:DB.lastPos, notes:DB.notes, qNotes:DB.qNotes||{},
-    fillBatches:DB.fillBatches||[], fillWrong:DB.fillWrong||[]
+    fillBatches:DB.fillBatches||[], fillWrong:DB.fillWrong||[], kwCards:DB.kwCards||{}
   };
 
   // Each batch = its own small doc (only progress + answers, not full questions)
@@ -2060,6 +2061,7 @@ function cloudDownload(){
               if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
+if(!DB.kwCards) DB.kwCards={};
 if(!DB.fillProgress) DB.fillProgress={};
               saveDB(); renderHome(); renderStudy();
               showToast('✓ 已下载（旧格式）');
@@ -2069,7 +2071,7 @@ if(!DB.fillProgress) DB.fillProgress={};
         DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
         DB.starMap=m.starMap||{}; DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
         DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{}; DB.hlCache={};
-    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[];
+    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[]; DB.kwCards=m.kwCards||{};
         DB.batches=m.batches||[]; DB.analysisCache={}; DB.studyPages=[];
         saveDB(); renderHome(); renderStudy();
         showToast('✓ 已下载（旧格式，建议重新上传）');
@@ -2081,7 +2083,7 @@ if(!DB.fillProgress) DB.fillProgress={};
     DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
     DB.starMap=m.starMap||{}; DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
     DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{}; DB.hlCache={};
-    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[];
+    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[]; DB.kwCards=m.kwCards||{};
 
     // Load batches
     var batchIds=batchIdxDoc.exists?(batchIdxDoc.data().ids||[]):[];
@@ -2153,6 +2155,7 @@ function renderStudy(){
   if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
+if(!DB.kwCards) DB.kwCards={};
 if(!DB.fillProgress) DB.fillProgress={};
 
   var html = '<div class="card">'
@@ -2540,6 +2543,7 @@ function renderFill(){
   var fp = document.getElementById('fill-area'); if(!fp) return;
   if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
+if(!DB.kwCards) DB.kwCards={};
 if(!DB.fillProgress) DB.fillProgress={};
   var html = '<div class="card">'
     +'<div class="row"><button class="btn" onclick="navBack()">← 返回</button>'
@@ -3138,6 +3142,7 @@ function renderSearch(){
     +'<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
     +'<input id="search-kw" class="full" style="flex:1;min-width:180px" placeholder="输入关键词，或点下方高频词…" onkeydown="if(event.key===\'Enter\')doSearch()"/>'
     +'<button class="btn primary" onclick="doSearch()">搜索</button>'
+    +'<button class="btn" style="background:#2e7d52;color:#fff" onclick="doSemanticSearch()">🔮 语义扩展</button>'
     +'</div>'
     +'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:13px">'
     +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="search-exact"> 精确匹配</label>'
@@ -3165,7 +3170,8 @@ function renderSearch(){
     });
     html+='</div></div>';
   });
-  html+='</div><div id="search-results"></div>';
+  html+='</div><div id="kw-cards-list"></div><div id="search-results"></div>';
+  setTimeout(function(){var cl=document.getElementById('kw-cards-list');if(cl)cl.innerHTML=renderKwCardsList();},50);
   area.innerHTML = html;
 }
 
@@ -3181,11 +3187,108 @@ function hfSearch(btn){
   // Set exact match for short precise terms
   var exact=document.getElementById('search-exact'); if(exact) exact.checked=(word.length<=4);
   doSearch();
-  // Scroll to results
+  if(DB.kwCards&&DB.kwCards[word]){ setTimeout(function(){genKeywordCard(word);},200); }
   setTimeout(function(){
     var res=document.getElementById('search-results');
     if(res) res.scrollIntoView({behavior:'smooth',block:'start'});
-  },100);
+  },400);
+}
+
+async function doSemanticSearch(){
+  var kw=(document.getElementById('search-kw')||{}).value||'';
+  kw=kw.trim(); if(!kw){showToast('请输入概括性词语，例如：五腧穴、西医、补泻手法');return;}
+  var inp=document.getElementById('search-kw'); if(inp) inp.disabled=true;
+  showToast('🔮 AI正在扩展「'+kw+'」的相关词…',5000);
+
+  // Step 1: Ask AI to generate related search terms
+  var expandPrompt='你是PCE针灸考试专家。请为概念「'+kw+'」生成相关的具体搜索词语列表，用于在题库中找出相关题目。'
+    +'要求：列出10-20个具体词语（不要笼统词），涵盖该概念下的子类、常见名称、症状、穴位、方法等。'
+    +'只输出词语列表，每行一个，不要编号，不要解释。';
+
+  try{
+    var expanded = await callClaude(expandPrompt, 500);
+    var terms = expanded.split(/[,，、;；\r\n]+/).map(function(t){return t.trim().replace(/^[0-9]+[.]\s*/,'');}).filter(function(t){return t.length>=2&&t.length<=12;});
+    if(inp) inp.disabled=false;
+
+    if(!terms.length){showToast('AI扩展失败，请直接搜索');return;}
+
+    // Show expanded terms and ask user to confirm
+    var area=document.getElementById('search-results'); if(!area)return;
+    var termBtns=terms.map(function(t){
+      return '<button class="search-term-btn" data-t="'+esc(t)+'" onclick="toggleTermBtn(this)" '
+        +'style="padding:3px 10px;border-radius:20px;border:1.5px solid #2e7d52;background:#e8f5ed;font-size:13px;cursor:pointer;color:#2e7d52">'+esc(t)+'</button>';
+    }).join('');
+
+    area.innerHTML='<div class="card" style="padding:12px 14px">'
+      +'<div style="font-size:13px;font-weight:700;color:#2e7d52;margin-bottom:8px">🔮 「'+esc(kw)+'」的相关词（可取消勾选）</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px" id="term-btns">'+termBtns+'</div>'
+      +'<div class="row" style="gap:8px">'
+      +'<button class="btn primary" onclick="runSemanticSearch()">用这些词搜索</button>'
+      +'<button class="btn small" onclick="selectAllTerms(true)">全选</button>'
+      +'<button class="btn small" onclick="selectAllTerms(false)">全不选</button>'
+      +'</div></div>';
+  }catch(e){
+    if(inp) inp.disabled=false;
+    showToast('扩展失败：'+e.message);
+  }
+}
+
+function toggleTermBtn(btn){
+  var active=btn.dataset.active==='1';
+  btn.dataset.active=active?'':'1';
+  btn.style.background=active?'#e8f5ed':'#2e7d52';
+  btn.style.color=active?'#2e7d52':'#fff';
+}
+
+function selectAllTerms(sel){
+  document.querySelectorAll('.search-term-btn').forEach(function(b){
+    b.dataset.active=sel?'1':'';
+    b.style.background=sel?'#2e7d52':'#e8f5ed';
+    b.style.color=sel?'#fff':'#2e7d52';
+  });
+}
+
+function runSemanticSearch(){
+  // Get selected terms (unselected = active='')
+  var terms=[];
+  document.querySelectorAll('.search-term-btn').forEach(function(b){
+    if(b.dataset.active!=='1') terms.push(b.dataset.t); // default = selected (green)
+    // Wait — initially all are selected (green bg = selected, dark = active means deselected)
+  });
+  // Actually: initially active='' = selected. active='1' = deselected
+  terms=[];
+  document.querySelectorAll('.search-term-btn').forEach(function(b){
+    if(b.dataset.active!=='1') terms.push(b.dataset.t);
+  });
+  if(!terms.length){showToast('请至少选一个词');return;}
+
+  // Run search with OR logic across all selected terms
+  _searchResults=[];
+  var inBody=document.getElementById('search-in-body')&&document.getElementById('search-in-body').checked;
+  var inOpts=document.getElementById('search-in-opts')&&document.getElementById('search-in-opts').checked;
+  var inAns=document.getElementById('search-in-ans')&&document.getElementById('search-in-ans').checked;
+  var inAI=document.getElementById('search-in-ai')&&document.getElementById('search-in-ai').checked;
+  var inNote=document.getElementById('search-in-note')&&document.getElementById('search-in-note').checked;
+  if(!inBody&&!inOpts&&!inAns&&!inAI&&!inNote){inBody=true;inOpts=true;}
+
+  DB.batches.forEach(function(batch){
+    (batch.questions||[]).forEach(function(q,qi){
+      var matchedIn=[], matchedTerms=[];
+      terms.forEach(function(term){
+        if(inBody&&q.body&&q.body.indexOf(term)>=0&&matchedIn.indexOf('题目')<0){matchedIn.push('题目');matchedTerms.push(term);}
+        if(inOpts&&q.opts){q.opts.forEach(function(o){if(o.text&&o.text.indexOf(term)>=0&&matchedIn.indexOf('选项')<0){matchedIn.push('选项');matchedTerms.push(term);}});}
+        if(inAns&&q.answer&&q.answer.indexOf(term)>=0&&matchedIn.indexOf('答案')<0){matchedIn.push('答案');matchedTerms.push(term);}
+        if(inAI&&DB.analysisCache&&DB.analysisCache[q.id]&&DB.analysisCache[q.id].indexOf(term)>=0&&matchedIn.indexOf('AI解析')<0){matchedIn.push('AI解析');matchedTerms.push(term);}
+        if(inNote&&DB.qNotes&&DB.qNotes['ann_'+q.id]&&DB.qNotes['ann_'+q.id].indexOf(term)>=0&&matchedIn.indexOf('注释')<0){matchedIn.push('注释');matchedTerms.push(term);}
+      });
+      if(matchedIn.length){
+        _searchResults.push({batchId:batch.id,batchName:batch.name,q:q,qIdx:qi,matchedIn:matchedIn,matchedTerms:matchedTerms});
+      }
+    });
+  });
+
+  var kw=document.getElementById('search-kw').value||'语义扩展';
+  renderSearchResults(kw+'（语义扩展：'+terms.slice(0,5).join('、')+(terms.length>5?'…':'')+'）');
 }
 
 function doSearch(){
@@ -3281,6 +3384,18 @@ function renderSearchResults(kw){
 }
 
 function genKeywordCard(kw){
+  if(!kw||!kw.trim()) return; kw=kw.trim();
+  if(!DB.kwCards) DB.kwCards={};
+  // Check cache (try exact, then trimmed)
+  var cacheKey = kw;
+  if(!DB.kwCards[cacheKey]){
+    // Try to find similar key
+    var allKeys = Object.keys(DB.kwCards);
+    for(var ki=0;ki<allKeys.length;ki++){
+      if(allKeys[ki].trim()===kw.trim()){cacheKey=allKeys[ki];break;}
+    }
+  }
+  if(DB.kwCards[cacheKey]){ showKwCard(cacheKey,DB.kwCards[cacheKey].txt,DB.kwCards[cacheKey].ts,DB.kwCards[cacheKey].count||0); return; }
   var area = document.getElementById('keyword-card-area'); if(!area) return;
   area.innerHTML='<div style="padding:12px;background:#f0ebff;border-radius:8px;color:#6040b0;font-size:13px;margin-bottom:10px">🧠 AI 正在分析「'+esc(kw)+'」相关题目，生成考点归纳…</div>';
   
@@ -3335,10 +3450,48 @@ function genKeywordCard(kw){
     area.innerHTML='';
     area.appendChild(cardDiv);
     // Render with full AI formatter
-    renderAI(contentDiv, txt);
+    // Save to cache
+    if(!DB.kwCards) DB.kwCards={};
+    DB.kwCards[kw]={txt:txt, ts:Date.now(), count:qs.length};
+    saveDB();
+    showKwCard(kw, txt, Date.now(), qs.length);
   }).catch(function(e){
     area.innerHTML='<div style="padding:10px;background:#fdeaea;border-radius:8px;color:#b83232;font-size:13px">❌ '+esc(e.message)+'<button class="btn small" onclick="genKeywordCard(document.getElementById(\'search-kw\').value)" style="margin-left:8px">重试</button></div>';
   });
+}
+
+function showKwCard(kw, txt, ts, count){
+  var area=document.getElementById('keyword-card-area'); if(!area)return;
+  var date=ts?new Date(ts).toLocaleDateString('zh-CN'):'';
+  var wrap=document.createElement('div');
+  wrap.style.cssText='background:#f0ebff;border:1px solid #d4c9f5;border-radius:10px;padding:14px 16px;margin-bottom:12px';
+  var titleDiv=document.createElement('div');
+  titleDiv.style.cssText='display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px';
+  titleDiv.innerHTML='<span style="font-size:14px;font-weight:700;color:#6040b0">🧠 「'+esc(kw)+'」考点归纳</span>'
+    +'<span style="font-size:11px;color:#aaa">'+esc(date)+' · '+count+'道题</span>'
+    +'<span style="font-size:11px;background:#e8e4f8;color:#6040b0;padding:1px 7px;border-radius:10px;margin-left:auto">已缓存</span>';
+  var contentDiv=document.createElement('div');
+  var btnDiv=document.createElement('div');
+  btnDiv.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #d4c9f5';
+  function mkBtn(label,cls,fn){var b=document.createElement('button');b.className='btn small'+(cls?' '+cls:'');b.textContent=label;b.onclick=fn;return b;}
+  btnDiv.appendChild(mkBtn('🔄 重新生成','blue',function(){if(DB.kwCards)delete DB.kwCards[kw];saveDB();genKeywordCard(kw);}));
+  btnDiv.appendChild(mkBtn('📝 存入笔记本','',function(){saveCardToNotes(kw,txt);}));
+  btnDiv.appendChild(mkBtn('🗑 删除缓存','red',function(){if(!confirm('删除「'+kw+'」的缓存？'))return;if(DB.kwCards)delete DB.kwCards[kw];saveDB();area.innerHTML='';showToast('已删除');}));
+  btnDiv.appendChild(mkBtn('收起','',function(){area.innerHTML='';}));
+  wrap.appendChild(titleDiv); wrap.appendChild(contentDiv); wrap.appendChild(btnDiv);
+  area.innerHTML=''; area.appendChild(wrap);
+  renderAI(contentDiv, txt);
+}
+
+function renderKwCardsList(){
+  if(!DB.kwCards) return '';
+  var keys=Object.keys(DB.kwCards); if(!keys.length) return '';
+  var html='<div class="card" style="padding:10px 14px;margin-bottom:0"><div style="font-size:12px;font-weight:700;color:#888;margin-bottom:6px">📁 已缓存的考点卡片（'+keys.length+'个）</div><div style="display:flex;flex-wrap:wrap;gap:5px">';
+  keys.forEach(function(k){
+    var d=new Date(DB.kwCards[k].ts).toLocaleDateString('zh-CN');
+    html+='<button data-kw="'+esc(k)+'" onclick="genKeywordCard(this.dataset.kw)" style="padding:3px 10px;border-radius:20px;border:1.5px solid #d4c9f5;background:#f0ebff;font-size:12px;cursor:pointer;color:#6040b0">'+esc(k)+'<span style="font-size:10px;color:#aaa;margin-left:4px">'+d+'</span></button>';
+  });
+  html+='</div></div>'; return html;
 }
 
 function saveCardToNotes(kw, txt){
