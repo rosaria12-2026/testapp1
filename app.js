@@ -10,7 +10,7 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
@@ -20,6 +20,7 @@ if(!DB.studyPages) DB.studyPages=[];
 if(!DB.fillBatches) DB.fillBatches=[];
 if(!DB.fillWrong) DB.fillWrong=[];
 if(!DB.kwCards) DB.kwCards={};
+if(!DB.searchHistory) DB.searchHistory={};
 if(!DB.fillProgress) DB.fillProgress={};
 if(DB.lastPos===undefined) DB.lastPos=null;
 // Re-fix caseText for existing batches: clear wrong case assignments beyond range
@@ -3177,14 +3178,20 @@ function renderSearch(){
 
 function hfSearch(btn){
   var word = btn.dataset.word;
-  // Highlight selected button
+  if(!DB.searchHistory) DB.searchHistory={};
+  DB.searchHistory[word]=Date.now();
+  saveDB();
+  // Reset all, then highlight searched ones
   document.querySelectorAll('[data-word]').forEach(function(b){
-    b.dataset.active=''; b.style.background='#f8f7f3'; b.style.color='#333'; b.style.borderColor='#ddd';
+    var s=DB.searchHistory&&DB.searchHistory[b.dataset.word];
+    var isCur=b===btn;
+    b.dataset.active=isCur?'1':'';
+    b.style.background=isCur?'#e8effa':s?'#fff3cd':'#f8f7f3';
+    b.style.color=isCur?'#1a4fa0':s?'#8a6000':'#333';
+    b.style.borderColor=isCur?'#b8d0f0':s?'#f0d060':'#ddd';
+    b.style.fontWeight=s?'700':'400';
   });
-  btn.dataset.active='1'; btn.style.background='#e8effa'; btn.style.color='#1a4fa0'; btn.style.borderColor='#b8d0f0';
-  // Set search input and search
   var inp=document.getElementById('search-kw'); if(inp) inp.value=word;
-  // Set exact match for short precise terms
   var exact=document.getElementById('search-exact'); if(exact) exact.checked=(word.length<=4);
   doSearch();
   if(DB.kwCards&&DB.kwCards[word]){ setTimeout(function(){genKeywordCard(word);},200); }
@@ -3193,6 +3200,17 @@ function hfSearch(btn){
     if(res) res.scrollIntoView({behavior:'smooth',block:'start'});
   },400);
 }
+
+function refreshHfHighlights(){
+  if(!DB.searchHistory) return;
+  document.querySelectorAll('[data-word]').forEach(function(b){
+    if(DB.searchHistory[b.dataset.word] && b.dataset.active!=='1'){
+      b.style.background='#fff3cd'; b.style.color='#8a6000';
+      b.style.borderColor='#f0d060'; b.style.fontWeight='700';
+    }
+  });
+}
+
 
 async function doSemanticSearch(){
   var kw=(document.getElementById('search-kw')||{}).value||'';
