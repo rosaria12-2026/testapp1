@@ -401,10 +401,9 @@ function startBatchFiltered(batchId, mode){
     dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false,autoAdvance:true};
   QZ.returnToBatchId=batchId;
   // Set required DOM elements like startBatchFrom does
-  // Use one-page quiz mode instead of auto-jump
-  _onePageQs = qs;
-  _onePageBatchId = batchId;
-  renderOnePageQuiz();
+  var qb=document.getElementById('q-batch'); if(qb) qb.textContent=filteredBatch.name;
+  var qt=document.getElementById('q-total'); if(qt) qt.textContent=qs.length;
+  navTo('quiz'); loadQ(0);
 }
 
 function getHfWords(){
@@ -889,9 +888,9 @@ function startHFRemainingQuiz(){
     questions:remaining,progress:{idx:0,answers:new Array(remaining.length).fill(null),dk:{},_committed:{}}};
   QZ={batch:batch,qs:remaining,cur:0,ans:new Array(remaining.length).fill(null),
     dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false};
-  _onePageQs = remaining;
-  _onePageBatchId = null;
-  renderOnePageQuiz();
+  var qb=document.getElementById('q-batch'); if(qb) qb.textContent=batch.name;
+  var qt=document.getElementById('q-total'); if(qt) qt.textContent=remaining.length;
+  navTo('quiz'); loadQ(0);
 }
 
 // ═══════════════════════════════════════
@@ -3742,7 +3741,7 @@ function renderSearchResults(kw){
     +'<div class="spacer"></div>'
     +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
     +'<button class="btn" style="background:#6040b0;color:#fff" onclick="genKeywordCard(document.getElementById(\'search-kw\').value)">🧠 考点归纳卡片</button>'
-    +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startOnePageQuiz()">📋 一页做完</button>'
+    +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startSearchQuiz(false)">▶ 做题（自动跳题）</button>'
     +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
     +'<button class="btn blue" onclick="searchAddToBatch()">➕ 加入已有批次</button>'
     +'</div>'
