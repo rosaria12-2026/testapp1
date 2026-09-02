@@ -2261,48 +2261,78 @@ function cloudDownload(){
   if(typeof firebase==='undefined'){showToast('请先配置Firebase');return;}
   var user=firebase.auth().currentUser; if(!user){showToast('请先登录');return;}
   showToast('下载中…',8000);
-  var col=firebase.firestore().collection('users').doc(user.uid).collection('data');
-  // Try new split format first
-  col.doc('meta_v2').get().then(function(metaDoc){
-    if(metaDoc.exists){
-      // New format: meta + batches
-      var meta=JSON.parse(metaDoc.data().meta);
-      col.doc('batch_index_v2').get().then(function(idxDoc){
-        var ids=idxDoc.exists?(idxDoc.data().ids||[]):[];
-        Promise.all(ids.map(function(id){return col.doc('b_'+id).get();}))
-          .then(function(docs){
-            var batches=docs.filter(function(d){return d.exists;}).map(function(d){return JSON.parse(d.data().data);});
-            meta.batches=batches;
-            DB=meta;
-            ['analysisCache','notes','starMap','answerKeys','hlCache','qNotes','fillBatches','fillWrong','kwCards','searchHistory','customKw','kwNotes','hfQids','fillProgress','studyPages'].forEach(function(k){
-              if(!DB[k]) DB[k]=(['notes','fillBatches','fillWrong','customKw','studyPages'].indexOf(k)>=0)?[]:{};
-            });
-            saveDB(); renderHome();
-            showToast('✓ 已下载（'+DB.batches.length+'批次 · '+Object.keys(DB.wrongMap||{}).length+'错题）');
-          });
-      });
-    } else {
-      // Try old single doc format
-      col.doc('main').get().then(function(doc){
-        if(doc.exists){
-          DB=JSON.parse(doc.data().db);
-          ['analysisCache','notes','starMap'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
-          saveDB(); renderHome();
-          showToast('✓ 已下载（'+DB.batches.length+'批次）');
-        } else {
-          // Try very old format
-          firebase.firestore().collection('users').doc(user.uid).get().then(function(oldDoc){
-            if(!oldDoc.exists){showToast('云端暂无数据');return;}
-            DB=JSON.parse(oldDoc.data().db);
-            ['analysisCache','notes','starMap'].forEach(function(k){if(!DB[k])DB[k]=k==='notes'?[]:{};});
-            saveDB(); renderHome();
-            showToast('✓ 已下载（旧格式）');
-          });
-        }
-      });
+  var uid=user.uid;
+  var col=firebase.firestore().collection('users').doc(uid).collection('data');
+  // Fetch all documents in parallel
+  Promise.all([
+    col.doc('batch_index').get().catch(function(){return null;}),
+    col.doc('meta2').get().catch(function(){return null;}),
+    col.doc('meta3').get().catch(function(){return null;}),
+    col.doc('meta4').get().catch(function(){return null;}),
+    col.doc('meta5').get().catch(function(){return null;}),
+    col.doc('analysis_0').get().catch(function(){return null;}),
+    col.doc('meta_v2').get().catch(function(){return null;}),
+    col.doc('batch_index_v2').get().catch(function(){return null;})
+  ]).then(function(results){
+    var batchIdxDoc=results[0];
+    var m2=results[1]&&results[1].exists?results[1].data():{};
+    var m3=results[2]&&results[2].exists?results[2].data():{};
+    var m4=results[3]&&results[3].exists?results[3].data():{};
+    var m5=results[4]&&results[4].exists?results[4].data():{};
+    var a0=results[5]&&results[5].exists?results[5].data():{};
+    var metaV2=results[6]&&results[6].exists?results[6].data():null;
+    var batchIdxV2=results[7]&&results[7].exists?results[7].data():null;
+
+    // Restore meta fields
+    DB.notes=m2.notes||[];
+    DB.qNotes=m2.qNotes||{};
+    DB.wrongMap=m3.wrongMap||{};
+    DB.dkMap=m3.dkMap||{};
+    DB.starMap=m3.starMap||{};
+    DB.answerKeys=m3.answerKeys||{};
+    DB.fillBatches=m4.fillBatches||[];
+    DB.fillWrong=m4.fillWrong||[];
+    DB.kwCards=m4.kwCards||{};
+    DB.searchHistory=m4.searchHistory||{};
+    DB.studyPages=typeof m5.studyPages==='string'?JSON.parse(m5.studyPages||'[]'):(m5.studyPages||[]);
+    DB.customKw=typeof m5.customKw==='string'?JSON.parse(m5.customKw||'[]'):(m5.customKw||[]);
+    DB.kwNotes=m5.kwNotes||{};
+    DB.hfQids=m5.hfQids||{};
+    DB.fillProgress=typeof m5.fillProgress==='string'?JSON.parse(m5.fillProgress||'{}'):(m5.fillProgress||{});
+    DB.analysisCache=a0.cache||{};
+
+    // Also try meta_v2 for additional fields
+    if(metaV2&&metaV2.meta){
+      try{
+        var mv=JSON.parse(metaV2.meta);
+        if(!Object.keys(DB.wrongMap).length&&mv.wrongMap) DB.wrongMap=mv.wrongMap;
+        if(!DB.notes.length&&mv.notes) DB.notes=mv.notes;
+        if(mv.stats) DB.stats=mv.stats;
+        if(mv.lastPos) DB.lastPos=mv.lastPos;
+      }catch(e){}
     }
+
+    // Fetch batches
+    var batchIds=[];
+    if(batchIdxDoc&&batchIdxDoc.exists) batchIds=batchIdxDoc.data().ids||[];
+    else if(batchIdxV2) batchIds=batchIdxV2.ids||[];
+
+    if(!batchIds.length){
+      saveDB(); renderHome();
+      showToast('✓ 已下载（无批次数据）');
+      return;
+    }
+
+    Promise.all(batchIds.map(function(id){
+      return col.doc('batch_'+id).get().catch(function(){return null;});
+    })).then(function(docs){
+      DB.batches=docs.filter(function(d){return d&&d.exists;}).map(function(d){return d.data();});
+      saveDB(); renderHome();
+      showToast('✓ 已下载（'+DB.batches.length+'批次 · '+DB.notes.length+'笔记 · '+Object.keys(DB.wrongMap).length+'错题）');
+    });
   }).catch(function(e){showToast('下载失败：'+e.message);});
 }
+
 
 
 // ═══════════════════════════════════════════════════════
