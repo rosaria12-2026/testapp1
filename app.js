@@ -3229,7 +3229,12 @@ var HF_KEYWORDS = [
 
 function renderSearch(){
   var area = document.getElementById('search-area'); if(!area) return;
-  var html = '<div class="card">'
+  var html = '<div id="kw-cards-top" class="card" style="padding:10px 14px;margin-bottom:8px">'
+    +'<div style="font-size:12px;font-weight:700;color:#888;margin-bottom:6px">📁 考点卡片（点击展开/再点收起）</div>'
+    +'<div id="kw-cards-top-btns" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"></div>'
+    +'<div id="keyword-card-area"></div>'
+    +'</div>'
+  +'<div class="card">'
     +'<div class="row"><div class="title">🔍 搜题</div></div>'
     +'<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
     +'<input id="search-kw" class="full" style="flex:1;min-width:180px" placeholder="输入关键词，或点下方高频词…" onkeydown="if(event.key===\'Enter\')doSearch()"/>'
@@ -3301,6 +3306,7 @@ function renderSearch(){
 
   area.innerHTML = html;
   setTimeout(function(){
+    mountTopKwCards();
     var cl=document.getElementById('kw-cards-list'); if(cl) mountKwCardsList(cl);
     mountCustomKw();
     loadSearchNote();
@@ -3549,11 +3555,11 @@ function renderSearchResults(kw){
     +'<div class="spacer"></div>'
     +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
     +'<button class="btn" style="background:#6040b0;color:#fff" onclick="genKeywordCard(document.getElementById(\'search-kw\').value)">🧠 考点归纳卡片</button>'
-    +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startSearchQuiz(true)">▶ 隐藏答案做题</button>'
+    +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startInlineQuiz()">📝 在页面做题</button>'
     +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
     +'<button class="btn blue" onclick="searchAddToBatch()">➕ 加入已有批次</button>'
     +'</div>'
-    +'<div id="keyword-card-area"></div>';
+    +''; // keyword-card-area moved to top
 
   _searchResults.forEach(function(r,ri){
     var annNote = DB.qNotes&&DB.qNotes['ann_'+r.q.id]||'';
@@ -3562,14 +3568,26 @@ function renderSearchResults(kw){
       var isAns=o.letter===r.q.answer;
       return '<div style="padding:3px 0;color:'+(isAns?'#2e7d52':'#333')+';font-weight:'+(isAns?'700':'400')+';font-size:13px">'+esc(o.letter+'. '+o.text)+(isAns?' <span style="background:#2e7d52;color:#fff;border-radius:3px;padding:0 4px;font-size:11px">✓</span>':'')+'</div>';
     }).join('') : '';
-    html+='<div style="padding:10px 0;border-bottom:1px solid #eee">'
+    // Inline quiz options (hidden until startInlineQuiz)
+    var inlineOpts = r.q.opts&&r.q.opts.length ? r.q.opts.map(function(o){
+      return '<button class="iq-opt" data-ri="'+ri+'" data-l="'+esc(o.letter)+'" onclick="pickInlineOpt(parseInt(this.dataset.ri),this.dataset.l)" '
+        +'style="padding:6px 10px;border:1.5px solid #ddd;border-radius:8px;margin:2px;font-size:13px;cursor:pointer;background:#fafaf8;color:#333">'
+        +esc(o.letter+'. '+o.text)+'</button>';
+    }).join('') : '';
+
+    html+='<div class="sr-item" style="padding:10px 0;border-bottom:1px solid #eee" data-ri="'+ri+'">'
       +'<div style="display:flex;align-items:flex-start;gap:8px">'
       +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:4px;flex-shrink:0">'
       +'<div style="flex:1">'
       +'<div style="font-size:11px;color:#888;margin-bottom:4px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题</div>'
       +'<div style="font-size:14px;line-height:1.7;color:#222;margin-bottom:6px;user-select:text">'+esc(r.q.body||'')+'</div>'
-      +(r.q.answer?'<div style="font-size:13px;color:#2e7d52;font-weight:700;margin-bottom:6px;background:#e8f5ed;padding:5px 10px;border-radius:6px">✓ '+esc(r.q.answer)+'. '+(correctOpt?esc(correctOpt.text):'')+'</div>':'')
+      // Correct answer (hidden when in quiz mode, shown by default)
+      +(r.q.answer?'<div class="sr-answer-'+ri+'" style="font-size:13px;color:#2e7d52;font-weight:700;margin-bottom:6px;background:#e8f5ed;padding:5px 10px;border-radius:6px">✓ '+esc(r.q.answer)+'. '+(correctOpt?esc(correctOpt.text):'')+'</div>':'')
+      // Inline quiz options (hidden by default)
+      +'<div class="iq-opts-'+ri+'" style="display:none;margin-bottom:6px;flex-wrap:wrap">'+inlineOpts+'</div>'
+      +'<div class="iq-result-'+ri+'" style="display:none;margin-bottom:6px;font-size:13px"></div>'
       +(annNote?'<div style="font-size:12px;color:#555;background:#fffbe6;padding:3px 7px;border-radius:4px;margin-bottom:4px">📝 '+esc(annNote)+'</div>':'')
+      // Expandable all options
       +'<div id="sr-detail-'+ri+'" style="display:none;margin-top:4px;padding:8px;background:#f8f7f3;border-radius:8px">'+optsHtml
       +(DB.analysisCache&&DB.analysisCache[r.q.id]?'<div style="margin-top:6px;padding:6px 8px;background:#f0ebff;border-radius:6px;font-size:12px;white-space:pre-wrap">🤖 '+esc((DB.analysisCache[r.q.id]||'').slice(0,300))+'</div>':'')
       +'</div>'
@@ -3589,6 +3607,41 @@ function renderSearchResults(kw){
     var panel=document.getElementById('search-note-panel'); if(panel) panel.style.display='block';
     ta.value=ta.value?ta.value+'\n'+txt:txt;
     saveSearchNote(); showToast('✓ 已复制到笔记');
+  });
+}
+
+function mountTopKwCards(){
+  var area=document.getElementById('kw-cards-top-btns'); if(!area)return;
+  area.innerHTML='';
+  if(!DB.kwCards||!Object.keys(DB.kwCards).length){
+    area.innerHTML='<span style="font-size:11px;color:#ccc">还没有考点卡片 — 搜词后点「🧠 考点归纳卡片」生成</span>';
+    return;
+  }
+  Object.keys(DB.kwCards).forEach(function(k){
+    var d=new Date(DB.kwCards[k].ts).toLocaleDateString('zh-CN');
+    var btn=document.createElement('button');
+    btn.id='kwtop-'+k;
+    btn.style.cssText='padding:4px 12px;border-radius:20px;border:1.5px solid #d4c9f5;background:#f0ebff;font-size:12px;cursor:pointer;color:#6040b0';
+    btn.innerHTML=esc(k)+'<span style="font-size:10px;color:#aaa;margin-left:4px">'+d+'</span>'
+      +'<span style="margin-left:6px;color:#b83232;font-size:11px" data-kwtop-del="'+esc(k)+'">✕</span>';
+    btn.onclick=(function(kw,b){ return function(e){
+      // Delete button
+      if(e.target.dataset.kwTopDel){
+        if(!confirm('删除「'+kw+'」的卡片？'))return;
+        delete DB.kwCards[kw]; saveDB(); mountTopKwCards(); return;
+      }
+      var ca=document.getElementById('keyword-card-area');
+      if(ca&&ca.dataset.openKw===kw){
+        ca.innerHTML=''; ca.dataset.openKw='';
+        b.style.background='#f0ebff'; b.style.color='#6040b0';
+      } else {
+        document.querySelectorAll('[id^="kwtop-"]').forEach(function(x){x.style.background='#f0ebff';x.style.color='#6040b0';});
+        b.style.background='#6040b0'; b.style.color='#fff';
+        if(ca) ca.dataset.openKw=kw;
+        showKwCard(kw,DB.kwCards[kw].txt,DB.kwCards[kw].ts,DB.kwCards[kw].count||0);
+      }
+    }; })(k,btn);
+    area.appendChild(btn);
   });
 }
 
@@ -3835,6 +3888,82 @@ function saveCardToNotes(kw, txt){
   if(!DB.notes) DB.notes=[];
   DB.notes.push({id:uid(), type:'ai-summary', title:'考点归纳：'+kw, content:txt, ts:Date.now()});
   saveDB(); showToast('✓ 已存入笔记本');
+}
+
+var _inlineAnswers = {};
+var _inlineMode = false;
+
+function startInlineQuiz(){
+  _inlineAnswers={};
+  _inlineMode=true;
+  // Hide correct answers, show option buttons
+  _searchResults.forEach(function(r,ri){
+    var ansEl=document.querySelector('.sr-answer-'+ri);
+    var optsEl=document.querySelector('.iq-opts-'+ri);
+    var resEl=document.querySelector('.iq-result-'+ri);
+    if(ansEl) ansEl.style.display='none';
+    if(optsEl) optsEl.style.display='flex';
+    if(resEl) resEl.style.display='none';
+  });
+  showToast('📝 做题模式：选完答案后点「一键核对」');
+  // Show check button
+  var hdr=document.querySelector('#search-results .card>.row');
+  if(hdr){
+    var checkBtn=document.getElementById('inline-check-btn');
+    if(!checkBtn){
+      checkBtn=document.createElement('button');
+      checkBtn.id='inline-check-btn';
+      checkBtn.className='btn';
+      checkBtn.style.cssText='background:#2e7d52;color:#fff';
+      checkBtn.textContent='✓ 一键核对';
+      checkBtn.onclick=checkInlineQuiz;
+      hdr.appendChild(checkBtn);
+    }
+    checkBtn.style.display='inline';
+  }
+}
+
+function pickInlineOpt(ri, letter){
+  _inlineAnswers[ri]=letter;
+  // Highlight selected option
+  document.querySelectorAll('.iq-opt[data-ri="'+ri+'"]').forEach(function(b){
+    var isMe=b.dataset.l===letter;
+    b.style.background=isMe?'#e8effa':'#fafaf8';
+    b.style.borderColor=isMe?'#1a4fa0':'#ddd';
+    b.style.color=isMe?'#1a4fa0':'#333';
+    b.style.fontWeight=isMe?'700':'400';
+  });
+}
+
+function checkInlineQuiz(){
+  var correct=0, total=_searchResults.length, answered=0;
+  _searchResults.forEach(function(r,ri){
+    var my=_inlineAnswers[ri];
+    if(my) answered++;
+    var isOk=my&&r.q.answer&&my.toUpperCase()===r.q.answer.toUpperCase();
+    if(isOk) correct++;
+    // Color options
+    document.querySelectorAll('.iq-opt[data-ri="'+ri+'"]').forEach(function(b){
+      if(b.dataset.l===r.q.answer){b.style.background='#e8f5ed';b.style.borderColor='#2e7d52';b.style.color='#2e7d52';b.style.fontWeight='700';}
+      else if(b.dataset.l===my&&!isOk){b.style.background='#fdeaea';b.style.borderColor='#b83232';b.style.color='#b83232';}
+    });
+    // Show result
+    var resEl=document.querySelector('.iq-result-'+ri);
+    if(resEl){
+      resEl.style.display='block';
+      if(!my) resEl.innerHTML='<span style="color:#888">未作答 — 答案：'+esc(r.q.answer||'?')+'</span>';
+      else if(isOk) resEl.innerHTML='<span style="color:#2e7d52;font-weight:700">✓ 正确！</span>';
+      else resEl.innerHTML='<span style="color:#b83232;font-weight:700">✗ 你选：'+esc(my)+' · 正确：'+esc(r.q.answer||'?')+'</span>';
+    }
+    // Update wrongMap
+    if(my&&r.q.answer){
+      var b2=DB.batches.find(function(x){return x.id===r.batchId;});
+      if(isOk){delete DB.wrongMap[r.q.id];}
+      else DB.wrongMap[r.q.id]={q:r.q,batchId:r.batchId,batchName:r.batchName,myAns:my};
+    }
+  });
+  saveDB();
+  showToast('✓ 核对完成！答对'+correct+'/'+answered+'（共'+total+'题）',4000);
 }
 
 function toggleSearchDetail(ri){
