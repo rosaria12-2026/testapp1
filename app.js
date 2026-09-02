@@ -887,7 +887,9 @@ function startHFRemainingQuiz(){
   var batch={id:'hf_remain_'+Date.now(),name:'高频词剩余题('+remaining.length+'题)',
     questions:remaining,progress:{idx:0,answers:new Array(remaining.length).fill(null),dk:{},_committed:{}}};
   QZ={batch:batch,qs:remaining,cur:0,ans:new Array(remaining.length).fill(null),
-    dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:true};
+    dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false};
+  var qb=document.getElementById('q-batch'); if(qb) qb.textContent=batch.name;
+  var qt=document.getElementById('q-total'); if(qt) qt.textContent=remaining.length;
   navTo('quiz'); loadQ(0);
 }
 
