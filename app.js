@@ -1484,7 +1484,7 @@ function renderAI(el,txt){
     var part=parts[i];
     if(/^【[^】]+】$/.test(part)){
       var label=part.slice(1,-1);
-      var colorMap={'解题逻辑':'#2e7d52','混淆点':'#b83232','一句话记忆':'#8a6000','错误原因':'#b83232','正确思路':'#2e7d52','核心知识点':'#1a4fa0'};
+      var colorMap={'解题逻辑':'#2e7d52','混淆点':'#b83232','一句话记忆':'#8a6000','一句话记忆法':'#8a6000','答题口诀':'#8a6000','错误原因':'#b83232','正确思路':'#2e7d52','核心知识点':'#1a4fa0','核心要点':'#1a4fa0','正确答案判断':'#2e7d52','鉴别对比表':'#b83232','高频陷阱':'#b83232','高频考点':'#6040b0'};
       var color=colorMap[label]||'#6040b0';
       var body=(parts[i+1]||'').trim(); i++;
       html+='<div style="font-size:11px;font-weight:700;color:'+color+';margin:10px 0 4px;letter-spacing:.3px">▌ '+esc(label)+'</div>';
@@ -3761,7 +3761,12 @@ function genKeywordCard(kw){
 }
 
 function showKwCard(kw, txt, ts, count){
-  var area=document.getElementById('keyword-card-area'); if(!area)return;
+  var area=document.getElementById('keyword-card-area');
+  if(!area){
+    // keyword-card-area might not exist yet, try to show search page first
+    showToast('请先打开搜索页再查看考点卡片');
+    return;
+  }
   var date=ts?new Date(ts).toLocaleDateString('zh-CN'):'';
   var wrap=document.createElement('div');
   wrap.style.cssText='background:#f0ebff;border:1px solid #d4c9f5;border-radius:10px;padding:14px 16px;margin-bottom:12px';
