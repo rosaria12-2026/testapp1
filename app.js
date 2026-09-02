@@ -931,7 +931,7 @@ function renderOnePageQuiz(){
     +'</div>';
 
   qs.forEach(function(q,qi){
-    html+='<div class="card" id="opq-'+qi+'" style="margin-bottom:12px">'
+    html+='<div id="opq-'+qi+'" style="background:#fff;border:1px solid #e0ddd8;border-radius:10px;padding:16px;margin-bottom:12px">'
       +'<div style="font-size:12px;color:#888;margin-bottom:6px">第'+(qi+1)+'题</div>'
       +'<div style="font-size:15px;line-height:1.8;margin-bottom:10px">'+esc(q.body||'')+'</div>'
       +'<div id="opq-opts-'+qi+'">';
