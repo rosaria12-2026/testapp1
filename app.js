@@ -111,6 +111,7 @@ function showPage(name) {
   window.scrollTo({top:0, behavior:'smooth'});
 }
 function navTo(name) {
+  var ov=document.getElementById('onepage-overlay'); if(ov) ov.parentNode.removeChild(ov);
   if (_pageStack[_pageStack.length-1] !== name) _pageStack.push(name);
   showPage(name);
 }
