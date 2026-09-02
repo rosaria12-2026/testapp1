@@ -10,7 +10,7 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{}, customKw:[], kwNotes:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
@@ -3415,6 +3415,75 @@ function renderSearchResults(kw){
     ta.value=ta.value?ta.value+'\n'+txt:txt;
     saveSearchNote(); showToast('✓ 已复制到笔记');
   });
+}
+
+function addCustomKw(){
+  var inp=document.getElementById('custom-kw-input'); if(!inp)return;
+  var w=inp.value.trim(); if(!w){showToast('请输入词语');return;}
+  if(!DB.customKw) DB.customKw=[];
+  if(DB.customKw.indexOf(w)>=0){showToast('已存在');return;}
+  DB.customKw.push(w); saveDB(); inp.value=''; mountCustomKw(); showToast('✓ 已添加：'+w);
+}
+
+function deleteCustomKw(w){
+  if(!DB.customKw)return;
+  DB.customKw=DB.customKw.filter(function(k){return k!==w;});
+  saveDB(); mountCustomKw();
+}
+
+function mountCustomKw(){
+  var area=document.getElementById('custom-kw-area'); if(!area)return;
+  area.innerHTML='';
+  if(!DB.customKw||!DB.customKw.length){
+    area.innerHTML='<span style="font-size:11px;color:#ccc">还没有自定义词</span>';
+    return;
+  }
+  DB.customKw.forEach(function(w){
+    var searched=DB.searchHistory&&DB.searchHistory[w];
+    var hasNote=DB.kwNotes&&DB.kwNotes[w];
+    var btn=document.createElement('button');
+    btn.style.cssText='padding:3px 8px;border-radius:20px;border:1px solid '+(searched?'#f0d060':'#ddd')+';background:'+(searched?'#fff3cd':'#f8f7f3')+';font-size:12px;cursor:pointer;color:'+(searched?'#8a6000':'#333');
+    var label=document.createElement('span'); label.textContent=w+(hasNote?'★':'');
+    var del=document.createElement('span');
+    del.textContent=' ✕'; del.style.cssText='color:#ccc;font-size:10px;cursor:pointer';
+    del.onclick=function(e){e.stopPropagation();deleteCustomKw(w);};
+    btn.appendChild(label); btn.appendChild(del);
+    btn.onclick=function(e){
+      if(e.target===del)return;
+      if(!DB.searchHistory)DB.searchHistory={};
+      DB.searchHistory[w]=Date.now(); saveDB();
+      var inp=document.getElementById('search-kw'); if(inp) inp.value=w;
+      doSearch();
+      if(DB.kwCards&&DB.kwCards[w]) setTimeout(function(){genKeywordCard(w);},200);
+      setTimeout(function(){var res=document.getElementById('search-results');if(res)res.scrollIntoView({behavior:'smooth',block:'start'});},400);
+      mountCustomKw(); refreshHfHighlights();
+    };
+    area.appendChild(btn);
+  });
+}
+
+function loadSearchNote(){
+  var ta=document.getElementById('search-note-txt'); if(!ta)return;
+  var note=(DB.kwNotes&&DB.kwNotes['__search__'])||'';
+  ta.value=note;
+  var panel=document.getElementById('search-note-panel');
+  if(panel) panel.style.display=note?'block':'none';
+}
+
+function saveSearchNote(){
+  var ta=document.getElementById('search-note-txt'); if(!ta)return;
+  if(!DB.kwNotes) DB.kwNotes={};
+  var val=ta.value.trim();
+  if(val) DB.kwNotes['__search__']=val; else delete DB.kwNotes['__search__'];
+  saveDB();
+}
+
+function saveSearchNoteToNotes(){
+  var ta=document.getElementById('search-note-txt'); if(!ta||!ta.value.trim())return;
+  var kw=(document.getElementById('search-kw')||{}).value||'搜索';
+  if(!DB.notes) DB.notes=[];
+  DB.notes.push({id:uid(),type:'search-note',title:'搜索笔记：'+kw.slice(0,20),content:ta.value,ts:Date.now()});
+  saveDB(); showToast('✓ 已存入笔记本');
 }
 
 function genKeywordCard(kw){
