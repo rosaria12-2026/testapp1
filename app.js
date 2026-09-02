@@ -2284,10 +2284,10 @@ function cloudUpload(){
   var extraOp = col.doc('extra_data').set({
     kwCards:DB.kwCards||{},
     searchHistory:DB.searchHistory||{},
-    customKw:DB.customKw||[],
+    customKw:JSON.stringify(DB.customKw||[]),
     kwNotes:DB.kwNotes||{},
     hfQids:DB.hfQids||{},
-    fillProgress:DB.fillProgress||{},
+    fillProgress:JSON.stringify(DB.fillProgress||{}),
     ts:Date.now()
   });
   var allOps = [col.doc('meta').set(meta), extraOp, batchIndex, analysisIndex, studyIndex]
@@ -2343,10 +2343,10 @@ if(!DB.fillProgress) DB.fillProgress={};
     var exDoc=results[1]; var ex=exDoc&&exDoc.exists?exDoc.data():{};
     DB.kwCards=ex.kwCards||m.kwCards||{};
     DB.searchHistory=ex.searchHistory||{};
-    DB.customKw=ex.customKw||[];
+    DB.customKw=typeof ex.customKw==='string'?JSON.parse(ex.customKw||'[]'):(ex.customKw||[]);
     DB.kwNotes=ex.kwNotes||{};
     DB.hfQids=ex.hfQids||{};
-    DB.fillProgress=ex.fillProgress||{};
+    DB.fillProgress=typeof ex.fillProgress==='string'?JSON.parse(ex.fillProgress||'{}'):(ex.fillProgress||{});
         DB.batches=m.batches||[]; DB.analysisCache={}; DB.studyPages=[];
         saveDB(); renderHome(); renderStudy();
         showToast('✓ 已下载（旧格式，建议重新上传）');
@@ -2363,10 +2363,10 @@ if(!DB.fillProgress) DB.fillProgress={};
     var exDoc=results[1]; var ex=exDoc&&exDoc.exists?exDoc.data():{};
     DB.kwCards=ex.kwCards||m.kwCards||{};
     DB.searchHistory=ex.searchHistory||{};
-    DB.customKw=ex.customKw||[];
+    DB.customKw=typeof ex.customKw==='string'?JSON.parse(ex.customKw||'[]'):(ex.customKw||[]);
     DB.kwNotes=ex.kwNotes||{};
     DB.hfQids=ex.hfQids||{};
-    DB.fillProgress=ex.fillProgress||{};
+    DB.fillProgress=typeof ex.fillProgress==='string'?JSON.parse(ex.fillProgress||'{}'):(ex.fillProgress||{});
 
     // Load batches
     var batchIds=batchIdxDoc.exists?(batchIdxDoc.data().ids||[]):[];
