@@ -2312,9 +2312,17 @@ function cloudDownload(){
     col.doc('extra_data').get().catch(function(){return null;}),
     col.doc('batch_index').get(),
     col.doc('study_index').get(),
-    col.doc('analysis_index').get()
+    col.doc('analysis_index').get(),
+    col.doc('meta2').get().catch(function(){return null;}),
+    col.doc('meta3').get().catch(function(){return null;}),
+    col.doc('meta4').get().catch(function(){return null;}),
+    col.doc('meta5').get().catch(function(){return null;})
   ]).then(function(results){
-    var metaDoc=results[0], batchIdxDoc=results[1], studyIdxDoc=results[2], analysisIdxDoc=results[3];
+    var metaDoc=results[0], batchIdxDoc=results[2], studyIdxDoc=results[3], analysisIdxDoc=results[4];
+    var m2=results[5]&&results[5].exists?results[5].data():{};
+    var m3=results[6]&&results[6].exists?results[6].data():{};
+    var m4=results[7]&&results[7].exists?results[7].data():{};
+    var m5=results[8]&&results[8].exists?results[8].data():{};
 
     if(!metaDoc.exists){
       // Fallback: try old 'main' doc format
@@ -2355,18 +2363,19 @@ if(!DB.fillProgress) DB.fillProgress={};
 
     // Load meta
     var m=metaDoc.data();
-    DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
-    DB.starMap=m.starMap||{}; DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
-    DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{}; DB.hlCache={};
-    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[];
-    // Restore from extra_data doc (index 1 in Promise.all results)
+    DB.wrongMap=m3.wrongMap||m.wrongMap||{}; DB.dkMap=m3.dkMap||m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
+    DB.starMap=m3.starMap||m.starMap||{}; DB.answerKeys=m3.answerKeys||m.answerKeys||{}; DB.lastPos=m.lastPos||null;
+    DB.notes=m2.notes||m.notes||[]; DB.qNotes=m2.qNotes||m.qNotes||{}; DB.hlCache={};
+    DB.fillBatches=m4.fillBatches||m.fillBatches||[]; DB.fillWrong=m4.fillWrong||m.fillWrong||[];
+    // Restore from extra_data or meta4/meta5
     var exDoc=results[1]; var ex=exDoc&&exDoc.exists?exDoc.data():{};
-    DB.kwCards=ex.kwCards||m.kwCards||{};
-    DB.searchHistory=ex.searchHistory||{};
-    DB.customKw=typeof ex.customKw==='string'?JSON.parse(ex.customKw||'[]'):(ex.customKw||[]);
-    DB.kwNotes=ex.kwNotes||{};
-    DB.hfQids=ex.hfQids||{};
-    DB.fillProgress=typeof ex.fillProgress==='string'?JSON.parse(ex.fillProgress||'{}'):(ex.fillProgress||{});
+    DB.kwCards=m4.kwCards||ex.kwCards||{};
+    DB.searchHistory=m4.searchHistory||ex.searchHistory||{};
+    DB.customKw=typeof m5.customKw==='string'?JSON.parse(m5.customKw||'[]'):(m5.customKw||ex.customKw||[]);
+    DB.kwNotes=m5.kwNotes||ex.kwNotes||{};
+    DB.hfQids=m5.hfQids||ex.hfQids||{};
+    DB.fillProgress=typeof m5.fillProgress==='string'?JSON.parse(m5.fillProgress||'{}'):(m5.fillProgress||ex.fillProgress||{});
+    DB.studyPages=typeof m5.studyPages==='string'?JSON.parse(m5.studyPages||'[]'):(m5.studyPages||[]);
 
     // Load batches
     var batchIds=batchIdxDoc.exists?(batchIdxDoc.data().ids||[]):[];
