@@ -686,6 +686,8 @@ function loadQ(i){
     hind.style.display='block';
   } else if(hind) hind.style.display='none';
   rebuildActions(); startTimer();
+  var bsBtn=document.getElementById('back-to-search-btn');
+  if(bsBtn) bsBtn.style.display=(QZ.batch&&QZ.batch._isTemp)?'inline-block':'none';
   // Load annotation for this question
   loadQAnnotation(q.id);
 }
@@ -3554,27 +3556,25 @@ function renderSearchResults(kw){
     +'<div id="keyword-card-area"></div>';
 
   _searchResults.forEach(function(r,ri){
-    var preview = (r.q.body||'').replace(/\n/g,' ').slice(0,60);
     var annNote = DB.qNotes&&DB.qNotes['ann_'+r.q.id]||'';
+    var correctOpt = r.q.opts ? r.q.opts.find(function(o){return o.letter===r.q.answer;}) : null;
+    var optsHtml = r.q.opts&&r.q.opts.length ? r.q.opts.map(function(o){
+      var isAns=o.letter===r.q.answer;
+      return '<div style="padding:3px 0;color:'+(isAns?'#2e7d52':'#333')+';font-weight:'+(isAns?'700':'400')+';font-size:13px">'+esc(o.letter+'. '+o.text)+(isAns?' <span style="background:#2e7d52;color:#fff;border-radius:3px;padding:0 4px;font-size:11px">✓</span>':'')+'</div>';
+    }).join('') : '';
     html+='<div style="padding:10px 0;border-bottom:1px solid #eee">'
       +'<div style="display:flex;align-items:flex-start;gap:8px">'
       +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:4px;flex-shrink:0">'
-      +'<div style="flex:1;cursor:pointer" onclick="toggleSearchDetail('+ri+')">'
-      +'<div style="font-size:11px;color:#888;margin-bottom:2px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题 · 匹配：'+r.matchedIn.join('、')+'</div>'
-      +'<div style="font-size:14px;line-height:1.6;color:#333">'+esc(preview)+'…</div>'
-      +(r.q.answer?'<div style="font-size:12px;color:#2e7d52;margin-top:2px;font-weight:700">答案：'+esc(r.q.answer)+'</div>':'')
-      +(annNote?'<div style="font-size:12px;color:#555;background:#fffbe6;padding:3px 7px;border-radius:4px;margin-top:4px">📝 '+esc(annNote)+'</div>':'')
+      +'<div style="flex:1">'
+      +'<div style="font-size:11px;color:#888;margin-bottom:4px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题</div>'
+      +'<div style="font-size:14px;line-height:1.7;color:#222;margin-bottom:6px;user-select:text">'+esc(r.q.body||'')+'</div>'
+      +(r.q.answer?'<div style="font-size:13px;color:#2e7d52;font-weight:700;margin-bottom:6px;background:#e8f5ed;padding:5px 10px;border-radius:6px">✓ '+esc(r.q.answer)+'. '+(correctOpt?esc(correctOpt.text):'')+'</div>':'')
+      +(annNote?'<div style="font-size:12px;color:#555;background:#fffbe6;padding:3px 7px;border-radius:4px;margin-bottom:4px">📝 '+esc(annNote)+'</div>':'')
+      +'<div id="sr-detail-'+ri+'" style="display:none;margin-top:4px;padding:8px;background:#f8f7f3;border-radius:8px">'+optsHtml
+      +(DB.analysisCache&&DB.analysisCache[r.q.id]?'<div style="margin-top:6px;padding:6px 8px;background:#f0ebff;border-radius:6px;font-size:12px;white-space:pre-wrap">🤖 '+esc((DB.analysisCache[r.q.id]||'').slice(0,300))+'</div>':'')
       +'</div>'
-      +'<span style="font-size:11px;color:#aaa;flex-shrink:0;cursor:pointer" onclick="toggleSearchDetail('+ri+')">▼ 展开</span>'
+      +'<span style="font-size:11px;color:#aaa;cursor:pointer" onclick="toggleSearchDetail('+ri+')">▼ 展开选项</span>'
       +'</div>'
-      // Detail (hidden by default)
-      +'<div id="sr-detail-'+ri+'" style="display:none;margin-top:8px;padding:10px;background:#f8f7f3;border-radius:8px;font-size:13px;line-height:1.8">'
-      +esc(r.q.body||'')
-      +(r.q.opts&&r.q.opts.length?'<div style="margin-top:6px">'+r.q.opts.map(function(o){
-        var isAns=o.letter===r.q.answer;
-        return '<div style="padding:2px 0;color:'+(isAns?'#2e7d52':'#333')+';font-weight:'+(isAns?'700':'400')+'">'+esc(o.letter+'. '+o.text)+(isAns?' ✓':'')+'</div>';
-      }).join('')+'</div>':'')
-      +(DB.analysisCache&&DB.analysisCache[r.q.id]?'<div style="margin-top:8px;padding:8px;background:#f0ebff;border-radius:6px;font-size:12px;white-space:pre-wrap">🤖 '+esc((DB.analysisCache[r.q.id]||'').slice(0,300))+'</div>':'')
       +'</div>'
       +'</div>';
   });
