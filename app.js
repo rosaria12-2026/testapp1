@@ -2281,6 +2281,15 @@ function cloudUpload(){
     ids:studyPages.map(function(pg){return pg.id;}), ts:Date.now()
   });
 
+  var extraOp = col.doc('extra_data').set({
+    kwCards:DB.kwCards||{},
+    searchHistory:DB.searchHistory||{},
+    customKw:DB.customKw||[],
+    kwNotes:DB.kwNotes||{},
+    hfQids:DB.hfQids||{},
+    fillProgress:DB.fillProgress||{},
+    ts:Date.now()
+  });
   var allOps = [col.doc('meta').set(meta), extraOp, batchIndex, analysisIndex, studyIndex]
     .concat(batchOps).concat(cacheOps).concat(studyOps);
 
