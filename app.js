@@ -3365,22 +3365,20 @@ function startMultiSearch(){
 }
 
 function hfSearch(cbOrBtn){
-  // Accept either a checkbox input or a span with data-word
   var word = cbOrBtn.dataset.word;
   if(!word) return;
-  var word = btn.dataset.word;
   if(!DB.searchHistory) DB.searchHistory={};
+  if(DB.searchHistory[word]){
+    delete DB.searchHistory[word];
+    saveDB(); refreshHfHighlights(); return;
+  }
   DB.searchHistory[word]=Date.now();
-  saveDB();
-  refreshHfHighlights();
+  saveDB(); refreshHfHighlights();
   var inp=document.getElementById('search-kw'); if(inp) inp.value=word;
   var exact=document.getElementById('search-exact'); if(exact) exact.checked=(word.length<=4);
   doSearch();
   if(DB.kwCards&&DB.kwCards[word]){ setTimeout(function(){genKeywordCard(word);},200); }
-  setTimeout(function(){
-    var res=document.getElementById('search-results');
-    if(res) res.scrollIntoView({behavior:'smooth',block:'start'});
-  },400);
+  setTimeout(function(){var res=document.getElementById('search-results');if(res)res.scrollIntoView({behavior:'smooth',block:'start'});},400);
 }
 
 function refreshHfHighlights(){
@@ -3674,29 +3672,15 @@ if(!DB.hfQids) DB.hfQids={};
 
 function saveSearchNoteToNotes(){
   var ta=document.getElementById('search-note-txt'); if(!ta||!ta.value.trim())return;
-  var kw=(document.getElementById('search-kw')||{}).value||'搜索';
-  kw=kw.trim();
+  var kw=(document.getElementById('search-kw')||{}).value||'搜索'; kw=kw.trim();
   if(!DB.notes) DB.notes=[];
-  // Find existing unified keyword notebook
   var unified=null;
-  for(var ni=0;ni<DB.notes.length;ni++){
-    if(DB.notes[ni].type==='kw-notebook'){unified=DB.notes[ni];break;}
-  }
-  var timestamp=new Date().toLocaleDateString('zh-CN');
-  var newEntry='\n\n【'+kw+'】'+timestamp+'\n'+ta.value.trim();
-  if(unified){
-    unified.content=(unified.content||'')+newEntry;
-    unified.ts=Date.now();
-  } else {
-    DB.notes.unshift({id:uid(),type:'kw-notebook',title:'🔍 高频词笔记本',content:'高频词搜索笔记（按词分段）'+newEntry,ts:Date.now()});
-  }
-  // Mark kw as having note
-  if(!DB.kwNotes) DB.kwNotes={};
-  if(kw) DB.kwNotes['__kw__'+kw]=true;
-  saveDB();
-  refreshHfHighlights();
-  if(typeof mountCustomKw==='function') mountCustomKw();
-  showToast('✓ 已追加到「高频词笔记本」');
+  for(var ni=0;ni<DB.notes.length;ni++){if(DB.notes[ni].type==='hf-notebook'){unified=DB.notes[ni];break;}}
+  var entry='\n\n【'+kw+'】'+new Date().toLocaleDateString('zh-CN')+'\n'+ta.value.trim();
+  if(unified){unified.content=(unified.content||'')+entry;unified.ts=Date.now();}
+  else DB.notes.unshift({id:uid(),type:'hf-notebook',title:'🔍 高频考题笔记本',content:'高频考题搜索笔记'+entry,ts:Date.now()});
+  if(!DB.kwNotes)DB.kwNotes={}; DB.kwNotes['__kw__'+kw]=true;
+  saveDB(); showToast('✓ 已追加到「高频考题笔记本」');
 }
 
 function genKeywordCard(kw){
@@ -3909,20 +3893,16 @@ function searchDoAddToBatch(){
 function startSearchQuiz(hideAnswer){
   if(!_searchResults.length){showToast('没有搜索结果');return;}
   var qs=_searchResults.map(function(r){return r.q;});
-  // Deduplicate by id
   var seen={}, unique=[];
   qs.forEach(function(q){if(!seen[q.id]){seen[q.id]=true;unique.push(q);}});
-  // Tag for HF tracking
-  if(!DB.hfQids) DB.hfQids={};
-  unique.forEach(function(q){ DB.hfQids[q.id]=true; }); saveDB();
   if(!unique.length){showToast('没有题目');return;}
-  // Create a temporary batch
   var bname='搜索结果 ('+unique.length+'题)';
-  var batch={id:'search_tmp_'+Date.now(),name:bname,questions:unique,
+  var batch={id:'search_tmp_'+Date.now(),_isTemp:true,name:bname,questions:unique,
     progress:{idx:0,answers:new Array(unique.length).fill(null),dk:{},_committed:{}}};
   QZ={batch:batch,qs:unique,cur:0,ans:new Array(unique.length).fill(null),
-    dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,
-    hideAnswer:!!hideAnswer};
+    dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:!!hideAnswer};
+  var qb=document.getElementById('q-batch'); if(qb) qb.textContent=bname;
+  var qt=document.getElementById('q-total'); if(qt) qt.textContent=unique.length;
   navTo('quiz'); loadQ(0);
 }
 
