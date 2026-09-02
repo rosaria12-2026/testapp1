@@ -3174,12 +3174,37 @@ function renderSearch(){
     });
     html+='</div></div>';
   });
-  html+='</div><div id="kw-cards-list"></div><div id="search-results"></div>';
+  // Close the HF keyword card, then add custom kw as separate card
+  html+='</div>'; // close HF card
+  html+='<div class="card" style="padding:10px 14px">'
+    +'<div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">⭐ 我的自定义词</div>'
+    +'<div id="custom-kw-area" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"></div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<input id="custom-kw-input" placeholder="输入新词语，回车添加…" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px" onkeydown="if(event.keyCode===13)addCustomKw()"/>'
+    +'<button class="btn small" onclick="addCustomKw()">+ 添加</button>'
+    +'</div>'
+  +'</div>'
+  +'<div id="kw-cards-list"></div>'
+  +'<div style="display:flex;gap:12px;align-items:flex-start">'
+  +'<div id="search-results" style="flex:1;min-width:0"></div>'
+  +'<div id="search-note-panel" style="width:210px;flex-shrink:0;position:sticky;top:70px;display:none">'
+  +'<div style="background:#fffbe6;border:1.5px solid #f0d060;border-radius:10px;padding:10px 12px">'
+  +'<div style="font-size:12px;font-weight:700;color:#8a6000;margin-bottom:4px">📝 搜索笔记</div>'
+  +'<label style="font-size:11px;color:#aaa;display:flex;align-items:center;gap:3px;margin-bottom:4px"><input type="checkbox" id="snote-autocopy" checked> 选字自动复制</label>'
+  +'<textarea id="search-note-txt" placeholder="选中题目文字自动追加…" style="width:100%;min-height:100px;padding:6px;border:1px solid #f0d060;border-radius:6px;font-size:12px;resize:vertical;box-sizing:border-box;background:#fffdf5" oninput="saveSearchNote()"></textarea>'
+  +'<div style="display:flex;gap:4px;margin-top:6px">'
+  +'<button class="btn small" onclick="saveSearchNoteToNotes()" style="font-size:11px">📚 存笔记本</button>'
+  +'<button class="btn small" onclick="clearSearchNote()" style="font-size:11px;color:#888">清空</button>'
+  +'</div></div></div>'
+  +'</div>';
+
+  area.innerHTML = html;
   setTimeout(function(){
     var cl=document.getElementById('kw-cards-list'); if(cl) mountKwCardsList(cl);
+    mountCustomKw();
+    loadSearchNote();
     refreshHfHighlights();
   },80);
-  area.innerHTML = html;
 }
 
 function hfSearch(btn){
@@ -3470,6 +3495,10 @@ function loadSearchNote(){
   if(panel) panel.style.display=note?'block':'none';
 }
 
+function clearSearchNote(){
+  var ta=document.getElementById('search-note-txt'); if(!ta)return;
+  ta.value=''; saveSearchNote();
+}
 function saveSearchNote(){
   var ta=document.getElementById('search-note-txt'); if(!ta)return;
   if(!DB.kwNotes) DB.kwNotes={};
