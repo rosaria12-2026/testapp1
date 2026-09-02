@@ -119,6 +119,7 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
         <button class="btn small orange" id="dkbtn" onclick="toggleDK()">不会</button>
         <button class="btn small primary" onclick="nextQ()">确认/下一题 →</button>
         <button class="btn small red spacer" onclick="finishQuiz()">结束</button>
+        <button class="btn small" id="back-to-search-btn" style="display:none" onclick="navTo('search')">🔍 回搜题</button>
       </div>
     </div>
   </section>
@@ -239,7 +240,7 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 </div>
 <div id="toast"></div>
 
-<script src="app.js?v=110"></script>
+<script src="app.js?v=111"></script>
 <script>
   // Init notes page when tab clicked
   document.querySelector('.tab[data-page="notes"]').addEventListener('click', function(){ renderNotes(); });
