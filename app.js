@@ -2244,18 +2244,8 @@ function cloudUpload(){
     wrongMap:DB.wrongMap, dkMap:DB.dkMap, stats:DB.stats,
     starMap:DB.starMap, answerKeys:DB.answerKeys,
     lastPos:DB.lastPos, notes:DB.notes, qNotes:DB.qNotes||{},
-    fillBatches:DB.fillBatches||[], fillWrong:DB.fillWrong||[]
+    fillBatches:DB.fillBatches||[], fillWrong:DB.fillWrong||[], kwCards:DB.kwCards||{}
   };
-  // Large/growing fields go in their own doc so 'meta' stays under Firestore's index-field limit
-  var extraOp = col.doc('extra_data').set({
-    kwCards:DB.kwCards||{},
-    searchHistory:DB.searchHistory||{},
-    customKw:DB.customKw||[],
-    kwNotes:DB.kwNotes||{},
-    hfQids:DB.hfQids||{},
-    fillProgress:DB.fillProgress||{},
-    ts:Date.now()
-  });
 
   // Each batch = its own small doc (only progress + answers, not full questions)
   var batchOps = DB.batches.map(function(b){
@@ -2291,6 +2281,15 @@ function cloudUpload(){
     ids:studyPages.map(function(pg){return pg.id;}), ts:Date.now()
   });
 
+  var extraOp = col.doc('extra_data').set({
+    kwCards:DB.kwCards||{},
+    searchHistory:DB.searchHistory||{},
+    customKw:DB.customKw||[],
+    kwNotes:DB.kwNotes||{},
+    hfQids:DB.hfQids||{},
+    fillProgress:DB.fillProgress||{},
+    ts:Date.now()
+  });
   var allOps = [col.doc('meta').set(meta), extraOp, batchIndex, analysisIndex, studyIndex]
     .concat(batchOps).concat(cacheOps).concat(studyOps);
 
