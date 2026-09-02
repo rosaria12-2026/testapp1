@@ -393,7 +393,9 @@ function startBatchFiltered(batchId, mode){
   }
   var labels={excludeHf:'排除高频',wrongOnly:'只做错题',dkOnly:'只做不会'};
   var filteredBatch={
-    id:batch.id,
+    id:'tmp_filtered_'+Date.now(),
+    _isTemp:true,
+    _realBatchId:batch.id,
     name:batch.name+'（'+labels[mode]+' '+qs.length+'题）',
     questions:qs,
     progress:{idx:0,answers:new Array(qs.length).fill(null),dk:{},_committed:{}}
@@ -828,7 +830,7 @@ function autoSave(i,ans){
   QZ.batch.progress.answers=QZ.ans;
   QZ.batch.progress.idx=QZ.cur;
   QZ.batch.progress.dk=QZ.dk;
-  // Save last played position for resumeQuiz
+  if(QZ.batch._isTemp) return; // don't save temp batches to DB
   DB.lastPos={batchId:QZ.batch.id, idx:QZ.cur};
   saveDB();
 }
@@ -885,7 +887,7 @@ function startHFRemainingQuiz(){
     return DB.hfQids[q.id] && (!QZ.ans[i]||QZ.ans[i]==='skip');
   });
   if(!remaining.length){showToast('高频词题目已全部作答！');return;}
-  var batch={id:'hf_remain_'+Date.now(),name:'高频词剩余题('+remaining.length+'题)',
+  var batch={id:'hf_remain_'+Date.now(),_isTemp:true,name:'高频词剩余题('+remaining.length+'题)',
     questions:remaining,progress:{idx:0,answers:new Array(remaining.length).fill(null),dk:{},_committed:{}}};
   QZ={batch:batch,qs:remaining,cur:0,ans:new Array(remaining.length).fill(null),
     dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false};
@@ -1036,6 +1038,11 @@ function commitResults(){
     // Mark as committed
     if(!batch.progress._committed) batch.progress._committed={};
     batch.progress._committed[q.id]=true;
+  }
+  if(!QZ.batch._isTemp){
+    // Save real batch progress
+    var realBatch=DB.batches.find(function(b){return b.id===QZ.batch.id;});
+    if(realBatch) realBatch.progress=QZ.batch.progress;
   }
   saveDB(); renderHome();
 }
