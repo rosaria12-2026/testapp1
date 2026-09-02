@@ -401,9 +401,10 @@ function startBatchFiltered(batchId, mode){
     dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false,autoAdvance:true};
   QZ.returnToBatchId=batchId;
   // Set required DOM elements like startBatchFrom does
-  var qb=document.getElementById('q-batch'); if(qb) qb.textContent=filteredBatch.name;
-  var qt=document.getElementById('q-total'); if(qt) qt.textContent=qs.length;
-  navTo('quiz'); loadQ(0);
+  // Use one-page quiz mode instead of auto-jump
+  _onePageQs = qs;
+  _onePageBatchId = batchId;
+  renderOnePageQuiz();
 }
 
 function getHfWords(){
@@ -888,9 +889,125 @@ function startHFRemainingQuiz(){
     questions:remaining,progress:{idx:0,answers:new Array(remaining.length).fill(null),dk:{},_committed:{}}};
   QZ={batch:batch,qs:remaining,cur:0,ans:new Array(remaining.length).fill(null),
     dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false};
-  var qb=document.getElementById('q-batch'); if(qb) qb.textContent=batch.name;
-  var qt=document.getElementById('q-total'); if(qt) qt.textContent=remaining.length;
-  navTo('quiz'); loadQ(0);
+  _onePageQs = remaining;
+  _onePageBatchId = null;
+  renderOnePageQuiz();
+}
+
+// ═══════════════════════════════════════
+// ONE-PAGE QUIZ
+// ═══════════════════════════════════════
+var _onePageQs = [];
+var _onePageBatchId = null;
+var _onePageAns = {};
+
+function startOnePageQuiz(){
+  if(!_searchResults.length){showToast('没有搜索结果');return;}
+  var seen={}, qs=[];
+  _searchResults.forEach(function(r){if(!seen[r.q.id]){seen[r.q.id]=true;qs.push(r.q);}});
+  _onePageQs=qs; _onePageBatchId=null;
+  renderOnePageQuiz();
+}
+
+function renderOnePageQuiz(){
+  var qs=_onePageQs;
+  if(!qs||!qs.length){showToast('没有题目');return;}
+  _onePageAns={};
+  var area=document.getElementById('search-area')||document.getElementById('home');
+  // Use a full page overlay
+  var overlay=document.getElementById('onepage-overlay');
+  if(!overlay){
+    overlay=document.createElement('div');
+    overlay.id='onepage-overlay';
+    overlay.style.cssText='position:fixed;inset:0;background:#f8f7f3;z-index:200;overflow-y:auto;padding:16px';
+    document.body.appendChild(overlay);
+  }
+
+  var html='<div style="max-width:900px;margin:0 auto">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #ddd;position:sticky;top:0;background:#f8f7f3;z-index:10;padding-top:8px">'
+    +'<div style="font-size:18px;font-weight:700;flex:1">📋 一页做题（'+qs.length+'题）</div>'
+    +'<button class="btn primary" onclick="submitOnePageQuiz()">✓ 提交答案</button>'
+    +'<button class="btn" onclick="closeOnePageQuiz()">✕ 关闭</button>'
+    +'</div>';
+
+  qs.forEach(function(q,qi){
+    html+='<div class="card" id="opq-'+qi+'" style="margin-bottom:12px">'
+      +'<div style="font-size:12px;color:#888;margin-bottom:6px">第'+(qi+1)+'题</div>'
+      +'<div style="font-size:15px;line-height:1.8;margin-bottom:10px">'+esc(q.body||'')+'</div>'
+      +'<div id="opq-opts-'+qi+'">';
+    if(q.opts&&q.opts.length){
+      q.opts.forEach(function(o){
+        html+='<div style="padding:8px 12px;border:1.5px solid #ddd;border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:14px;transition:all .15s" '
+        html+='<div style="padding:8px 12px;border:1.5px solid #ddd;border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:14px" '
+          +'id="opq-'+qi+'-'+o.letter+'" data-qi="'+qi+'" data-l="'+o.letter+'" '
+          +'onclick="pickOnePageOpt(parseInt(this.dataset.qi),this.dataset.l)">'
+      });
+    }
+    html+='</div>'
+      +'<div id="opq-result-'+qi+'" style="display:none;margin-top:6px;font-size:13px"></div>'
+      +'</div>';
+  });
+
+  html+='<div style="text-align:center;padding:16px">'
+    +'<button class="btn primary" onclick="submitOnePageQuiz()" style="padding:12px 32px;font-size:16px">✓ 提交答案查看结果</button>'
+    +'</div></div>';
+
+  overlay.innerHTML=html;
+  overlay.style.display='block';
+}
+
+function pickOnePageOpt(qi, letter){
+  _onePageAns[qi]=letter;
+  // Highlight selected
+  var q=_onePageQs[qi]; if(!q) return;
+  if(q.opts) q.opts.forEach(function(o){
+    var el=document.getElementById('opq-'+qi+'-'+o.letter);
+    if(!el) return;
+    el.style.background=o.letter===letter?'#e8effa':'';
+    el.style.borderColor=o.letter===letter?'#1a4fa0':'#ddd';
+    el.style.color=o.letter===letter?'#1a4fa0':'#333';
+  });
+}
+
+function submitOnePageQuiz(){
+  var qs=_onePageQs;
+  var correct=0, total=0;
+  qs.forEach(function(q,qi){
+    total++;
+    var myAns=_onePageAns[qi]||'';
+    var isOk=myAns&&q.answer&&myAns.toUpperCase()===q.answer.toUpperCase();
+    if(isOk) correct++;
+    // Show result for each question
+    var resEl=document.getElementById('opq-result-'+qi);
+    if(resEl){
+      resEl.style.display='block';
+      resEl.innerHTML=isOk
+        ?'<span style="color:#2e7d52;font-weight:700">✓ 正确！答案：'+esc(q.answer)+'</span>'
+        :'<span style="color:#b83232;font-weight:700">✗ 你选：'+(myAns||'未选')+' · 正确：'+esc(q.answer||'?')+'</span>';
+    }
+    // Color the correct option green
+    if(q.opts) q.opts.forEach(function(o){
+      var el=document.getElementById('opq-'+qi+'-'+o.letter);
+      if(!el) return;
+      if(o.letter===q.answer){el.style.background='#e8f5ed';el.style.borderColor='#2e7d52';el.style.color='#2e7d52';el.style.fontWeight='700';}
+      else if(o.letter===myAns&&!isOk){el.style.background='#fdeaea';el.style.borderColor='#b83232';el.style.color='#b83232';}
+    });
+    // Update wrong/dk maps
+    if(myAns&&q.answer){
+      if(isOk){delete DB.wrongMap[q.id];}
+      else{var b=DB.batches.find(function(x){return x.questions.some(function(bq){return bq.id===q.id;});});DB.wrongMap[q.id]={q:q,batchId:b?b.id:'',batchName:b?b.name:'',myAns:myAns};}
+    }
+  });
+  saveDB();
+  // Scroll to top and show score
+  var overlay=document.getElementById('onepage-overlay');
+  if(overlay) overlay.scrollTo({top:0,behavior:'smooth'});
+  showToast('✓ 提交完成！答对 '+correct+'/'+total+' 题（'+Math.round(correct/total*100)+'%）', 4000);
+}
+
+function closeOnePageQuiz(){
+  var overlay=document.getElementById('onepage-overlay');
+  if(overlay) overlay.style.display='none';
 }
 
 function commitResults(){
@@ -3625,7 +3742,7 @@ function renderSearchResults(kw){
     +'<div class="spacer"></div>'
     +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
     +'<button class="btn" style="background:#6040b0;color:#fff" onclick="genKeywordCard(document.getElementById(\'search-kw\').value)">🧠 考点归纳卡片</button>'
-    +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startSearchQuiz(true)">▶ 隐藏答案做题</button>'
+    +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startOnePageQuiz()">📋 一页做完</button>'
     +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
     +'<button class="btn blue" onclick="searchAddToBatch()">➕ 加入已有批次</button>'
     +'</div>'
@@ -3922,6 +4039,14 @@ function saveCardToNotes(kw, txt){
   if(!DB.notes) DB.notes=[];
   DB.notes.push({id:uid(), type:'ai-summary', title:'考点归纳：'+kw, content:txt, ts:Date.now()});
   saveDB(); showToast('✓ 已存入笔记本');
+}
+
+function toggleDoneHf(btn){
+  var hide=btn.textContent.indexOf('隐藏')>=0;
+  document.querySelectorAll('.sr-item[data-donehf="1"]').forEach(function(el){
+    el.style.display=hide?'none':'';
+  });
+  btn.textContent=hide?'👁 显示已做高频题':'🙈 隐藏已做高频题';
 }
 
 function toggleSearchDetail(ri){
