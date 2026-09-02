@@ -956,16 +956,16 @@ function renderOnePageQuiz(){
   overlay.style.display='block';
 }
 
-function pickOnePageOpt(qi, letter){
+function pickOnePageOpt(qi, letter){ pickOnePageOpt2(qi,letter); }
+function pickOnePageOpt2(qi, letter){
   _onePageAns[qi]=letter;
   // Highlight selected
   var q=_onePageQs[qi]; if(!q) return;
   if(q.opts) q.opts.forEach(function(o){
     var el=document.getElementById('opq-'+qi+'-'+o.letter);
     if(!el) return;
-    el.style.background=o.letter===letter?'#e8effa':'';
-    el.style.borderColor=o.letter===letter?'#1a4fa0':'#ddd';
-    el.style.color=o.letter===letter?'#1a4fa0':'#333';
+    if(o.letter===letter){el.style.background='#e8effa';el.style.borderColor='#1a4fa0';el.style.color='#1a4fa0';el.style.fontWeight='700';}
+    else{el.style.background='#fafaf8';el.style.borderColor='#ddd';el.style.color='#333';el.style.fontWeight='400';}
   });
 }
 
