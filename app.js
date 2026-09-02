@@ -10,7 +10,7 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{}, customKw:[], kwNotes:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{}, customKw:[], kwNotes:{}, hfQids:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
@@ -624,6 +624,20 @@ function loadQ(i){
     btn.addEventListener('click',(function(letter,b){return function(){pickOpt(letter,b);};})(o.letter,btn));
     optsEl.appendChild(btn);
   });
+  // Remove old reveal button when loading new question
+  var old=document.getElementById('reveal-ans-btn'); if(old) old.remove();
+  // Show hide-answer indicator
+  var hind=document.getElementById('hide-ans-indicator');
+  if(QZ.hideAnswer){
+    if(!hind){
+      hind=document.createElement('div');
+      hind.id='hide-ans-indicator';
+      hind.style.cssText='font-size:11px;color:#e8623a;text-align:right;padding:2px 0';
+      hind.textContent='👁 隐藏答案模式 — 选完后点揭示';
+      var qb=document.getElementById('qbody'); if(qb&&qb.parentNode) qb.parentNode.insertBefore(hind,qb.nextSibling);
+    }
+    hind.style.display='block';
+  } else if(hind) hind.style.display='none';
   rebuildActions(); startTimer();
   // Load annotation for this question
   loadQAnnotation(q.id);
@@ -715,10 +729,47 @@ function pickOpt(l,btn){
   btn.classList.add('sel');
   autoSave(QZ.cur,l);
   clearTimeout(QZ._autoNext);
+  if(QZ.hideAnswer){
+    // Show reveal button, don't auto-advance
+    var revBtn=document.getElementById('reveal-ans-btn');
+    if(!revBtn){
+      revBtn=document.createElement('button');
+      revBtn.id='reveal-ans-btn';
+      revBtn.className='btn';
+      revBtn.style.cssText='background:#e8623a;color:#fff;margin-top:8px;width:100%';
+      revBtn.textContent='👁 揭示正确答案';
+      revBtn.onclick=revealAnswer;
+      var actEl=document.querySelector('#quiz .actions');
+      if(actEl) actEl.parentNode.insertBefore(revBtn,actEl);
+    }
+    revBtn.style.display='block';
+    return; // don't auto-advance
+  }
   if(!QZ.stopped){
     QZ._autoNext = setTimeout(function(){
       if(QZ.sel===l){ clearInterval(QZ.tmr); advanceQ(); }
     },700);
+  }
+}
+
+function revealAnswer(){
+  var q=QZ.qs[QZ.cur]; if(!q||!q.answer) return;
+  var ans=q.answer.toUpperCase();
+  document.querySelectorAll('#opts .opt').forEach(function(b){
+    var letter=b.querySelector('.opt-letter');
+    if(!letter) return;
+    var l=letter.textContent.trim();
+    if(l===ans) b.classList.add('correct');
+    else if(l===QZ.sel) b.classList.add('wrong');
+  });
+  var revBtn=document.getElementById('reveal-ans-btn');
+  if(revBtn){
+    revBtn.textContent='→ 下一题';
+    revBtn.style.background='#2e7d52';
+    revBtn.onclick=function(){
+      var rb=document.getElementById('reveal-ans-btn'); if(rb) rb.remove();
+      advanceQ();
+    };
   }
 }
 function autoSave(i,ans){
@@ -775,6 +826,21 @@ function finishQuiz(){
   // Show result then offer to go back to batch
   showResultPage();
 }
+function startHFRemainingQuiz(){
+  if(!QZ.batch||!QZ.batch.questions)return;
+  if(!DB.hfQids) DB.hfQids={};
+  // Get HF questions not yet answered correctly
+  var remaining=QZ.batch.questions.filter(function(q,i){
+    return DB.hfQids[q.id] && (!QZ.ans[i]||QZ.ans[i]==='skip');
+  });
+  if(!remaining.length){showToast('高频词题目已全部作答！');return;}
+  var batch={id:'hf_remain_'+Date.now(),name:'高频词剩余题('+remaining.length+'题)',
+    questions:remaining,progress:{idx:0,answers:new Array(remaining.length).fill(null),dk:{},_committed:{}}};
+  QZ={batch:batch,qs:remaining,cur:0,ans:new Array(remaining.length).fill(null),
+    dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:true};
+  navTo('quiz'); loadQ(0);
+}
+
 function commitResults(){
   var batch=QZ.batch;
   // Only count questions answered in THIS session (not previously recorded)
@@ -895,6 +961,20 @@ function showResultPage(){
     var bBtn=document.createElement('button');bBtn.className='btn primary';bBtn.textContent='📋 回到题目列表';
     (function(bid){bBtn.addEventListener('click',function(){showBatchDetail(bid);});})(batchId);
     btn.innerHTML='<span style="font-size:14px;flex:1">✓ 答题完成！</span>';
+    // HF remaining button
+    if(DB.hfQids&&QZ.batch&&QZ.batch.questions){
+      var hfQs=QZ.batch.questions.filter(function(q,i){
+        return DB.hfQids[q.id]&&(!QZ.ans[i]||QZ.ans[i]==='skip');
+      });
+      if(hfQs.length>0){
+        var hfBtn=document.createElement('button');
+        hfBtn.className='btn';
+        hfBtn.style.cssText='background:#e8623a;color:#fff';
+        hfBtn.textContent='🔍 只做高频词剩余('+hfQs.length+'题)';
+        hfBtn.onclick=startHFRemainingQuiz;
+        btn.appendChild(hfBtn);
+      }
+    }
     btn.appendChild(bBtn);
     // Insert after the first card (result stats card), not before everything
     var firstCard = r.querySelector('.card');
@@ -3460,6 +3540,7 @@ function renderSearchResults(kw){
     +'<div class="spacer"></div>'
     +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
     +'<button class="btn" style="background:#6040b0;color:#fff" onclick="genKeywordCard(document.getElementById(\'search-kw\').value)">🧠 考点归纳卡片</button>'
+    +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startSearchQuiz(true)">▶ 隐藏答案做题</button>'
     +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
     +'<button class="btn blue" onclick="searchAddToBatch()">➕ 加入已有批次</button>'
     +'</div>'
@@ -3564,6 +3645,7 @@ function clearSearchNote(){
 function saveSearchNote(){
   var ta=document.getElementById('search-note-txt'); if(!ta)return;
   if(!DB.kwNotes) DB.kwNotes={};
+if(!DB.hfQids) DB.hfQids={};
   var val=ta.value.trim();
   var kw=(document.getElementById('search-kw')||{}).value||'';
   kw=kw.trim();
@@ -3815,9 +3897,32 @@ function searchDoAddToBatch(){
   if(sel2&&sel2.parentNode) sel2.parentNode.remove();
 }
 
+function startSearchQuiz(hideAnswer){
+  if(!_searchResults.length){showToast('没有搜索结果');return;}
+  var qs=_searchResults.map(function(r){return r.q;});
+  // Deduplicate by id
+  var seen={}, unique=[];
+  qs.forEach(function(q){if(!seen[q.id]){seen[q.id]=true;unique.push(q);}});
+  // Tag for HF tracking
+  if(!DB.hfQids) DB.hfQids={};
+  unique.forEach(function(q){ DB.hfQids[q.id]=true; }); saveDB();
+  if(!unique.length){showToast('没有题目');return;}
+  // Create a temporary batch
+  var bname='搜索结果 ('+unique.length+'题)';
+  var batch={id:'search_tmp_'+Date.now(),name:bname,questions:unique,
+    progress:{idx:0,answers:new Array(unique.length).fill(null),dk:{},_committed:{}}};
+  QZ={batch:batch,qs:unique,cur:0,ans:new Array(unique.length).fill(null),
+    dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,
+    hideAnswer:!!hideAnswer};
+  navTo('quiz'); loadQ(0);
+}
+
 function searchSaveBatch(){
   var selected=searchGetSelected();
   if(!selected.length){ showToast('请先勾选题目'); return; }
+  // Tag as HF questions
+  if(!DB.hfQids) DB.hfQids={};
+  selected.forEach(function(q){DB.hfQids[q.id]=true;}); saveDB();
   var name=prompt('新批次名称：','搜索结果 — '+new Date().toLocaleDateString('zh-CN'));
   if(!name||!name.trim()) return;
   var batch={
