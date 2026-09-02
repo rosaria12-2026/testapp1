@@ -398,7 +398,7 @@ function startBatchFiltered(batchId, mode){
     progress:{idx:0,answers:new Array(qs.length).fill(null),dk:{},_committed:{}}
   };
   QZ={batch:filteredBatch,qs:qs,cur:0,ans:new Array(qs.length).fill(null),
-    dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false};
+    dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false,autoAdvance:true};
   QZ.returnToBatchId=batchId;
   navTo('quiz'); loadQ(0);
 }
@@ -3403,14 +3403,25 @@ function startMultiSearch(){
 }
 
 function hfSearch(cbOrBtn){
-  // Accept either a checkbox input or a span with data-word
   var word = cbOrBtn.dataset.word;
   if(!word) return;
-  var word = btn.dataset.word;
   if(!DB.searchHistory) DB.searchHistory={};
+  // Toggle: if already searched, clicking again removes highlight (deselect)
+  if(DB.searchHistory[word] && cbOrBtn.dataset.active==='1'){
+    delete DB.searchHistory[word];
+    cbOrBtn.dataset.active='';
+    cbOrBtn.style.background='#f8f7f3'; cbOrBtn.style.color='#333';
+    cbOrBtn.style.borderColor='#ddd'; cbOrBtn.style.fontWeight='400';
+    saveDB(); return;
+  }
   DB.searchHistory[word]=Date.now();
   saveDB();
-  refreshHfHighlights();
+  // Highlight this word immediately
+  document.querySelectorAll('[data-word="'+word+'"]').forEach(function(b){
+    b.dataset.active='1';
+    b.style.background='#fff3cd'; b.style.color='#8a6000';
+    b.style.borderColor='#f0d060'; b.style.fontWeight='700';
+  });
   var inp=document.getElementById('search-kw'); if(inp) inp.value=word;
   var exact=document.getElementById('search-exact'); if(exact) exact.checked=(word.length<=4);
   doSearch();
@@ -3424,9 +3435,14 @@ function hfSearch(cbOrBtn){
 function refreshHfHighlights(){
   if(!DB.searchHistory) return;
   document.querySelectorAll('[data-word]').forEach(function(b){
-    if(DB.searchHistory[b.dataset.word] && b.dataset.active!=='1'){
+    if(DB.searchHistory[b.dataset.word]){
+      b.dataset.active='1';
       b.style.background='#fff3cd'; b.style.color='#8a6000';
       b.style.borderColor='#f0d060'; b.style.fontWeight='700';
+    } else {
+      b.dataset.active='';
+      b.style.background='#f8f7f3'; b.style.color='#333';
+      b.style.borderColor='#ddd'; b.style.fontWeight='400';
     }
   });
 }
@@ -3960,7 +3976,7 @@ function startSearchQuiz(hideAnswer){
     progress:{idx:0,answers:new Array(unique.length).fill(null),dk:{},_committed:{}}};
   QZ={batch:batch,qs:unique,cur:0,ans:new Array(unique.length).fill(null),
     dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,
-    hideAnswer:!!hideAnswer};
+    hideAnswer:!!hideAnswer, autoAdvance:!hideAnswer};
   navTo('quiz'); loadQ(0);
 }
 
