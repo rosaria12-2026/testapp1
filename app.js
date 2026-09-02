@@ -2230,31 +2230,39 @@ function cloudLogout(){
 function cloudUpload(){
   if(typeof firebase==='undefined'){showToast('请先配置Firebase');return;}
   var user=firebase.auth().currentUser; if(!user){showToast('请先登录');return;}
-  showToast('上传中…',8000);
-  // Split into chunks if too large (Firestore 1MB limit)
-  var dbStr=JSON.stringify(DB);
+  showToast('上传中…',10000);
   var col=firebase.firestore().collection('users').doc(user.uid).collection('data');
-  if(dbStr.length<900000){
-    // Small enough: store as single doc
-    col.doc('main').set({db:dbStr, ts:Date.now()})
-      .then(function(){showToast('✓ 已上传（'+DB.batches.length+'批次 · '+Math.round(dbStr.length/1024)+'KB）');})
-      .catch(function(e){showToast('上传失败：'+e.message);});
-  } else {
-    // Split: store meta + batches separately
-    var metaDB=JSON.parse(dbStr);
-    var batches=metaDB.batches||[];
-    delete metaDB.batches;
-    var ops=[
-      col.doc('meta_v2').set({meta:JSON.stringify(metaDB), ts:Date.now()}),
-      col.doc('batch_index_v2').set({ids:batches.map(function(b){return b.id;}), ts:Date.now()})
-    ];
-    batches.forEach(function(b){
-      ops.push(col.doc('b_'+b.id).set({data:JSON.stringify(b)}));
-    });
-    Promise.all(ops)
-      .then(function(){showToast('✓ 已上传（'+batches.length+'批次，分块存储）');})
-      .catch(function(e){showToast('上传失败：'+e.message);});
-  }
+  var ops=[];
+
+  // meta2: notes + qNotes
+  ops.push(col.doc('meta2').set({notes:DB.notes||[],qNotes:DB.qNotes||{},ts:Date.now()}));
+  // meta3: wrongMap + dkMap + starMap + answerKeys
+  ops.push(col.doc('meta3').set({wrongMap:DB.wrongMap||{},dkMap:DB.dkMap||{},starMap:DB.starMap||{},answerKeys:DB.answerKeys||{},ts:Date.now()}));
+  // meta4: fillBatches + kwCards + searchHistory
+  ops.push(col.doc('meta4').set({fillBatches:DB.fillBatches||[],fillWrong:DB.fillWrong||[],kwCards:DB.kwCards||{},searchHistory:DB.searchHistory||{},ts:Date.now()}));
+  // meta5: studyPages + customKw + kwNotes + hfQids + fillProgress
+  ops.push(col.doc('meta5').set({
+    studyPages:JSON.stringify(DB.studyPages||[]),
+    customKw:JSON.stringify(DB.customKw||[]),
+    kwNotes:DB.kwNotes||{},
+    hfQids:DB.hfQids||{},
+    fillProgress:JSON.stringify(DB.fillProgress||{}),
+    ts:Date.now()
+  }));
+  // meta: stats + lastPos
+  ops.push(col.doc('meta').set({stats:DB.stats||{},lastPos:DB.lastPos||null,ts:Date.now()}));
+  // analysis
+  ops.push(col.doc('analysis_0').set({cache:DB.analysisCache||{},ts:Date.now()}));
+  // batch_index
+  ops.push(col.doc('batch_index').set({ids:DB.batches.map(function(b){return b.id;}),ts:Date.now()}));
+  // each batch
+  DB.batches.forEach(function(b){
+    ops.push(col.doc('batch_'+b.id).set({id:b.id,name:b.name,date:b.date,questions:b.questions,progress:b.progress}));
+  });
+
+  Promise.all(ops)
+    .then(function(){showToast('✓ 已上传（'+DB.batches.length+'批次 · '+DB.notes.length+'笔记 · '+Object.keys(DB.wrongMap||{}).length+'错题）',5000);})
+    .catch(function(e){showToast('上传失败：'+e.message);});
 }
 
 function cloudDownload(){
