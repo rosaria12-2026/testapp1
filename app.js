@@ -400,6 +400,9 @@ function startBatchFiltered(batchId, mode){
   QZ={batch:filteredBatch,qs:qs,cur:0,ans:new Array(qs.length).fill(null),
     dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false,autoAdvance:true};
   QZ.returnToBatchId=batchId;
+  // Set required DOM elements like startBatchFrom does
+  var qb=document.getElementById('q-batch'); if(qb) qb.textContent=filteredBatch.name;
+  var qt=document.getElementById('q-total'); if(qt) qt.textContent=qs.length;
   navTo('quiz'); loadQ(0);
 }
 
@@ -2152,7 +2155,7 @@ function cloudUpload(){
     ids:studyPages.map(function(pg){return pg.id;}), ts:Date.now()
   });
 
-  var allOps = [col.doc('meta').set(meta), batchIndex, analysisIndex, studyIndex]
+  var allOps = [col.doc('meta').set(meta), extraOp, batchIndex, analysisIndex, studyIndex]
     .concat(batchOps).concat(cacheOps).concat(studyOps);
 
   var metaKB = Math.round(JSON.stringify(meta).length/1024);
@@ -2171,6 +2174,7 @@ function cloudDownload(){
   // Read meta + indexes first
   Promise.all([
     col.doc('meta').get(),
+    col.doc('extra_data').get().catch(function(){return null;}),
     col.doc('batch_index').get(),
     col.doc('study_index').get(),
     col.doc('analysis_index').get()
@@ -2199,7 +2203,15 @@ if(!DB.fillProgress) DB.fillProgress={};
         DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
         DB.starMap=m.starMap||{}; DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
         DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{}; DB.hlCache={};
-    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[]; DB.kwCards=m.kwCards||{};
+    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[];
+    // Restore from extra_data doc (index 1 in Promise.all results)
+    var exDoc=results[1]; var ex=exDoc&&exDoc.exists?exDoc.data():{};
+    DB.kwCards=ex.kwCards||m.kwCards||{};
+    DB.searchHistory=ex.searchHistory||{};
+    DB.customKw=ex.customKw||[];
+    DB.kwNotes=ex.kwNotes||{};
+    DB.hfQids=ex.hfQids||{};
+    DB.fillProgress=ex.fillProgress||{};
         DB.batches=m.batches||[]; DB.analysisCache={}; DB.studyPages=[];
         saveDB(); renderHome(); renderStudy();
         showToast('✓ 已下载（旧格式，建议重新上传）');
@@ -2211,7 +2223,15 @@ if(!DB.fillProgress) DB.fillProgress={};
     DB.wrongMap=m.wrongMap||{}; DB.dkMap=m.dkMap||{}; DB.stats=m.stats||{done:0,correct:0};
     DB.starMap=m.starMap||{}; DB.answerKeys=m.answerKeys||{}; DB.lastPos=m.lastPos||null;
     DB.notes=m.notes||[]; DB.qNotes=m.qNotes||{}; DB.hlCache={};
-    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[]; DB.kwCards=m.kwCards||{};
+    DB.fillBatches=m.fillBatches||[]; DB.fillWrong=m.fillWrong||[];
+    // Restore from extra_data doc (index 1 in Promise.all results)
+    var exDoc=results[1]; var ex=exDoc&&exDoc.exists?exDoc.data():{};
+    DB.kwCards=ex.kwCards||m.kwCards||{};
+    DB.searchHistory=ex.searchHistory||{};
+    DB.customKw=ex.customKw||[];
+    DB.kwNotes=ex.kwNotes||{};
+    DB.hfQids=ex.hfQids||{};
+    DB.fillProgress=ex.fillProgress||{};
 
     // Load batches
     var batchIds=batchIdxDoc.exists?(batchIdxDoc.data().ids||[]):[];
