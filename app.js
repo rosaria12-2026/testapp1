@@ -375,6 +375,34 @@ function importQuestions(start) {
 // ═══════════════════════════════════════════════════════
 // BATCH DETAIL — full question list with all ops
 // ═══════════════════════════════════════════════════════
+function startBatchFiltered(batchId, mode){
+  var batch=null;
+  for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}}
+  if(!batch) return;
+  var qs=[];
+  if(mode==='excludeHf'){
+    qs=batch.questions.filter(function(q){return !qMatchesHf(q);});
+    if(!qs.length){showToast('所有题目都含高频词！换个搜索词再试');return;}
+  } else if(mode==='wrongOnly'){
+    qs=batch.questions.filter(function(q){return !!DB.wrongMap[q.id];});
+    if(!qs.length){showToast('这个批次没有错题');return;}
+  } else if(mode==='dkOnly'){
+    qs=batch.questions.filter(function(q){return !!DB.dkMap[q.id];});
+    if(!qs.length){showToast('这个批次没有标记不会的题');return;}
+  }
+  var labels={excludeHf:'排除高频',wrongOnly:'只做错题',dkOnly:'只做不会'};
+  var filteredBatch={
+    id:batch.id,
+    name:batch.name+'（'+labels[mode]+' '+qs.length+'题）',
+    questions:qs,
+    progress:{idx:0,answers:new Array(qs.length).fill(null),dk:{},_committed:{}}
+  };
+  QZ={batch:filteredBatch,qs:qs,cur:0,ans:new Array(qs.length).fill(null),
+    dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false};
+  QZ.returnToBatchId=batchId;
+  navTo('quiz'); loadQ(0);
+}
+
 function showBatchDetail(batchId) {
   var batch=null;
   for(var i=0;i<DB.batches.length;i++){ if(DB.batches[i].id===batchId){batch=DB.batches[i];break;} }
@@ -394,8 +422,20 @@ function showBatchDetail(batchId) {
     +'</div>'
     +'<div class="sub" style="margin:6px 0">共 '+batch.questions.length+' 题 · 已答 '+done+' ('+prog+'%) · 点任意行从该题开始</div>'
     +'<div class="row" style="gap:8px;flex-wrap:wrap">'
-    +'<button class="btn primary" onclick="startBatchFrom(\''+batchId+'\','+resumeIdx+')">'+(allDone?'🔄 从头重做':'▶ 继续第'+(resumeIdx+1)+'题')+'</button>'
+    +'<button class="btn primary" onclick="startBatchFrom(\''+batchId+'\','+resumeIdx+'">'+(allDone?'🔄 从头重做':'▶ 继续第'+(resumeIdx+1)+'题')+'</button>'
     +'<button class="btn" onclick="startBatchFrom(\''+batchId+'\',0)">从第1题开始</button>'
+    +'</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
+    +'<button class="btn small" style="background:#fff3cd;border:1px solid #f0d060;color:#8a6000" data-bid="'+batchId+'" onclick="startBatchFiltered(this.dataset.bid,\'excludeHf\')">🔍 排除高频词题</button>'
+    +'<button class="btn small red" data-bid="'+batchId+'" onclick="startBatchFiltered(this.dataset.bid,\'wrongOnly\')">✗ 只做错题</button>'
+    +'<button class="btn small" style="background:#fff0e6;border:1px solid #ffb88c;color:#c47a1a" data-bid="'+batchId+'" onclick="startBatchFiltered(this.dataset.bid,\'dkOnly\')">❓ 只做不会</button>'
+    +'</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">'
+    +'<button class="btn small" style="background:#fff3cd;border-color:#f0d060;color:#8a6000" data-bid="'+batchId+'" onclick="startBatchFiltered(this.dataset.bid,\'excludeHf\')">🔍 排除高频词题</button>'
+    +'<button class="btn small red" data-bid="'+batchId+'" onclick="startBatchFiltered(this.dataset.bid,\'wrongOnly\')">✗ 只做错题</button>'
+    +'<button class="btn small" style="background:#fff0e6;border-color:#ffb88c;color:#c47a1a" data-bid="'+batchId+'" onclick="startBatchFiltered(this.dataset.bid,\'dkOnly\')">❓ 只做不会</button>'
+    +'</div>'
     +'</div>'
     +'<div class="row" style="margin-top:8px;align-items:center;gap:6px">'
     +'<span style="font-size:13px;color:#666">跳到第</span>'
