@@ -3156,21 +3156,31 @@ function renderSearch(){
 
     // High frequency keyword panel
     +'<div class="card" style="padding:12px 14px">'
-    +'<div style="font-size:13px;font-weight:700;color:#555;margin-bottom:10px">📚 高频核心词库 — 点词即搜</div>';
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+    +'<div style="font-size:13px;font-weight:700;color:#555">📚 高频核心词库</div>'
+    +'<span style="font-size:11px;color:#aaa">点词即搜 · 或勾选多词后一起做</span>'
+    +'<div style="margin-left:auto;display:flex;gap:6px">'
+    +'<span id="sel-count" style="font-size:12px;color:#6040b0;display:none">已选 <b id="sel-num">0</b> 词</span>'
+    +'<button id="start-multi-btn" onclick="startMultiSearch()" style="display:none;padding:4px 12px;border-radius:8px;border:none;background:#6040b0;color:#fff;font-size:12px;cursor:pointer">▶ 做选中题目</button>'
+    +'<button onclick="clearSelections()" style="display:none;padding:4px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-size:11px;cursor:pointer;color:#888" id="clear-sel-btn">清除选择</button>'
+    +'</div>'
+    +'</div>';
 
   HF_KEYWORDS.forEach(function(cat, ci){
     html+='<div style="margin-bottom:10px">'
-      +'<div style="font-size:11px;font-weight:700;color:#888;margin-bottom:5px">'+esc(cat.name)+'</div>'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'
+      +'<span style="font-size:11px;font-weight:700;color:#888">'+esc(cat.name)+'</span>'
+      +'<button class="cat-sel-btn" data-cat="'+ci+'" onclick="selectCat(this)" style="font-size:10px;padding:1px 6px;border:1px solid #ddd;border-radius:10px;background:#f5f5f5;cursor:pointer;color:#888">全选此类</button>'
+      +'</div>'
       +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
     cat.words.forEach(function(w){
-      html+='<button onclick="hfSearch(this)" data-word="'+esc(w)+'" '
-        +'style="padding:3px 10px;border-radius:20px;border:1px solid #ddd;background:#f8f7f3;font-size:13px;cursor:pointer;color:#333;transition:background .15s"'
-        +' onmouseover="this.style.background=\'#e8effa\';this.style.color=\'#1a4fa0\';this.style.borderColor=\'#b8d0f0\'"'
-        +' onmouseout="this.style.background=this.dataset.active?\'#e8effa\':\'#f8f7f3\';this.style.color=this.dataset.active?\'#1a4fa0\':\'#333\';this.style.borderColor=this.dataset.active?\'#b8d0f0\':\'#ddd\'"'
-        +'>'+(function(word){
-          var hasNote=DB.kwNotes&&DB.kwNotes[word];
-          return esc(word)+(hasNote?'<span style="color:#f0a000;margin-left:2px;font-size:10px">★</span>':'');
-        })(w)+'</button>';
+      var hasNote2=DB.kwNotes&&(DB.kwNotes['__kw__'+w]||DB.kwNotes[w]);
+      html+='<label style="display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:20px;border:1px solid #ddd;background:#f8f7f3;font-size:13px;cursor:pointer;color:#333;transition:background .15s" data-word-label="'+esc(w)+'">'
+        +'<input type="checkbox" class="kw-cb" data-word="'+esc(w)+'" onchange="onKwCheck(this)" style="display:none">'
+        +'<span onclick="hfSearch(this.parentNode.querySelector(\'input\'))" data-word="'+esc(w)+'" style="cursor:pointer">'
+        +esc(w)+(hasNote2?'<span style="color:#f0a000;margin-left:2px;font-size:10px">★</span>':'')
+        +'</span>'
+        +'</label>';
     });
     html+='</div></div>';
   });
@@ -3193,7 +3203,7 @@ function renderSearch(){
   +'<label style="font-size:11px;color:#aaa;display:flex;align-items:center;gap:3px;margin-bottom:4px"><input type="checkbox" id="snote-autocopy" checked> 选字自动复制</label>'
   +'<textarea id="search-note-txt" placeholder="选中题目文字自动追加…" style="width:100%;min-height:100px;padding:6px;border:1px solid #f0d060;border-radius:6px;font-size:12px;resize:vertical;box-sizing:border-box;background:#fffdf5" oninput="saveSearchNote()"></textarea>'
   +'<div style="display:flex;gap:4px;margin-top:6px">'
-  +'<button class="btn small" onclick="saveSearchNoteToNotes()" style="font-size:11px">📚 存笔记本</button>'
+  +'<button class="btn small" onclick="saveSearchNoteToNotes()" style="font-size:11px">📚 追加到高频词笔记本</button>'
   +'<button class="btn small" onclick="clearSearchNote()" style="font-size:11px;color:#888">清空</button>'
   +'</div></div></div>'
   +'</div>';
@@ -3207,21 +3217,73 @@ function renderSearch(){
   },80);
 }
 
-function hfSearch(btn){
+function onKwCheck(cb){
+  updateSelCount();
+}
+
+function updateSelCount(){
+  var cbs=document.querySelectorAll('.kw-cb:checked');
+  var n=cbs.length;
+  var sc=document.getElementById('sel-count');
+  var sb=document.getElementById('start-multi-btn');
+  var cb2=document.getElementById('clear-sel-btn');
+  var sn=document.getElementById('sel-num');
+  if(sc) sc.style.display=n?'inline':'none';
+  if(sb) sb.style.display=n?'inline':'none';
+  if(cb2) cb2.style.display=n?'inline':'none';
+  if(sn) sn.textContent=n;
+}
+
+function selectCat(btn){
+  var ci=parseInt(btn.dataset.cat);
+  var cat=HF_KEYWORDS[ci]; if(!cat)return;
+  var cbs=document.querySelectorAll('.kw-cb');
+  var catWords=cat.words;
+  cbs.forEach(function(cb){
+    if(catWords.indexOf(cb.dataset.word)>=0) cb.checked=true;
+  });
+  updateSelCount();
+}
+
+function clearSelections(){
+  document.querySelectorAll('.kw-cb').forEach(function(cb){cb.checked=false;});
+  updateSelCount();
+}
+
+function startMultiSearch(){
+  var cbs=document.querySelectorAll('.kw-cb:checked');
+  if(!cbs.length){showToast('请先勾选词语');return;}
+  var words=[];
+  cbs.forEach(function(cb){words.push(cb.dataset.word);});
+  // Search with all selected words (OR logic)
+  _searchResults=[];
+  var inBody=true,inOpts=true,inAns=true,inAI=true,inNote=true;
+  DB.batches.forEach(function(batch){
+    (batch.questions||[]).forEach(function(q,qi){
+      var matched=[];
+      words.forEach(function(word){
+        if(inBody&&q.body&&q.body.indexOf(word)>=0&&matched.indexOf(word)<0) matched.push(word);
+        if(inOpts&&q.opts){q.opts.forEach(function(o){if(o.text&&o.text.indexOf(word)>=0&&matched.indexOf(word)<0)matched.push(word);});}
+        if(inAns&&q.answer&&q.answer.indexOf(word)>=0&&matched.indexOf(word)<0) matched.push(word);
+        if(inAI&&DB.analysisCache&&DB.analysisCache[q.id]&&DB.analysisCache[q.id].indexOf(word)>=0&&matched.indexOf(word)<0) matched.push(word);
+        if(inNote&&DB.qNotes&&DB.qNotes['ann_'+q.id]&&DB.qNotes['ann_'+q.id].indexOf(word)>=0&&matched.indexOf(word)<0) matched.push(word);
+      });
+      if(matched.length) _searchResults.push({batchId:batch.id,batchName:batch.name,q:q,qIdx:qi,matchedIn:['题目'],matchedTerms:matched});
+    });
+  });
+  renderSearchResults('多词搜索：'+words.slice(0,5).join('、')+(words.length>5?'…':''));
+  setTimeout(function(){var r=document.getElementById('search-results');if(r)r.scrollIntoView({behavior:'smooth',block:'start'});},200);
+}
+
+function hfSearch(cbOrBtn){
+  // Accept either a checkbox input or a span with data-word
+  var word = cbOrBtn.dataset.word;
+  if(!word) return;
   var word = btn.dataset.word;
   if(!DB.searchHistory) DB.searchHistory={};
   DB.searchHistory[word]=Date.now();
   saveDB();
-  // Reset all, then highlight searched ones
-  document.querySelectorAll('[data-word]').forEach(function(b){
-    var s=DB.searchHistory&&DB.searchHistory[b.dataset.word];
-    var isCur=b===btn;
-    b.dataset.active=isCur?'1':'';
-    b.style.background=isCur?'#e8effa':s?'#fff3cd':'#f8f7f3';
-    b.style.color=isCur?'#1a4fa0':s?'#8a6000':'#333';
-    b.style.borderColor=isCur?'#b8d0f0':s?'#f0d060':'#ddd';
-    b.style.fontWeight=s?'700':'400';
-  });
+  refreshHfHighlights();
   var inp=document.getElementById('search-kw'); if(inp) inp.value=word;
   var exact=document.getElementById('search-exact'); if(exact) exact.checked=(word.length<=4);
   doSearch();
@@ -3465,7 +3527,7 @@ function mountCustomKw(){
   }
   DB.customKw.forEach(function(w){
     var searched=DB.searchHistory&&DB.searchHistory[w];
-    var hasNote=DB.kwNotes&&DB.kwNotes[w];
+    var hasNote=DB.kwNotes&&(DB.kwNotes['__kw__'+w]||DB.kwNotes[w]);
     var btn=document.createElement('button');
     btn.style.cssText='padding:3px 8px;border-radius:20px;border:1px solid '+(searched?'#f0d060':'#ddd')+';background:'+(searched?'#fff3cd':'#f8f7f3')+';font-size:12px;cursor:pointer;color:'+(searched?'#8a6000':'#333');
     var label=document.createElement('span'); label.textContent=w+(hasNote?'★':'');
@@ -3503,16 +3565,47 @@ function saveSearchNote(){
   var ta=document.getElementById('search-note-txt'); if(!ta)return;
   if(!DB.kwNotes) DB.kwNotes={};
   var val=ta.value.trim();
-  if(val) DB.kwNotes['__search__']=val; else delete DB.kwNotes['__search__'];
+  var kw=(document.getElementById('search-kw')||{}).value||'';
+  kw=kw.trim();
+  // Save under __search__ for persistence, and mark kw as having note
+  if(val){
+    DB.kwNotes['__search__']=val;
+    if(kw) DB.kwNotes['__kw__'+kw]=true; // mark this kw has note
+  } else {
+    delete DB.kwNotes['__search__'];
+    if(kw) delete DB.kwNotes['__kw__'+kw];
+  }
   saveDB();
+  // Refresh star display
+  refreshHfHighlights();
+  if(typeof mountCustomKw==='function') mountCustomKw();
 }
 
 function saveSearchNoteToNotes(){
   var ta=document.getElementById('search-note-txt'); if(!ta||!ta.value.trim())return;
   var kw=(document.getElementById('search-kw')||{}).value||'搜索';
+  kw=kw.trim();
   if(!DB.notes) DB.notes=[];
-  DB.notes.push({id:uid(),type:'search-note',title:'搜索笔记：'+kw.slice(0,20),content:ta.value,ts:Date.now()});
-  saveDB(); showToast('✓ 已存入笔记本');
+  // Find existing unified keyword notebook
+  var unified=null;
+  for(var ni=0;ni<DB.notes.length;ni++){
+    if(DB.notes[ni].type==='kw-notebook'){unified=DB.notes[ni];break;}
+  }
+  var timestamp=new Date().toLocaleDateString('zh-CN');
+  var newEntry='\n\n【'+kw+'】'+timestamp+'\n'+ta.value.trim();
+  if(unified){
+    unified.content=(unified.content||'')+newEntry;
+    unified.ts=Date.now();
+  } else {
+    DB.notes.unshift({id:uid(),type:'kw-notebook',title:'🔍 高频词笔记本',content:'高频词搜索笔记（按词分段）'+newEntry,ts:Date.now()});
+  }
+  // Mark kw as having note
+  if(!DB.kwNotes) DB.kwNotes={};
+  if(kw) DB.kwNotes['__kw__'+kw]=true;
+  saveDB();
+  refreshHfHighlights();
+  if(typeof mountCustomKw==='function') mountCustomKw();
+  showToast('✓ 已追加到「高频词笔记本」');
 }
 
 function genKeywordCard(kw){
