@@ -403,6 +403,20 @@ function startBatchFiltered(batchId, mode){
   navTo('quiz'); loadQ(0);
 }
 
+function getHfWords(){
+  if(!DB.searchHistory) return [];
+  return Object.keys(DB.searchHistory);
+}
+
+function qMatchesHf(q){
+  var words=getHfWords(); if(!words.length) return false;
+  var text=(q.body||'')+' '+(q.opts?q.opts.map(function(o){return o.text;}).join(' '):'');
+  for(var i=0;i<words.length;i++){
+    if(text.indexOf(words[i])>=0) return true;
+  }
+  return false;
+}
+
 function showBatchDetail(batchId) {
   var batch=null;
   for(var i=0;i<DB.batches.length;i++){ if(DB.batches[i].id===batchId){batch=DB.batches[i];break;} }
