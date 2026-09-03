@@ -10,7 +10,7 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{}, customKw:[], kwNotes:{}, hfQids:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{}, customKw:[], kwNotes:{}, hfQids:{}, hfWrong:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
@@ -878,6 +878,7 @@ function finishQuiz(){
 function startHFRemainingQuiz(){
   if(!QZ.batch||!QZ.batch.questions)return;
   if(!DB.hfQids) DB.hfQids={};
+if(!DB.hfWrong) DB.hfWrong={};
   // Get HF questions not yet answered correctly
   var remaining=QZ.batch.questions.filter(function(q,i){
     return DB.hfQids[q.id] && (!QZ.ans[i]||QZ.ans[i]==='skip');
@@ -2143,7 +2144,7 @@ function cloudUpload(){
     col.doc('meta2').set({notes:DB.notes||[],qNotes:DB.qNotes||{},ts:Date.now()}),
     col.doc('meta3').set({wrongMap:DB.wrongMap||{},dkMap:DB.dkMap||{},starMap:DB.starMap||{},answerKeys:DB.answerKeys||{},ts:Date.now()}),
     col.doc('meta4').set({fillBatches:DB.fillBatches||[],fillWrong:DB.fillWrong||[],kwCards:DB.kwCards||{},searchHistory:DB.searchHistory||{},ts:Date.now()}),
-    col.doc('meta5').set({studyPages:JSON.stringify(DB.studyPages||[]),customKw:JSON.stringify(DB.customKw||[]),kwNotes:DB.kwNotes||{},hfQids:DB.hfQids||{},fillProgress:JSON.stringify(DB.fillProgress||{}),ts:Date.now()}),
+    col.doc('meta5').set({studyPages:JSON.stringify(DB.studyPages||[]),customKw:JSON.stringify(DB.customKw||[]),kwNotes:DB.kwNotes||{},hfQids:DB.hfQids||{},hfWrong:DB.hfWrong||{},fillProgress:JSON.stringify(DB.fillProgress||{}),ts:Date.now()}),
     col.doc('analysis_0').set({cache:DB.analysisCache||{},ts:Date.now()}),
     col.doc('batch_index').set({ids:DB.batches.map(function(b){return b.id;}),ts:Date.now()})
   ];
@@ -2229,6 +2230,7 @@ function cloudDownload(){
     DB.customKw=typeof m5.customKw==='string'?JSON.parse(m5.customKw||'[]'):(m5.customKw||[]);
     DB.kwNotes=m5.kwNotes||{};
     DB.hfQids=m5.hfQids||{};
+    DB.hfWrong=m5.hfWrong||{};
     DB.fillProgress=typeof m5.fillProgress==='string'?JSON.parse(m5.fillProgress||'{}'):(m5.fillProgress||{});
     DB.analysisCache=a0.cache||{};
 
@@ -3595,6 +3597,7 @@ function renderSearchResults(kw){
     +'<div>找到 <b>'+_searchResults.length+'</b> 道题'+(doneHfCount?' · <span style="font-size:12px;color:#aaa">已做高频'+doneHfCount+'题</span>':'')+'</div>'
     +'<div class="spacer"></div>'
     +(doneHfCount?'<button class="btn small" id="toggle-done-hf" onclick="toggleDoneHf(this)" style="font-size:12px">👁 全部显示（'+doneHfCount+'题已灰）</button>':'')
+    +'<button class="btn small" style="background:#fdeaea;color:#b83232;font-size:12px" onclick="showHfWrong()">✗ 高频错题（'+(Object.keys(DB.hfWrong||{}).length)+'题）</button>'
     +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
     +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startInlineQuiz()">📝 在页面做题</button>'
     +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
@@ -3998,11 +4001,15 @@ function checkInlineQuiz(){
       else if(isOk) resEl.innerHTML='<span style="color:#2e7d52;font-weight:700">✓ 正确！</span>';
       else resEl.innerHTML='<span style="color:#b83232;font-weight:700">✗ 你选：'+esc(my)+' · 正确：'+esc(r.q.answer||'?')+'</span>';
     }
-    // Update wrongMap
+    // Update wrongMap and hfWrong
     if(my&&r.q.answer){
-      var b2=DB.batches.find(function(x){return x.id===r.batchId;});
-      if(isOk){delete DB.wrongMap[r.q.id];}
-      else DB.wrongMap[r.q.id]={q:r.q,batchId:r.batchId,batchName:r.batchName,myAns:my};
+      if(!DB.hfWrong) DB.hfWrong={};
+      if(isOk){
+        delete DB.wrongMap[r.q.id];
+      } else {
+        DB.wrongMap[r.q.id]={q:r.q,batchId:r.batchId,batchName:r.batchName,myAns:my};
+        DB.hfWrong[r.q.id]=(DB.hfWrong[r.q.id]||0)+1;
+      }
     }
   });
   saveDB();
@@ -4022,6 +4029,27 @@ function toggleDoneHf(btn){
     btn.dataset.grayed=''; btn.textContent='🙈 灰色已做高频题';
     btn.style.background='#f5f5f5'; btn.style.color='#888';
   }
+}
+
+function showHfWrong(){
+  if(!DB.hfWrong||!Object.keys(DB.hfWrong).length){showToast('还没有高频错题记录，先在搜索页做题吧');return;}
+  var times=prompt('显示错误几次及以上的题？（输入数字）','2');
+  if(!times) return;
+  var n=parseInt(times); if(isNaN(n)||n<1) return;
+  var wrongIds=Object.keys(DB.hfWrong).filter(function(id){return DB.hfWrong[id]>=n;});
+  if(!wrongIds.length){showToast('没有错误'+n+'次及以上的高频题');return;}
+  _searchResults=[];
+  DB.batches.forEach(function(batch){
+    (batch.questions||[]).forEach(function(q,qi){
+      if(wrongIds.indexOf(q.id)>=0){
+        _searchResults.push({batchId:batch.id,batchName:batch.name,q:q,qIdx:qi,
+          matchedIn:['高频错题×'+(DB.hfWrong[q.id]||0)]});
+      }
+    });
+  });
+  if(!_searchResults.length){showToast('找不到题目');return;}
+  renderSearchResults('高频错题（错'+n+'次以上，共'+_searchResults.length+'题）');
+  setTimeout(function(){var r=document.getElementById('search-results');if(r)r.scrollIntoView({behavior:'smooth'});},200);
 }
 
 function toggleSearchDetail(ri){
