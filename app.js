@@ -10,7 +10,7 @@ var DB = (function(){
   catch(e) { return makeDB(); }
 })();
 function makeDB() {
-  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{}, customKw:[], kwNotes:{}, hfQids:{}, hfWrong:{} };
+  return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{}, customKw:[], kwNotes:{}, hfQids:{}, hfWrong:{}, hfResults:{} };
 }
 function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
 
@@ -879,6 +879,7 @@ function startHFRemainingQuiz(){
   if(!QZ.batch||!QZ.batch.questions)return;
   if(!DB.hfQids) DB.hfQids={};
 if(!DB.hfWrong) DB.hfWrong={};
+if(!DB.hfResults) DB.hfResults={};
   // Get HF questions not yet answered correctly
   var remaining=QZ.batch.questions.filter(function(q,i){
     return DB.hfQids[q.id] && (!QZ.ans[i]||QZ.ans[i]==='skip');
@@ -2141,7 +2142,7 @@ function cloudUpload(){
     col.doc('meta2').set({notes:DB.notes||[],qNotes:DB.qNotes||{},ts:Date.now()}),
     col.doc('meta3').set({wrongMap:DB.wrongMap||{},dkMap:DB.dkMap||{},starMap:DB.starMap||{},answerKeys:DB.answerKeys||{},ts:Date.now()}),
     col.doc('meta4').set({fillBatches:DB.fillBatches||[],fillWrong:DB.fillWrong||[],kwCards:DB.kwCards||{},searchHistory:DB.searchHistory||{},ts:Date.now()}),
-    col.doc('meta5').set({studyPages:JSON.stringify(DB.studyPages||[]),customKw:JSON.stringify(DB.customKw||[]),kwNotes:DB.kwNotes||{},hfQids:DB.hfQids||{},hfWrong:DB.hfWrong||{},fillProgress:JSON.stringify(DB.fillProgress||{}),ts:Date.now()}),
+    col.doc('meta5').set({studyPages:JSON.stringify(DB.studyPages||[]),customKw:JSON.stringify(DB.customKw||[]),kwNotes:DB.kwNotes||{},hfQids:DB.hfQids||{},hfWrong:DB.hfWrong||{},hfResults:JSON.stringify(DB.hfResults||{}),fillProgress:JSON.stringify(DB.fillProgress||{}),ts:Date.now()}),
     col.doc('analysis_0').set({cache:DB.analysisCache||{},ts:Date.now()}),
     col.doc('batch_index').set({ids:DB.batches.map(function(b){return b.id;}),ts:Date.now()})
   ];
@@ -2228,6 +2229,7 @@ function cloudDownload(){
     DB.kwNotes=m5.kwNotes||{};
     DB.hfQids=m5.hfQids||{};
     DB.hfWrong=m5.hfWrong||{};
+    DB.hfResults=typeof m5.hfResults==='string'?JSON.parse(m5.hfResults||'{}'):(m5.hfResults||{});
     DB.fillProgress=typeof m5.fillProgress==='string'?JSON.parse(m5.fillProgress||'{}'):(m5.fillProgress||{});
     DB.analysisCache=a0.cache||{};
 
@@ -3305,10 +3307,13 @@ function renderSearch(){
       +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
     cat.words.forEach(function(w){
       var hasNote2=DB.kwNotes&&(DB.kwNotes['__kw__'+w]||DB.kwNotes[w]);
+      var hfRes=DB.hfResults&&DB.hfResults[w];
+      var wrongBadge=hfRes&&hfRes.wrongCount>=5?'<span style="background:#b83232;color:#fff;border-radius:8px;font-size:9px;padding:0 4px;margin-left:3px">✗'+hfRes.wrongCount+'</span>':'';
       html+='<label style="display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:20px;border:1px solid #ddd;background:#f8f7f3;font-size:13px;cursor:pointer;color:#333;transition:background .15s" data-word-label="'+esc(w)+'">'
         +'<input type="checkbox" class="kw-cb" data-word="'+esc(w)+'" onchange="onKwCheck(this)" style="display:none">'
         +'<span onclick="hfSearch(this.parentNode.querySelector(\'input\'))" data-word="'+esc(w)+'" style="cursor:pointer">'
         +esc(w)+(hasNote2?'<span style="color:#f0a000;margin-left:2px;font-size:10px">★</span>':'')
+        +wrongBadge
         +'</span>'
         +'</label>';
     });
@@ -3422,6 +3427,10 @@ function hfSearch(cbOrBtn){
   var exact=document.getElementById('search-exact'); if(exact) exact.checked=(word.length<=4);
   doSearch();
   if(DB.kwCards&&DB.kwCards[word]){ setTimeout(function(){genKeywordCard(word);},200); }
+  // Show saved quiz results if exist
+  if(DB.hfResults&&DB.hfResults[word]){
+    setTimeout(function(){showSavedHfResult(word);},300);
+  }
   setTimeout(function(){var res=document.getElementById('search-results');if(res)res.scrollIntoView({behavior:'smooth',block:'start'});},400);
 }
 
@@ -4010,6 +4019,20 @@ function checkInlineQuiz(){
       }
     }
   });
+  // Save results for current keyword
+  var kw=(document.getElementById('search-kw')||{}).value||'';
+  kw=kw.trim();
+  if(kw){
+    if(!DB.hfResults) DB.hfResults={};
+    var wrongCount=0;
+    var resultItems=_searchResults.map(function(r,ri){
+      var my=_inlineAnswers[ri]||'';
+      var isOk=my&&r.q.answer&&my.toUpperCase()===r.q.answer.toUpperCase();
+      if(my&&!isOk) wrongCount++;
+      return {qid:r.q.id,body:r.q.body,opts:r.q.opts,answer:r.q.answer,my:my,ok:isOk,batchName:r.batchName};
+    });
+    DB.hfResults[kw]={ts:Date.now(),items:resultItems,wrongCount:wrongCount,total:total,correct:correct};
+  }
   saveDB();
   showToast('✓ 核对完成！答对'+correct+'/'+answered+'（共'+total+'题）',4000);
 }
@@ -4048,6 +4071,90 @@ function showHfWrong(){
   if(!_searchResults.length){showToast('找不到题目');return;}
   renderSearchResults('高频错题（错'+n+'次以上，共'+_searchResults.length+'题）');
   setTimeout(function(){var r=document.getElementById('search-results');if(r)r.scrollIntoView({behavior:'smooth'});},200);
+}
+
+function showSavedHfResult(kw){
+  var res=DB.hfResults&&DB.hfResults[kw]; if(!res) return;
+  var area=document.getElementById('search-results'); if(!area) return;
+  var date=new Date(res.ts).toLocaleDateString('zh-CN');
+  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
+  var html='<div style="background:#fff;border:1px solid #e8e4de;border-radius:12px;padding:14px 16px;margin-bottom:12px">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+    +'<span style="font-size:14px;font-weight:700;color:#333">📊 上次核对结果</span>'
+    +'<span style="font-size:12px;color:#aaa">'+date+'</span>'
+    +'<span style="font-size:13px;color:#2e7d52;font-weight:700;margin-left:auto">答对'+res.correct+'/'+res.total+'题</span>'
+    +'<button onclick="this.parentNode.parentNode.remove()" style="border:none;background:none;cursor:pointer;color:#aaa;font-size:16px">✕</button>'
+    +'</div>';
+
+  if(wrongItems.length){
+    html+='<div style="font-size:12px;font-weight:700;color:#b83232;margin-bottom:6px">✗ 错题（'+wrongItems.length+'题）</div>';
+    wrongItems.forEach(function(item,i){
+      html+='<div style="background:#fdeaea;border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:13px">'
+        +'<div style="color:#333;margin-bottom:4px">'+esc(item.body.slice(0,60))+(item.body.length>60?'…':'')+'</div>'
+        +'<div style="color:#b83232">我选：'+esc(item.my||'?')+' · 正确：'+esc(item.answer||'?')+'</div>'
+        +'</div>';
+    });
+    html+='<button data-kw="'+esc(kw)+'" onclick="genWeakPointAnalysis(this.dataset.kw)" style="margin-top:8px;padding:8px 16px;background:#6040b0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">🧠 AI分析弱项</button>';
+  } else {
+    html+='<div style="color:#2e7d52;font-size:13px">✓ 全部答对！</div>';
+  }
+  html+='</div>';
+
+  // Insert before search results
+  var existing=document.getElementById('hf-result-panel');
+  if(existing) existing.remove();
+  var div=document.createElement('div');
+  div.id='hf-result-panel';
+  div.innerHTML=html;
+  area.insertBefore(div, area.firstChild);
+}
+
+function genWeakPointAnalysis(kw){
+  var res=DB.hfResults&&DB.hfResults[kw]; if(!res) return;
+  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
+  if(!wrongItems.length){showToast('没有错题');return;}
+
+  showToast('🧠 AI正在分析弱项…',8000);
+
+  var context=wrongItems.map(function(item,i){
+    var opts=item.opts?item.opts.map(function(o){return o.letter+'. '+o.text;}).join('\n'):'';
+    return '题'+(i+1)+': '+item.body+'\n'+opts+'\n我选：'+item.my+'  正确：'+item.answer;
+  }).join('\n\n---\n\n');
+
+  var prompt='以下是PCE针灸考试关于「'+kw+'」的错题（共'+wrongItems.length+'题）：\n\n'+context
+    +'\n\n请分析这些错题，生成弱项整理报告，格式：\n'
+    +'【主要弱点】列出2-3个核心薄弱点\n'
+    +'【混淆原因】为什么容易选错\n'
+    +'【记忆口诀】简洁记忆方法\n'
+    +'【重点复习】最需要掌握的知识点';
+
+  callClaude(prompt, 1500).then(function(txt){
+    // Save to weak points page
+    if(!DB.notes) DB.notes=[];
+    var weakNote=null;
+    for(var i=0;i<DB.notes.length;i++){
+      if(DB.notes[i].type==='weak-points'){weakNote=DB.notes[i];break;}
+    }
+    var entry='\n\n---\n【'+kw+'】'+new Date().toLocaleDateString('zh-CN')+'（错'+wrongItems.length+'题）\n'+txt;
+    if(weakNote){
+      weakNote.content=(weakNote.content||'')+entry;
+      weakNote.ts=Date.now();
+    } else {
+      DB.notes.unshift({id:uid(),type:'weak-points',title:'🔴 弱项整理（AI分析）',content:'高频词弱项分析'+entry,ts:Date.now()});
+    }
+    saveDB();
+    showToast('✓ 弱项整理已保存到笔记本');
+    // Show in panel
+    var panel=document.getElementById('hf-result-panel');
+    if(panel){
+      var aiDiv=document.createElement('div');
+      aiDiv.style.cssText='background:#f0ebff;border:1px solid #d4c9f5;border-radius:10px;padding:12px;margin-top:10px';
+      aiDiv.innerHTML='<div style="font-size:13px;font-weight:700;color:#6040b0;margin-bottom:8px">🧠 弱项分析</div>'
+        +'<div id="weak-ai-content" style="font-size:13px;line-height:1.8"></div>';
+      panel.querySelector('div').appendChild(aiDiv);
+      renderAI(document.getElementById('weak-ai-content'), txt);
+    }
+  }).catch(function(e){showToast('AI分析失败：'+e.message);});
 }
 
 function toggleSearchDetail(ri){
