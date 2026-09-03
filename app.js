@@ -3611,7 +3611,20 @@ function renderSearchResults(kw){
         +esc(o.letter+'. '+o.text)+'</button>';
     }).join('') : '';
 
-    var isDoneHf=!!(DB.hfQids&&DB.hfQids[r.q.id]);
+    var isDoneHf=(function(qid){
+      // Check if answered in any batch
+      if(DB.wrongMap&&DB.wrongMap[qid]) return true;
+      if(DB.dkMap&&DB.dkMap[qid]) return true;
+      for(var bi=0;bi<DB.batches.length;bi++){
+        var b=DB.batches[bi];
+        if(!b.progress||!b.progress.answers) continue;
+        var qs=b.questions||[];
+        for(var qi2=0;qi2<qs.length;qi2++){
+          if(qs[qi2].id===qid && b.progress.answers[qi2]) return true;
+        }
+      }
+      return false;
+    })(r.q.id);
     var grayStyle=isDoneHf?';opacity:0.45;filter:grayscale(70%);':''; 
     html+='<div class="sr-item" data-donehf="'+(isDoneHf?'1':'0')+'" data-ri="'+ri+'" style="padding:10px 0;border-bottom:1px solid #eee'+grayStyle+'">'
       +'<div style="display:flex;align-items:flex-start;gap:8px">'
