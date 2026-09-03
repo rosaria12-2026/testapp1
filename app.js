@@ -2160,19 +2160,30 @@ function cloudUpload(){
 }
 
 function downloadInChunks(col, batchIds){
-  var chunkSize=8;
+  var chunkSize=3;
   var total=batchIds.length;
   var done=0;
   var allDocs=[];
   function fetchChunk(i){
     if(i>=total) return Promise.resolve(allDocs);
     var chunk=batchIds.slice(i,i+chunkSize);
-    var ops=chunk.map(function(id){return col.doc('batch_'+id).get().catch(function(){return null;});});
+    var ops=chunk.map(function(id){
+      // Retry once on failure
+      return col.doc('batch_'+id).get().catch(function(){
+        return new Promise(function(resolve){
+          setTimeout(function(){
+            col.doc('batch_'+id).get().then(resolve).catch(function(){resolve(null);});
+          }, 1000);
+        });
+      });
+    });
     return Promise.all(ops).then(function(docs){
       allDocs=allDocs.concat(docs);
       done+=chunk.length;
       showProgress('下载批次 '+done+'/'+total, 40+done/total*50);
-      return fetchChunk(i+chunkSize);
+      return new Promise(function(resolve){
+        setTimeout(function(){ resolve(fetchChunk(i+chunkSize)); }, 300);
+      });
     });
   }
   return fetchChunk(0);
