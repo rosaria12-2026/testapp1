@@ -3576,6 +3576,9 @@ function doSearch(){
     });
   });
 
+  // Clear search note on new search
+  var ta=document.getElementById('search-note-txt');
+  if(ta){ta.value=''; saveSearchNote();}
   renderSearchResults(kw);
 }
 
