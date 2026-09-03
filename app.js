@@ -3573,12 +3573,13 @@ function renderSearchResults(kw){
     return;
   }
 
+  var doneHfCount=_searchResults.filter(function(r){return DB.hfQids&&DB.hfQids[r.q.id];}).length;
   var html='<div class="card">'
     +'<div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">'
-    +'<div>找到 <b>'+_searchResults.length+'</b> 道题</div>'
+    +'<div>找到 <b>'+_searchResults.length+'</b> 道题'+(doneHfCount?' · <span style="font-size:12px;color:#aaa">已做高频'+doneHfCount+'题</span>':'')+'</div>'
     +'<div class="spacer"></div>'
+    +(doneHfCount?'<button class="btn small" id="toggle-done-hf" onclick="toggleDoneHf(this)" style="font-size:12px">🙈 排除已做（'+doneHfCount+'题）</button>':'')
     +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
-    +'<button class="btn" style="background:#6040b0;color:#fff" onclick="genKeywordCard(document.getElementById(\'search-kw\').value)">🧠 考点归纳卡片</button>'
     +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startInlineQuiz()">📝 在页面做题</button>'
     +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
     +'<button class="btn blue" onclick="searchAddToBatch()">➕ 加入已有批次</button>'
