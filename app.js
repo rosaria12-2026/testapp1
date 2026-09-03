@@ -3592,17 +3592,18 @@ function renderSearchResults(kw){
   }
 
   var doneHfCount=_searchResults.filter(function(r){return DB.hfQids&&DB.hfQids[r.q.id];}).length;
-  var html='<div class="card">'
-    +'<div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">'
-    +'<div>找到 <b>'+_searchResults.length+'</b> 道题'+(doneHfCount?' · <span style="font-size:12px;color:#aaa">已做高频'+doneHfCount+'题</span>':'')+'</div>'
-    +'<div class="spacer"></div>'
-    +(doneHfCount?'<button class="btn small" id="toggle-done-hf" onclick="toggleDoneHf(this)" style="font-size:12px">👁 全部显示（'+doneHfCount+'题已灰）</button>':'')
-    +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
+  var html='<div style="background:#fff;border:1px solid #e8e4de;border-radius:12px;padding:14px 16px;margin-bottom:12px">'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
+    +'<span style="font-size:14px;font-weight:700;color:#333">找到 '+_searchResults.length+' 道题</span>'
+    +(doneHfCount?'<span style="font-size:12px;color:#aaa;background:#f5f5f5;padding:2px 8px;border-radius:10px">已做高频'+doneHfCount+'题</span>':'')
+    +'<div style="flex:1"></div>'
+    +(doneHfCount?'<button class="btn small" id="toggle-done-hf" onclick="toggleDoneHf(this)" style="font-size:12px">👁 全部显示</button>':'')
+    +'<label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
     +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startInlineQuiz()">📝 在页面做题</button>'
-    +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
-    +'<button class="btn blue" onclick="searchAddToBatch()">➕ 加入已有批次</button>'
+    +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存批次</button>'
+    +'<button class="btn blue" onclick="searchAddToBatch()">➕ 加入批次</button>'
     +'</div>'
-    +''; // keyword-card-area moved to top
+    +'</div>';
 
   _searchResults.forEach(function(r,ri){
     var annNote = DB.qNotes&&DB.qNotes['ann_'+r.q.id]||'';
@@ -3620,9 +3621,11 @@ function renderSearchResults(kw){
 
     var isDoneHf=!!(DB.hfQids&&DB.hfQids[r.q.id]);
     var grayStyle=isDoneHf?';opacity:0.45;filter:grayscale(70%);':''; 
-    html+='<div class="sr-item" data-donehf="'+(isDoneHf?'1':'0')+'" data-ri="'+ri+'" style="padding:10px 0;border-bottom:1px solid #eee'+grayStyle+'">'
-      +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:4px;flex-shrink:0">'
-      +'<div style="flex:1">'
+    html+='<div class="sr-item" data-donehf="'+(isDoneHf?'1':'0')+'" data-ri="'+ri+'"'
+      +' style="background:#fff;border:1px solid #e8e4de;border-radius:10px;padding:12px 14px;margin-bottom:8px'+grayStyle+'">'
+      +'<div style="display:flex;align-items:flex-start;gap:10px">'
+      +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:3px;flex-shrink:0;width:16px;height:16px">'
+      +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:11px;color:#888;margin-bottom:4px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题</div>'
       +'<div style="font-size:14px;line-height:1.7;color:#222;margin-bottom:6px;user-select:text">'+esc(r.q.body||'')+'</div>'
       // Correct answer (hidden when in quiz mode, shown by default)
@@ -3640,7 +3643,6 @@ function renderSearchResults(kw){
       +'</div>'
       +'</div>';
   });
-  html+='</div>';
   area.innerHTML=html;
   // Auto-copy selection to note panel
   area.addEventListener('mouseup', function(){
