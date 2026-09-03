@@ -3589,7 +3589,7 @@ function renderSearchResults(kw){
     +'<div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">'
     +'<div>找到 <b>'+_searchResults.length+'</b> 道题'+(doneHfCount?' · <span style="font-size:12px;color:#aaa">已做高频'+doneHfCount+'题</span>':'')+'</div>'
     +'<div class="spacer"></div>'
-    +(doneHfCount?'<button class="btn small" id="toggle-done-hf" onclick="toggleDoneHf(this)" style="font-size:12px">🙈 排除已做（'+doneHfCount+'题）</button>':'')
+    +(doneHfCount?'<button class="btn small" id="toggle-done-hf" onclick="toggleDoneHf(this)" style="font-size:12px">👁 全部显示（'+doneHfCount+'题已灰）</button>':'')
     +'<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="search-sel-all" onchange="searchToggleAll(this.checked)"> 全选</label>'
     +'<button class="btn" style="background:#e8623a;color:#fff" onclick="startInlineQuiz()">📝 在页面做题</button>'
     +'<button class="btn primary" onclick="searchSaveBatch()">💾 另存为新批次</button>'
@@ -3611,9 +3611,10 @@ function renderSearchResults(kw){
         +esc(o.letter+'. '+o.text)+'</button>';
     }).join('') : '';
 
-    html+='<div class="sr-item" style="padding:10px 0;border-bottom:1px solid #eee" data-ri="'+ri+'">'
+    var isDoneHf=!!(DB.hfQids&&DB.hfQids[r.q.id]);
+    var grayStyle=isDoneHf?';opacity:0.45;filter:grayscale(70%);':''; 
+    html+='<div class="sr-item" data-donehf="'+(isDoneHf?'1':'0')+'" data-ri="'+ri+'" style="padding:10px 0;border-bottom:1px solid #eee'+grayStyle+'">'
       +'<div style="display:flex;align-items:flex-start;gap:8px">'
-      +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:4px;flex-shrink:0">'
       +'<div style="flex:1">'
       +'<div style="font-size:11px;color:#888;margin-bottom:4px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题</div>'
       +'<div style="font-size:14px;line-height:1.7;color:#222;margin-bottom:6px;user-select:text">'+esc(r.q.body||'')+'</div>'
@@ -3705,6 +3706,7 @@ function mountCustomKw(){
   DB.customKw.forEach(function(w){
     var searched=DB.searchHistory&&DB.searchHistory[w];
     var hasNote=DB.kwNotes&&(DB.kwNotes['__kw__'+w]||DB.kwNotes[w]);
+  DB.kwNotes['__search_saved__']=true;
     var btn=document.createElement('button');
     btn.style.cssText='padding:3px 8px;border-radius:20px;border:1px solid '+(searched?'#f0d060':'#ddd')+';background:'+(searched?'#fff3cd':'#f8f7f3')+';font-size:12px;cursor:pointer;color:'+(searched?'#8a6000':'#333');
     var label=document.createElement('span'); label.textContent=w+(hasNote?'★':'');
