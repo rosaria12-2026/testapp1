@@ -2100,71 +2100,110 @@ function cloudLogout(){
   localStorage.removeItem('cloud_pass_hint');
   firebase.auth().signOut().then(function(){ document.getElementById('cloud-status').textContent='已退出。'; });
 }
+function showProgress(msg, pct){
+  var el=document.getElementById('cloud-progress');
+  if(!el){
+    el=document.createElement('div');
+    el.id='cloud-progress';
+    el.style.cssText='position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;min-width:260px;text-align:center';
+    document.body.appendChild(el);
+  }
+  el.innerHTML=msg+'<div style="background:#555;border-radius:4px;margin-top:6px;height:8px"><div style="background:#4caf50;height:8px;border-radius:4px;width:'+Math.round(pct)+'%;transition:width .3s"></div></div>';
+  if(pct>=100) setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el);},2000);
+}
+
+function uploadInChunks(col, batches){
+  var chunkSize=8;
+  var total=batches.length;
+  var done=0;
+  function uploadChunk(i){
+    if(i>=total) return Promise.resolve();
+    var chunk=batches.slice(i,i+chunkSize);
+    var ops=chunk.map(function(b){
+      return col.doc('batch_'+b.id).set({id:b.id,name:b.name,date:b.date,questions:b.questions,progress:b.progress});
+    });
+    return Promise.all(ops).then(function(){
+      done+=chunk.length;
+      showProgress('上传批次 '+done+'/'+total, 30+done/total*60);
+      return uploadChunk(i+chunkSize);
+    });
+  }
+  return uploadChunk(0);
+}
+
 function cloudUpload(){
   if(typeof firebase==='undefined'){showToast('请先配置Firebase');return;}
   var user=firebase.auth().currentUser; if(!user){showToast('请先登录');return;}
-  showToast('上传中…',10000);
+  showProgress('上传中… 准备数据', 5);
   var col=firebase.firestore().collection('users').doc(user.uid).collection('data');
-  var ops=[];
 
-  // meta2: notes + qNotes
-  ops.push(col.doc('meta2').set({notes:DB.notes||[],qNotes:DB.qNotes||{},ts:Date.now()}));
-  // meta3: wrongMap + dkMap + starMap + answerKeys
-  ops.push(col.doc('meta3').set({wrongMap:DB.wrongMap||{},dkMap:DB.dkMap||{},starMap:DB.starMap||{},answerKeys:DB.answerKeys||{},ts:Date.now()}));
-  // meta4: fillBatches + kwCards + searchHistory
-  ops.push(col.doc('meta4').set({fillBatches:DB.fillBatches||[],fillWrong:DB.fillWrong||[],kwCards:DB.kwCards||{},searchHistory:DB.searchHistory||{},ts:Date.now()}));
-  // meta5: studyPages + customKw + kwNotes + hfQids + fillProgress
-  ops.push(col.doc('meta5').set({
-    studyPages:JSON.stringify(DB.studyPages||[]),
-    customKw:JSON.stringify(DB.customKw||[]),
-    kwNotes:DB.kwNotes||{},
-    hfQids:DB.hfQids||{},
-    fillProgress:JSON.stringify(DB.fillProgress||{}),
-    ts:Date.now()
-  }));
-  // meta: stats + lastPos
-  ops.push(col.doc('meta').set({stats:DB.stats||{},lastPos:DB.lastPos||null,ts:Date.now()}));
-  // analysis
-  ops.push(col.doc('analysis_0').set({cache:DB.analysisCache||{},ts:Date.now()}));
-  // batch_index
-  ops.push(col.doc('batch_index').set({ids:DB.batches.map(function(b){return b.id;}),ts:Date.now()}));
-  // each batch
-  DB.batches.forEach(function(b){
-    ops.push(col.doc('batch_'+b.id).set({id:b.id,name:b.name,date:b.date,questions:b.questions,progress:b.progress}));
+  // Step 1: Upload meta docs
+  var metaOps=[
+    col.doc('meta').set({stats:DB.stats||{},lastPos:DB.lastPos||null,ts:Date.now()}),
+    col.doc('meta2').set({notes:DB.notes||[],qNotes:DB.qNotes||{},ts:Date.now()}),
+    col.doc('meta3').set({wrongMap:DB.wrongMap||{},dkMap:DB.dkMap||{},starMap:DB.starMap||{},answerKeys:DB.answerKeys||{},ts:Date.now()}),
+    col.doc('meta4').set({fillBatches:DB.fillBatches||[],fillWrong:DB.fillWrong||[],kwCards:DB.kwCards||{},searchHistory:DB.searchHistory||{},ts:Date.now()}),
+    col.doc('meta5').set({studyPages:JSON.stringify(DB.studyPages||[]),customKw:JSON.stringify(DB.customKw||[]),kwNotes:DB.kwNotes||{},hfQids:DB.hfQids||{},fillProgress:JSON.stringify(DB.fillProgress||{}),ts:Date.now()}),
+    col.doc('analysis_0').set({cache:DB.analysisCache||{},ts:Date.now()}),
+    col.doc('batch_index').set({ids:DB.batches.map(function(b){return b.id;}),ts:Date.now()})
+  ];
+
+  Promise.all(metaOps).then(function(){
+    showProgress('上传批次中…', 25);
+    return uploadInChunks(col, DB.batches);
+  }).then(function(){
+    showProgress('✓ 上传完成！'+DB.batches.length+'批次 · '+DB.notes.length+'笔记 · '+Object.keys(DB.wrongMap||{}).length+'错题', 100);
+  }).catch(function(e){
+    var el=document.getElementById('cloud-progress'); if(el&&el.parentNode)el.parentNode.removeChild(el);
+    showToast('上传失败：'+e.message);
   });
+}
 
-  Promise.all(ops)
-    .then(function(){showToast('✓ 已上传（'+DB.batches.length+'批次 · '+DB.notes.length+'笔记 · '+Object.keys(DB.wrongMap||{}).length+'错题）',5000);})
-    .catch(function(e){showToast('上传失败：'+e.message);});
+function downloadInChunks(col, batchIds){
+  var chunkSize=8;
+  var total=batchIds.length;
+  var done=0;
+  var allDocs=[];
+  function fetchChunk(i){
+    if(i>=total) return Promise.resolve(allDocs);
+    var chunk=batchIds.slice(i,i+chunkSize);
+    var ops=chunk.map(function(id){return col.doc('batch_'+id).get().catch(function(){return null;});});
+    return Promise.all(ops).then(function(docs){
+      allDocs=allDocs.concat(docs);
+      done+=chunk.length;
+      showProgress('下载批次 '+done+'/'+total, 40+done/total*50);
+      return fetchChunk(i+chunkSize);
+    });
+  }
+  return fetchChunk(0);
 }
 
 function cloudDownload(){
   if(typeof firebase==='undefined'){showToast('请先配置Firebase');return;}
   var user=firebase.auth().currentUser; if(!user){showToast('请先登录');return;}
-  showToast('下载中…',8000);
-  var uid=user.uid;
-  var col=firebase.firestore().collection('users').doc(uid).collection('data');
-  // Fetch all documents in parallel
+  showProgress('下载中… 获取数据', 5);
+  var col=firebase.firestore().collection('users').doc(user.uid).collection('data');
+
   Promise.all([
     col.doc('batch_index').get().catch(function(){return null;}),
+    col.doc('meta').get().catch(function(){return null;}),
     col.doc('meta2').get().catch(function(){return null;}),
     col.doc('meta3').get().catch(function(){return null;}),
     col.doc('meta4').get().catch(function(){return null;}),
     col.doc('meta5').get().catch(function(){return null;}),
-    col.doc('analysis_0').get().catch(function(){return null;}),
-    col.doc('meta_v2').get().catch(function(){return null;}),
-    col.doc('batch_index_v2').get().catch(function(){return null;})
+    col.doc('analysis_0').get().catch(function(){return null;})
   ]).then(function(results){
+    showProgress('处理数据…', 30);
     var batchIdxDoc=results[0];
-    var m2=results[1]&&results[1].exists?results[1].data():{};
-    var m3=results[2]&&results[2].exists?results[2].data():{};
-    var m4=results[3]&&results[3].exists?results[3].data():{};
-    var m5=results[4]&&results[4].exists?results[4].data():{};
-    var a0=results[5]&&results[5].exists?results[5].data():{};
-    var metaV2=results[6]&&results[6].exists?results[6].data():null;
-    var batchIdxV2=results[7]&&results[7].exists?results[7].data():null;
+    var m =results[1]&&results[1].exists?results[1].data():{};
+    var m2=results[2]&&results[2].exists?results[2].data():{};
+    var m3=results[3]&&results[3].exists?results[3].data():{};
+    var m4=results[4]&&results[4].exists?results[4].data():{};
+    var m5=results[5]&&results[5].exists?results[5].data():{};
+    var a0=results[6]&&results[6].exists?results[6].data():{};
 
-    // Restore meta fields
+    DB.stats=m.stats||DB.stats||{done:0,correct:0};
+    DB.lastPos=m.lastPos||null;
     DB.notes=m2.notes||[];
     DB.qNotes=m2.qNotes||{};
     DB.wrongMap=m3.wrongMap||{};
@@ -2182,36 +2221,21 @@ function cloudDownload(){
     DB.fillProgress=typeof m5.fillProgress==='string'?JSON.parse(m5.fillProgress||'{}'):(m5.fillProgress||{});
     DB.analysisCache=a0.cache||{};
 
-    // Also try meta_v2 for additional fields
-    if(metaV2&&metaV2.meta){
-      try{
-        var mv=JSON.parse(metaV2.meta);
-        if(!Object.keys(DB.wrongMap).length&&mv.wrongMap) DB.wrongMap=mv.wrongMap;
-        if(!DB.notes.length&&mv.notes) DB.notes=mv.notes;
-        if(mv.stats) DB.stats=mv.stats;
-        if(mv.lastPos) DB.lastPos=mv.lastPos;
-      }catch(e){}
-    }
-
-    // Fetch batches
-    var batchIds=[];
-    if(batchIdxDoc&&batchIdxDoc.exists) batchIds=batchIdxDoc.data().ids||[];
-    else if(batchIdxV2) batchIds=batchIdxV2.ids||[];
-
+    var batchIds=batchIdxDoc&&batchIdxDoc.exists?batchIdxDoc.data().ids||[]:[];
     if(!batchIds.length){
       saveDB(); renderHome();
-      showToast('✓ 已下载（无批次数据）');
-      return;
+      showProgress('✓ 下载完成（无批次）', 100); return;
     }
-
-    Promise.all(batchIds.map(function(id){
-      return col.doc('batch_'+id).get().catch(function(){return null;});
-    })).then(function(docs){
-      DB.batches=docs.filter(function(d){return d&&d.exists;}).map(function(d){return d.data();});
-      saveDB(); renderHome();
-      showToast('✓ 已下载（'+DB.batches.length+'批次 · '+DB.notes.length+'笔记 · '+Object.keys(DB.wrongMap).length+'错题）');
-    });
-  }).catch(function(e){showToast('下载失败：'+e.message);});
+    return downloadInChunks(col, batchIds);
+  }).then(function(docs){
+    if(!docs) return;
+    DB.batches=docs.filter(function(d){return d&&d.exists;}).map(function(d){return d.data();});
+    saveDB(); renderHome();
+    showProgress('✓ 下载完成！'+DB.batches.length+'批次 · '+DB.notes.length+'笔记 · '+Object.keys(DB.wrongMap).length+'错题', 100);
+  }).catch(function(e){
+    var el=document.getElementById('cloud-progress'); if(el&&el.parentNode)el.parentNode.removeChild(el);
+    showToast('下载失败：'+e.message);
+  });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3964,6 +3988,21 @@ function checkInlineQuiz(){
   });
   saveDB();
   showToast('✓ 核对完成！答对'+correct+'/'+answered+'（共'+total+'题）',4000);
+}
+
+function toggleDoneHf(btn){
+  var isGray=btn.dataset.grayed==='1';
+  document.querySelectorAll('.sr-item[data-donehf="1"]').forEach(function(el){
+    el.style.opacity=isGray?'':'0.35';
+    el.style.filter=isGray?'':'grayscale(80%)';
+  });
+  if(!isGray){
+    btn.dataset.grayed='1'; btn.textContent='👁 恢复显示';
+    btn.style.background='#fff3cd'; btn.style.color='#8a6000';
+  } else {
+    btn.dataset.grayed=''; btn.textContent='🙈 灰色已做高频题';
+    btn.style.background='#f5f5f5'; btn.style.color='#888';
+  }
 }
 
 function toggleSearchDetail(ri){
