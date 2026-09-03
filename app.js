@@ -3326,19 +3326,21 @@ function renderSearch(){
     +'</div>'
   +'</div>'
   +'<div id="kw-cards-list"></div>'
-  +'<div id="search-results"></div>'
-  +'<div class="card" style="padding:10px 14px;margin-top:8px">'
-  +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
-  +'<div style="font-size:12px;font-weight:700;color:#8a6000">📝 高频考题笔记</div>'
-  +'<label style="font-size:11px;color:#aaa;margin-left:auto;display:flex;align-items:center;gap:3px"><input type="checkbox" id="snote-autocopy" checked> 划字自动追加</label>'
+  +'<div style="display:flex;gap:10px;align-items:flex-start">'
+  +'<div id="search-results" style="flex:1;min-width:0"></div>'
+  +'<div style="width:190px;flex-shrink:0;position:sticky;top:60px">'
+  +'<div style="background:#fffbe6;border:1.5px solid #f0d060;border-radius:10px;padding:10px 12px">'
+  +'<div style="display:flex;align-items:center;margin-bottom:5px">'
+  +'<span style="font-size:12px;font-weight:700;color:#8a6000">📝 高频笔记</span>'
+  +'<label style="font-size:10px;color:#aaa;margin-left:auto;display:flex;align-items:center;gap:2px"><input type="checkbox" id="snote-autocopy" checked> 划字追加</label>'
   +'</div>'
-  +'<textarea id="search-note-txt" placeholder="在题目里划选文字自动追加…或直接输入笔记" style="width:100%;min-height:80px;padding:6px;border:1px solid #f0d060;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box;background:#fffdf5" oninput="saveSearchNote()"></textarea>'
-  +'<div style="display:flex;gap:6px;margin-top:6px">'
-  +'<button class="btn small" onclick="saveSearchNoteToNotes()">📚 存入高频考题笔记本</button>'
-  +'<button class="btn small" onclick="clearSearchNote()" style="color:#888">清空</button>'
+  +'<textarea id="search-note-txt" placeholder="划字自动追加…" style="width:100%;min-height:120px;padding:6px;border:1px solid #f0d060;border-radius:6px;font-size:12px;resize:vertical;box-sizing:border-box;background:#fffdf5" oninput="saveSearchNote()"></textarea>'
+  +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'
+  +'<button class="btn small" onclick="saveSearchNoteToNotes()" style="font-size:11px">📚 存笔记本</button>'
+  +'<button class="btn small" onclick="clearSearchNote()" style="font-size:11px;color:#888">清空</button>'
   +'</div>'
+  +'</div></div>'
   +'</div>';
-
   area.innerHTML = html;
   setTimeout(function(){
     mountTopKwCards();
@@ -3611,20 +3613,7 @@ function renderSearchResults(kw){
         +esc(o.letter+'. '+o.text)+'</button>';
     }).join('') : '';
 
-    var isDoneHf=(function(qid){
-      // Check if answered in any batch
-      if(DB.wrongMap&&DB.wrongMap[qid]) return true;
-      if(DB.dkMap&&DB.dkMap[qid]) return true;
-      for(var bi=0;bi<DB.batches.length;bi++){
-        var b=DB.batches[bi];
-        if(!b.progress||!b.progress.answers) continue;
-        var qs=b.questions||[];
-        for(var qi2=0;qi2<qs.length;qi2++){
-          if(qs[qi2].id===qid && b.progress.answers[qi2]) return true;
-        }
-      }
-      return false;
-    })(r.q.id);
+    var isDoneHf=!!(DB.hfQids&&DB.hfQids[r.q.id]);
     var grayStyle=isDoneHf?';opacity:0.45;filter:grayscale(70%);':''; 
     html+='<div class="sr-item" data-donehf="'+(isDoneHf?'1':'0')+'" data-ri="'+ri+'" style="padding:10px 0;border-bottom:1px solid #eee'+grayStyle+'">'
       +'<div style="display:flex;align-items:flex-start;gap:8px">'
