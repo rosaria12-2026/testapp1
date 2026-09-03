@@ -2102,15 +2102,12 @@ function cloudLogout(){
   firebase.auth().signOut().then(function(){ document.getElementById('cloud-status').textContent='已退出。'; });
 }
 function showProgress(msg, pct){
-  var el=document.getElementById('cloud-progress');
-  if(!el){
-    el=document.createElement('div');
-    el.id='cloud-progress';
-    el.style.cssText='position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;min-width:260px;text-align:center';
-    document.body.appendChild(el);
+  if(pct>=100){
+    showToast(msg, 4000);
+  } else if(pct<=10){
+    showToast(msg, 15000);
   }
-  el.innerHTML=msg+'<div style="background:#555;border-radius:4px;margin-top:6px;height:8px"><div style="background:#4caf50;height:8px;border-radius:4px;width:'+Math.round(pct)+'%;transition:width .3s"></div></div>';
-  if(pct>=100) setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el);},2000);
+  // else silent
 }
 
 function uploadInChunks(col, batches){
@@ -3952,21 +3949,21 @@ function startInlineQuiz(){
     if(optsEl) optsEl.style.display='flex';
     if(resEl) resEl.style.display='none';
   });
-  showToast('📝 做题模式：选完答案后点「一键核对」');
-  // Show check button
-  var hdr=document.querySelector('#search-results .card>.row');
-  if(hdr){
+  showToast('📝 做题模式：选完后点「✓ 一键核对」');
+  // Add check button to first div in search-results
+  var area=document.getElementById('search-results');
+  if(area){
     var checkBtn=document.getElementById('inline-check-btn');
     if(!checkBtn){
       checkBtn=document.createElement('button');
       checkBtn.id='inline-check-btn';
       checkBtn.className='btn';
-      checkBtn.style.cssText='background:#2e7d52;color:#fff';
-      checkBtn.textContent='✓ 一键核对';
+      checkBtn.style.cssText='background:#2e7d52;color:#fff;width:100%;margin-top:10px;padding:12px;font-size:15px;border-radius:10px';
+      checkBtn.textContent='✓ 一键核对所有答案';
       checkBtn.onclick=checkInlineQuiz;
-      hdr.appendChild(checkBtn);
+      area.appendChild(checkBtn);
     }
-    checkBtn.style.display='inline';
+    checkBtn.style.display='block';
   }
 }
 
