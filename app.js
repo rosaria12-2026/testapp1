@@ -4129,12 +4129,12 @@ function genWeakPointAnalysis(kw){
     return '题'+(i+1)+': '+item.body+'\n'+opts+'\n我选：'+item.my+'  正确：'+item.answer;
   }).join('\n\n---\n\n');
 
-  var prompt='以下是PCE针灸考试关于「'+kw+'」的错题（共'+wrongItems.length+'题）：\n\n'+context
-    +'\n\n请分析这些错题，生成弱项整理报告，格式：\n'
-    +'【主要弱点】列出2-3个核心薄弱点\n'
-    +'【混淆原因】为什么容易选错\n'
-    +'【记忆口诀】简洁记忆方法\n'
-    +'【重点复习】最需要掌握的知识点';
+  var prompt='以下是PCE针灸考试关于「'+kw+'」的'+wrongItems.length+'道错题及正确答案：\n\n'+context
+    +'\n\n请做以下分析（针对PCE考试，简洁实用）：\n\n'
+    +'【混淆项汇总】列出所有容易混淆的选项组合，用表格对比（错误选项 vs 正确选项，一句话说明区别）\n\n'
+    +'【看题关键字】列出判断答案的核心字眼——见到什么关键词就选什么，每条一行\n\n'
+    +'【考点精华】用最少的话提炼这些题的核心考点，适合考前速览\n\n'
+    +'【一句话口诀】为每个混淆点写一句超简洁的记忆口诀';
 
   callClaude(prompt, 1500).then(function(txt){
     // Save to weak points page
