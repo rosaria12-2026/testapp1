@@ -1596,9 +1596,17 @@ function renderNotes(){
     +'<button class="btn small" onclick="document.getElementById(\'ai-sum-box\').style.display=\'none\'">取消</button>'
     +'</div></div></div>';
 
-  DB.notes.slice().reverse().forEach(function(note){
-    var typeLabel=note.type==='question'?'📖 题目':note.type==='excerpt'?'✂️ 摘录':note.type==='ai-summary'?'🤖 AI整理':'📝 笔记';
-    var typeColor=note.type==='question'?'#1a4fa0':note.type==='excerpt'?'#2e7d52':note.type==='ai-summary'?'#6040b0':'#555';
+  // Sort: hf-notebook and weak-points first, then by date
+  var sortedNotes = DB.notes.slice().sort(function(a,b){
+    var priority={'hf-notebook':0,'weak-points':1};
+    var pa=priority[a.type]!==undefined?priority[a.type]:2;
+    var pb=priority[b.type]!==undefined?priority[b.type]:2;
+    if(pa!==pb) return pa-pb;
+    return b.ts-a.ts; // newest first within same priority
+  });
+  sortedNotes.forEach(function(note){
+    var typeLabel=note.type==='question'?'📖 题目':note.type==='excerpt'?'✂️ 摘录':note.type==='ai-summary'?'🤖 AI整理':note.type==='hf-notebook'?'🔍 高频考题笔记':note.type==='weak-points'?'🔴 弱项整理':'📝 笔记';
+    var typeColor=note.type==='question'?'#1a4fa0':note.type==='excerpt'?'#2e7d52':note.type==='ai-summary'?'#6040b0':note.type==='hf-notebook'?'#8a6000':note.type==='weak-points'?'#b83232':'#555';
     html+='<div class="card" style="padding:12px 14px" id="note-'+note.id+'">'
       +'<div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:6px">'
       +'<input type="checkbox" class="note-cb" data-nid="'+note.id+'" style="width:14px;height:14px;flex-shrink:0;margin-right:2px">'
@@ -1767,7 +1775,7 @@ function exportNotesPDF(){
   var body='<div class="nopr"><button onclick="window.print()" style="padding:10px 20px;background:#18180f;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">🖨 打印/PDF</button><button onclick="window.close()" style="padding:10px 14px;background:#f0efe9;border:1px solid #ccc;border-radius:8px;font-size:13px;cursor:pointer">关闭</button></div>'
     +'<h1>PCE 针灸复习笔记</h1><p style="color:#888;font-size:10pt">生成：'+new Date().toLocaleString('zh-CN')+' | 共 '+toExport.length+' 条</p><hr>';
   toExport.forEach(function(note){
-    var typeLabel=note.type==='question'?'📖 题目':note.type==='excerpt'?'✂️ 摘录':note.type==='ai-summary'?'🤖 AI整理':'📝 笔记';
+    var typeLabel=note.type==='question'?'📖 题目':note.type==='excerpt'?'✂️ 摘录':note.type==='ai-summary'?'🤖 AI整理':note.type==='hf-notebook'?'🔍 高频考题笔记':note.type==='weak-points'?'🔴 弱项整理':'📝 笔记';
     body+='<div class="card"><p><span class="tag" style="background:#e8e4f8">'+typeLabel+'</span><b>'+esc(note.title)+'</b></p>';
     if(note.type==='question'){
       body+='<div class="q">'+esc(note.content)+'</div>';
