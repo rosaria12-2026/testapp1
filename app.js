@@ -1990,6 +1990,7 @@ function finishMock(){
 // HOME
 // ═══════════════════════════════════════════════════════
 function renderHome(){
+  syncHfQids();
   var total=0; DB.batches.forEach(function(b){total+=b.questions.length;});
   document.getElementById('st-total').textContent=total;
   document.getElementById('st-done').textContent=DB.stats.done||0;
