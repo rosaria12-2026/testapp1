@@ -4210,34 +4210,87 @@ function hfWrongSelAll(checked){
 function hfWrongAddToBatch(kw){
   var res=DB.hfResults&&DB.hfResults[kw]; if(!res)return;
   var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
-  // Get selected items
   var selected=[];
   document.querySelectorAll('.hfw-cb:checked').forEach(function(cb){
     var i=parseInt(cb.dataset.idx);
     if(wrongItems[i]&&wrongItems[i].opts) selected.push(wrongItems[i]);
   });
   if(!selected.length){
-    // If none checked, use all
     selected=wrongItems.filter(function(x){return x.opts&&x.opts.length;});
   }
   if(!selected.length){showToast('没有可加入的题目（需要有选项数据）');return;}
-  // Convert hfResult items to question objects
   var qs=selected.map(function(item){
     return {id:uid(),num:null,body:item.body,opts:item.opts,answer:item.answer,caseText:null};
   });
-  // Show batch selector
-  var panel=document.getElementById('hf-result-panel'); if(!panel)return;
   var old=document.getElementById('hfw-batch-sel'); if(old)old.remove();
-  var batchOpts='<option value="__new__">＋ 新建批次</option>'
-    +DB.batches.map(function(b,bi){return '<option value="'+bi+'">'+esc(b.name)+' ('+b.questions.length+'题)</option>';}).join('');
+  // Build scrollable batch list
+  var listHtml='<div style="max-height:220px;overflow-y:auto;border:1px solid #d4c9f5;border-radius:6px;margin:8px 0;background:#fff">';
+  listHtml+='<div onclick="hfWrongDoAddNew(\''+esc(kw)+'\')" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #eee;color:#6040b0;font-weight:700;font-size:13px">＋ 新建批次</div>';
+  DB.batches.slice().reverse().forEach(function(b,ri){
+    var bi=DB.batches.length-1-ri;
+    listHtml+='<div onclick="hfWrongDoAddExist(\''+esc(kw)+'\','+bi+')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f0efe9;font-size:13px;color:#333">'+esc(b.name)+'<span style="font-size:11px;color:#aaa;margin-left:6px">'+b.questions.length+'题</span></div>';
+  });
+  listHtml+='</div>';
   var sel=document.createElement('div');
   sel.id='hfw-batch-sel';
-  sel.style.cssText='padding:10px 12px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px;margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
-  sel.innerHTML='<span style="font-size:13px;font-weight:700;color:#6040b0">选择批次（'+qs.length+'题）：</span>'
-    +'<select id="hfw-batch-select" style="padding:6px 10px;border:1px solid #d4c9f5;border-radius:6px;font-size:13px;flex:1">'+batchOpts+'</select>'
-    +'<button class="btn primary" style="font-size:12px" onclick="hfWrongDoAdd(\''+esc(kw)+'\')">确认加入</button>'
-    +'<button class="btn small" onclick="document.getElementById(\'hfw-batch-sel\').remove()">取消</button>';
-  panel.querySelector('div').appendChild(sel);
+  sel.style.cssText='padding:12px 14px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px;margin-top:10px';
+  sel.innerHTML='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+    +'<span style="font-size:13px;font-weight:700;color:#6040b0">选择批次加入 '+qs.length+' 题：</span>'
+    +'<button onclick="document.getElementById(\'hfw-batch-sel\').remove()" style="border:none;background:none;cursor:pointer;color:#aaa;font-size:16px;margin-left:auto">✕</button>'
+    +'</div>'
+    +listHtml;
+  // Insert after the toolbar div inside hf-result-panel
+  var panel=document.getElementById('hf-result-panel');
+  if(panel) panel.appendChild(sel);
+  else document.body.appendChild(sel);
+  sel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function hfWrongDoAddNew(kw){
+  var res=DB.hfResults&&DB.hfResults[kw]; if(!res)return;
+  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
+  var selected=[];
+  document.querySelectorAll('.hfw-cb:checked').forEach(function(cb){
+    var i=parseInt(cb.dataset.idx);
+    if(wrongItems[i]&&wrongItems[i].opts) selected.push(wrongItems[i]);
+  });
+  if(!selected.length) selected=wrongItems.filter(function(x){return x.opts&&x.opts.length;});
+  var qs=selected.map(function(item){
+    return {id:uid(),num:null,body:item.body,opts:item.opts,answer:item.answer,caseText:null};
+  });
+  var name=prompt('新批次名称：','错题-'+new Date().toLocaleDateString('zh-CN'));
+  if(!name||!name.trim())return;
+  var newBatch={id:uid(),name:name.trim(),questions:qs,progress:{idx:0,answers:new Array(qs.length).fill(null),dk:{}},date:Date.now()};
+  DB.batches.push(newBatch); saveDB(); renderHome();
+  var s=document.getElementById('hfw-batch-sel'); if(s)s.remove();
+  showToast('✓ 已新建批次「'+name.trim()+'」加入'+qs.length+'题');
+}
+
+function hfWrongDoAddExist(kw, bi){
+  var res=DB.hfResults&&DB.hfResults[kw]; if(!res)return;
+  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
+  var selected=[];
+  document.querySelectorAll('.hfw-cb:checked').forEach(function(cb){
+    var i=parseInt(cb.dataset.idx);
+    if(wrongItems[i]&&wrongItems[i].opts) selected.push(wrongItems[i]);
+  });
+  if(!selected.length) selected=wrongItems.filter(function(x){return x.opts&&x.opts.length;});
+  var qs=selected.map(function(item){
+    return {id:uid(),num:null,body:item.body,opts:item.opts,answer:item.answer,caseText:null};
+  });
+  var batch=DB.batches[bi]; if(!batch)return;
+  var existBodies=new Set(batch.questions.map(function(q){return q.body;}));
+  var added=0;
+  qs.forEach(function(q){
+    if(!existBodies.has(q.body)){
+      batch.questions.push(q);
+      if(batch.progress&&batch.progress.answers) batch.progress.answers.push(null);
+      added++;
+    }
+  });
+  saveDB(); renderHome();
+  var s=document.getElementById('hfw-batch-sel'); if(s)s.remove();
+  showToast('✓ 已加入「'+batch.name+'」'+added+'题（重复跳过'+(qs.length-added)+'题）');
 }
 
 function hfWrongDoAdd(kw){
