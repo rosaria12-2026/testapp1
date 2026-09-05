@@ -1989,6 +1989,15 @@ function finishMock(){
 // ═══════════════════════════════════════════════════════
 // HOME
 // ═══════════════════════════════════════════════════════
+function syncHfQids(){
+  if(!DB.hfQids) DB.hfQids={};
+  DB.batches.forEach(function(b){
+    if(b.name&&b.name.indexOf('高频')>=0){
+      (b.questions||[]).forEach(function(q){if(q&&q.id)DB.hfQids[q.id]=true;});
+    }
+  });
+}
+
 function renderHome(){
   syncHfQids();
   var total=0; DB.batches.forEach(function(b){total+=b.questions.length;});
