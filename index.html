@@ -240,11 +240,9 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 </div>
 <div id="toast"></div>
 
-<script src="app.js?v=143"></script>
+<script src="app.js?v=144"></script>
 <script>
-  // Init notes page when tab clicked
   document.querySelector('.tab[data-page="notes"]').addEventListener('click', function(){ renderNotes(); });
-  // study and fill tab clicks handled in app.js tab handler
   document.querySelector('.tab[data-page="review"]').addEventListener('click', function(){ renderReview(); });
   document.querySelector('.tab[data-page="mock"]').addEventListener('click', function(){ renderMockSetup(); });
   if ('serviceWorker' in navigator) {
