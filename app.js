@@ -4243,7 +4243,7 @@ function hfWrongAddToBatch(kw){
   var panel=document.getElementById('hf-result-panel');
   if(panel) panel.appendChild(sel);
   else document.body.appendChild(sel);
-  sel.scrollIntoView({behavior:'smooth',block:'nearest'});
+  // no auto-scroll
 }
 
 function hfWrongDoAddNew(kw){
@@ -4375,17 +4375,14 @@ function showSavedHfResult(kw){
       // AI analysis
       var aiCached=foundQid?(DB.analysisCache&&DB.analysisCache[foundQid]||''):'';
 
-      html+='<div style="border:1px solid #f5c5c5;border-radius:8px;margin-bottom:8px;overflow:hidden">'
-        // Header row — click to expand
-        +'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fdeaea;cursor:pointer" onclick="hfWrongToggleDetail('+i+')">'
-        +'<input type="checkbox" class="hfw-cb" data-idx="'+i+'" style="width:14px;height:14px;flex-shrink:0" onclick="event.stopPropagation()">'
-        +'<span style="font-size:13px;color:#333;flex:1;line-height:1.5">'+esc(item.body.replace(/\n/g,' ').slice(0,60))+(item.body.length>60?'…':'')+'</span>'
-        +'<span style="font-size:11px;color:#b83232;font-weight:700;flex-shrink:0">'+esc(item.my||'?')+' → '+esc(item.answer||'?')+'</span>'
-        +'<span style="font-size:11px;color:#aaa;flex-shrink:0">▼ 展开</span>'
+
+      html+='<div style="border:1px solid #f5c5c5;border-radius:8px;margin-bottom:12px;overflow:hidden">'
+        +'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fdeaea">'
+        +'<input type="checkbox" class="hfw-cb" data-idx="'+i+'" style="width:14px;height:14px;flex-shrink:0">'
+        +'<span style="font-size:12px;color:#b83232;font-weight:700">'+esc(item.my||'?')+' → '+esc(item.answer||'?')+'</span>'
         +'</div>'
-        // Detail panel — hidden by default
-        +'<div id="hfwd-'+i+'" style="display:none;padding:12px 14px;background:#fff">'
-        +(item.body.length>60?'<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;color:#222;margin-bottom:8px">'+esc(item.body)+'</div>':'')
+        +'<div style="padding:12px 14px;background:#fff">'
+        +'<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;color:#222;margin-bottom:8px">'+esc(item.body)+'</div>'
         +optsHtml
         +'<div style="font-size:12px;margin:6px 0;padding:5px 10px;background:#f8f7f3;border-radius:5px;display:inline-block">'
         +'<span style="color:#b83232;font-weight:700">我选：'+esc(item.my||'?')+(myOpt?' — '+esc(myOpt.text):'')+'</span>'
@@ -4393,10 +4390,11 @@ function showSavedHfResult(kw){
         +'<span style="color:#2e7d52;font-weight:700">正确：'+esc(item.answer||'?')+(correctOpt?' — '+esc(correctOpt.text):'')+'</span>'
         +'</div>'
         +(annNote?'<div style="margin-top:6px;font-size:12px;background:#fffbe6;border:1px solid #f0d060;border-radius:5px;padding:5px 8px">📝 注释：'+esc(annNote)+'</div>':'')
-        +(aiCached?'<div style="margin-top:8px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:6px;padding:8px 10px"><div style="font-size:11px;font-weight:700;color:#6040b0;margin-bottom:4px">🤖 AI解析</div><div style="font-size:12px;line-height:1.7;white-space:pre-wrap;color:#333;max-height:200px;overflow-y:auto">'+esc(aiCached)+'</div></div>':'')
-        +'<div style="margin-top:8px;display:flex;gap:6px">'
-        +'<button class="btn small blue" style="font-size:11px" data-idx="'+i+'" data-kw="'+esc(kw)+'" onclick="hfWrongLoadAI(parseInt(this.dataset.idx),this.dataset.kw)">🔍 AI解析</button>'
-        +'<button class="btn small" style="font-size:11px;background:#e8effa;color:#1a4fa0;border:1px solid #b8d0f0" data-idx="'+i+'" data-kw="'+esc(kw)+'" onclick="(function(el){document.querySelectorAll(\'.hfw-cb\').forEach(function(c){c.checked=false;});el.closest(\'.hfw-cb\')&&(el.closest(\'.hfw-cb\').checked=true);var cb=el.closest(\'div[id]\').previousSibling.querySelector(\'.hfw-cb\');if(cb)cb.checked=true;hfWrongAddToBatch(this.dataset.kw);})(this)">📂 单题加批次</button>'
+        +(aiCached
+          ?'<div style="margin-top:8px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:6px;padding:8px 10px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><span style="font-size:11px;font-weight:700;color:#6040b0">🤖 AI解析</span><span style="font-size:10px;background:#d4c9f5;color:#6040b0;padding:1px 6px;border-radius:8px">已缓存</span></div><div style="font-size:12px;line-height:1.7;white-space:pre-wrap;color:#333;max-height:220px;overflow-y:auto">'+esc(aiCached)+'</div></div>'
+          :'<div style="margin-top:6px;display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:#aaa">暂无AI解析</span><button class="btn small blue" style="font-size:11px;padding:2px 8px" data-idx2="'+i+'" data-kw2="'+esc(kw)+'" onclick="hfWrongLoadAI(parseInt(this.dataset.idx2),this.dataset.kw2)">🔍 生成</button></div>')
+        +'<div style="margin-top:8px">'
+        +'<button class="btn small" style="font-size:11px;background:#e8effa;color:#1a4fa0;border:1px solid #b8d0f0" data-idx="'+i+'" data-kw="'+esc(kw)+'" onclick="document.querySelectorAll(\'.hfw-cb\').forEach(function(c){c.checked=false;});document.querySelectorAll(\'.hfw-cb\')['+i+'].checked=true;hfWrongAddToBatch(this.dataset.kw)">📂 单题加批次</button>'
         +'</div>'
         +'<div id="hfwai-'+i+'" style="margin-top:6px"></div>'
         +'</div>'
