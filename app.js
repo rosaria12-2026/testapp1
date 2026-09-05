@@ -4043,7 +4043,36 @@ function checkInlineQuiz(){
     DB.hfResults[kw]={ts:Date.now(),items:resultItems,wrongCount:wrongCount,total:total,correct:correct};
   }
   saveDB();
+  // Copy wrong button
+  var area=document.getElementById('search-results');
+  if(area){
+    var oldBtn=document.getElementById('copy-wrong-btn'); if(oldBtn) oldBtn.remove();
+    var copyBtn=document.createElement('button');
+    copyBtn.id='copy-wrong-btn';
+    copyBtn.className='btn';
+    copyBtn.style.cssText='background:#b83232;color:#fff;margin-top:8px;display:block;width:100%';
+    copyBtn.textContent='✗ 一键复制错题（'+(_searchResults.length-correct)+'道）';
+    copyBtn.onclick=copyWrongQuestions;
+    area.appendChild(copyBtn);
+  }
   showToast('✓ 核对完成！答对'+correct+'/'+answered+'（共'+total+'题）',4000);
+}
+
+function copyWrongQuestions(){
+  var txt='';
+  _searchResults.forEach(function(r,ri){
+    var my=_inlineAnswers[ri];
+    if(!my) return;
+    var isOk=r.q.answer&&my.toUpperCase()===r.q.answer.toUpperCase();
+    if(isOk) return;
+    txt+=r.q.body+'\n';
+    if(r.q.opts) r.q.opts.forEach(function(o){txt+=o.letter+'. '+o.text+'\n';});
+    txt+='正确答案：'+r.q.answer+'\n\n';
+  });
+  if(!txt){showToast('没有错题');return;}
+  navigator.clipboard.writeText(txt).then(function(){
+    showToast('✓ 已复制到剪贴板');
+  }).catch(function(){showToast('复制失败');});
 }
 
 function toggleDoneHf(btn){
