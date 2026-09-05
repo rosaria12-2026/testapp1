@@ -2177,29 +2177,33 @@ function cloudUpload(){
 }
 
 function downloadInChunks(col, batchIds){
-  var chunkSize=3;
+  var chunkSize=2;
   var total=batchIds.length;
   var done=0;
   var allDocs=[];
+  // Fetch one doc with up to maxRetry retries
+  function fetchOneDoc(id, maxRetry){
+    maxRetry=maxRetry||3;
+    function attempt(n){
+      return col.doc('batch_'+id).get().catch(function(e){
+        if(n>=maxRetry) return null;
+        return new Promise(function(resolve){
+          setTimeout(function(){ attempt(n+1).then(resolve); }, 1200*n);
+        });
+      });
+    }
+    return attempt(1);
+  }
   function fetchChunk(i){
     if(i>=total) return Promise.resolve(allDocs);
     var chunk=batchIds.slice(i,i+chunkSize);
-    var ops=chunk.map(function(id){
-      // Retry once on failure
-      return col.doc('batch_'+id).get().catch(function(){
-        return new Promise(function(resolve){
-          setTimeout(function(){
-            col.doc('batch_'+id).get().then(resolve).catch(function(){resolve(null);});
-          }, 1000);
-        });
-      });
-    });
+    var ops=chunk.map(function(id){ return fetchOneDoc(id, 3); });
     return Promise.all(ops).then(function(docs){
       allDocs=allDocs.concat(docs);
       done+=chunk.length;
-      showProgress('下载批次 '+done+'/'+total, 40+done/total*50);
+      showProgress('下载批次 '+done+'/'+total+'…', 40+done/total*50);
       return new Promise(function(resolve){
-        setTimeout(function(){ resolve(fetchChunk(i+chunkSize)); }, 300);
+        setTimeout(function(){ resolve(fetchChunk(i+chunkSize)); }, 800);
       });
     });
   }
