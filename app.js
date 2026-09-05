@@ -4197,45 +4197,155 @@ function copyHfWrongText(kw){
   });
 }
 
+function hfWrongToggleDetail(i){
+  var el=document.getElementById('hfwd-'+i);
+  if(!el)return;
+  el.style.display=el.style.display==='none'?'block':'none';
+}
+
+function hfWrongSelAll(checked){
+  document.querySelectorAll('.hfw-cb').forEach(function(cb){cb.checked=checked;});
+}
+
+function hfWrongAddToBatch(kw){
+  var res=DB.hfResults&&DB.hfResults[kw]; if(!res)return;
+  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
+  // Get selected items
+  var selected=[];
+  document.querySelectorAll('.hfw-cb:checked').forEach(function(cb){
+    var i=parseInt(cb.dataset.idx);
+    if(wrongItems[i]&&wrongItems[i].opts) selected.push(wrongItems[i]);
+  });
+  if(!selected.length){
+    // If none checked, use all
+    selected=wrongItems.filter(function(x){return x.opts&&x.opts.length;});
+  }
+  if(!selected.length){showToast('没有可加入的题目（需要有选项数据）');return;}
+  // Convert hfResult items to question objects
+  var qs=selected.map(function(item){
+    return {id:uid(),num:null,body:item.body,opts:item.opts,answer:item.answer,caseText:null};
+  });
+  // Show batch selector
+  var panel=document.getElementById('hf-result-panel'); if(!panel)return;
+  var old=document.getElementById('hfw-batch-sel'); if(old)old.remove();
+  var batchOpts='<option value="__new__">＋ 新建批次</option>'
+    +DB.batches.map(function(b,bi){return '<option value="'+bi+'">'+esc(b.name)+' ('+b.questions.length+'题)</option>';}).join('');
+  var sel=document.createElement('div');
+  sel.id='hfw-batch-sel';
+  sel.style.cssText='padding:10px 12px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px;margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  sel.innerHTML='<span style="font-size:13px;font-weight:700;color:#6040b0">选择批次（'+qs.length+'题）：</span>'
+    +'<select id="hfw-batch-select" style="padding:6px 10px;border:1px solid #d4c9f5;border-radius:6px;font-size:13px;flex:1">'+batchOpts+'</select>'
+    +'<button class="btn primary" style="font-size:12px" onclick="hfWrongDoAdd(\''+esc(kw)+'\')">确认加入</button>'
+    +'<button class="btn small" onclick="document.getElementById(\'hfw-batch-sel\').remove()">取消</button>';
+  panel.querySelector('div').appendChild(sel);
+}
+
+function hfWrongDoAdd(kw){
+  var res=DB.hfResults&&DB.hfResults[kw]; if(!res)return;
+  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
+  var selected=[];
+  document.querySelectorAll('.hfw-cb:checked').forEach(function(cb){
+    var i=parseInt(cb.dataset.idx);
+    if(wrongItems[i]&&wrongItems[i].opts) selected.push(wrongItems[i]);
+  });
+  if(!selected.length) selected=wrongItems.filter(function(x){return x.opts&&x.opts.length;});
+  var qs=selected.map(function(item){
+    return {id:uid(),num:null,body:item.body,opts:item.opts,answer:item.answer,caseText:null};
+  });
+  var sel=document.getElementById('hfw-batch-select'); if(!sel)return;
+  var val=sel.value;
+  if(val==='__new__'){
+    var name=prompt('新批次名称：','错题-'+new Date().toLocaleDateString('zh-CN'));
+    if(!name||!name.trim())return;
+    var newBatch={id:uid(),name:name.trim(),questions:qs,progress:{idx:0,answers:new Array(qs.length).fill(null),dk:{}},date:Date.now()};
+    DB.batches.push(newBatch); saveDB(); renderHome();
+    showToast('✓ 已新建批次「'+name.trim()+'」加入'+qs.length+'题');
+  } else {
+    var batch=DB.batches[parseInt(val)]; if(!batch)return;
+    var existIds=new Set(batch.questions.map(function(q){return q.body;}));
+    var added=0;
+    qs.forEach(function(q){
+      if(!existIds.has(q.body)){batch.questions.push(q);if(batch.progress&&batch.progress.answers)batch.progress.answers.push(null);added++;}
+    });
+    saveDB();
+    showToast('✓ 已加入「'+batch.name+'」'+added+'题（重复跳过'+(qs.length-added)+'题）');
+  }
+  var s=document.getElementById('hfw-batch-sel'); if(s)s.remove();
+}
+
 function showSavedHfResult(kw){
   var res=DB.hfResults&&DB.hfResults[kw]; if(!res) return;
   var area=document.getElementById('search-results'); if(!area) return;
   var date=new Date(res.ts).toLocaleDateString('zh-CN');
   var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
   var html='<div style="background:#fff;border:1px solid #e8e4de;border-radius:12px;padding:14px 16px;margin-bottom:12px">'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
     +'<span style="font-size:14px;font-weight:700;color:#333">📊 上次核对结果</span>'
     +'<span style="font-size:12px;color:#aaa">'+date+'</span>'
     +'<span style="font-size:13px;color:#2e7d52;font-weight:700;margin-left:auto">答对'+res.correct+'/'+res.total+'题</span>'
-    +'<button onclick="this.parentNode.parentNode.remove()" style="border:none;background:none;cursor:pointer;color:#aaa;font-size:16px">✕</button>'
+    +'<button onclick="this.parentNode.parentNode.parentNode.remove()" style="border:none;background:none;cursor:pointer;color:#aaa;font-size:16px">✕</button>'
     +'</div>';
 
   if(wrongItems.length){
-    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+    // Toolbar
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;padding:8px 10px;background:#fdf5f5;border-radius:8px;border:1px solid #f5c5c5">'
+      +'<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;flex-shrink:0">'
+      +'<input type="checkbox" onchange="hfWrongSelAll(this.checked)" style="width:14px;height:14px"> 全选</label>'
       +'<span style="font-size:12px;font-weight:700;color:#b83232">✗ 错题（'+wrongItems.length+'题）</span>'
-      +'<button onclick="copyHfWrongText(\''+esc(kw)+'\')" style="padding:5px 14px;border-radius:8px;border:none;background:#b83232;color:#fff;font-size:12px;cursor:pointer;font-weight:700">📋 一键复制全部错题</button>'
+      +'<button onclick="hfWrongAddToBatch(\''+esc(kw)+'\')" style="padding:5px 12px;border-radius:8px;border:none;background:#1a4fa0;color:#fff;font-size:12px;cursor:pointer;font-weight:700">📂 加入批次</button>'
+      +'<button onclick="copyHfWrongText(\''+esc(kw)+'\')" style="padding:5px 12px;border-radius:8px;border:none;background:#b83232;color:#fff;font-size:12px;cursor:pointer;font-weight:700">📋 复制全部</button>'
       +'</div>';
+
     wrongItems.forEach(function(item,i){
       var correctOpt=item.opts?item.opts.find(function(o){return o.letter===item.answer;}):null;
       var myOpt=item.opts?item.opts.find(function(o){return o.letter===item.my;}):null;
+      // Full options html (shown when expanded)
       var optsHtml='';
       if(item.opts&&item.opts.length){
-        optsHtml='<div style="margin:6px 0 4px 0;display:flex;flex-direction:column;gap:2px">';
+        optsHtml='<div style="margin:8px 0 6px 0;display:flex;flex-direction:column;gap:3px">';
         item.opts.forEach(function(o){
           var isAns=o.letter===item.answer, isMy=o.letter===item.my&&!isAns;
-          optsHtml+='<div style="font-size:12px;padding:2px 6px;border-radius:4px;'
-            +(isAns?'background:#e8f5ed;color:#2e7d52;font-weight:700;':isMy?'background:#fdeaea;color:#b83232;font-weight:700;':'color:#555;')
+          optsHtml+='<div style="font-size:13px;padding:4px 8px;border-radius:5px;'
+            +(isAns?'background:#e8f5ed;color:#2e7d52;font-weight:700;':isMy?'background:#fdeaea;color:#b83232;font-weight:700;':'color:#444;background:#fafaf8;')
             +'">'+esc(o.letter+'. '+o.text)+(isAns?' ✓':'')+(isMy?' ← 我选':'')+'</div>';
         });
         optsHtml+='</div>';
       }
-      html+='<div style="background:#fdeaea;border:1px solid #f5c5c5;border-radius:8px;padding:10px 12px;margin-bottom:8px">'
-        +'<div style="font-size:13px;color:#333;line-height:1.6;margin-bottom:4px;white-space:pre-wrap">'+esc(item.body)+'</div>'
+      // Annotation / qNote
+      var annNote='';
+      // Try to find qid from DB by matching body text
+      var foundQid=null;
+      DB.batches.forEach(function(b){b.questions.forEach(function(q){if(q.body===item.body)foundQid=q.id;});});
+      if(foundQid){
+        annNote=(DB.qNotes&&DB.qNotes['ann_'+foundQid])||'';
+      }
+      // AI analysis
+      var aiCached=foundQid?(DB.analysisCache&&DB.analysisCache[foundQid]||''):'';
+
+      html+='<div style="border:1px solid #f5c5c5;border-radius:8px;margin-bottom:8px;overflow:hidden">'
+        // Header row — click to expand
+        +'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fdeaea;cursor:pointer" onclick="hfWrongToggleDetail('+i+')">'
+        +'<input type="checkbox" class="hfw-cb" data-idx="'+i+'" style="width:14px;height:14px;flex-shrink:0" onclick="event.stopPropagation()">'
+        +'<span style="font-size:13px;color:#333;flex:1;line-height:1.5">'+esc(item.body.replace(/\n/g,' ').slice(0,60))+(item.body.length>60?'…':'')+'</span>'
+        +'<span style="font-size:11px;color:#b83232;font-weight:700;flex-shrink:0">'+esc(item.my||'?')+' → '+esc(item.answer||'?')+'</span>'
+        +'<span style="font-size:11px;color:#aaa;flex-shrink:0">▼ 展开</span>'
+        +'</div>'
+        // Detail panel — hidden by default
+        +'<div id="hfwd-'+i+'" style="display:none;padding:12px 14px;background:#fff">'
+        +(item.body.length>60?'<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;color:#222;margin-bottom:8px">'+esc(item.body)+'</div>':'')
         +optsHtml
-        +'<div style="font-size:12px;margin-top:4px;padding:4px 8px;background:#fff;border-radius:4px;display:inline-block">'
+        +'<div style="font-size:12px;margin:6px 0;padding:5px 10px;background:#f8f7f3;border-radius:5px;display:inline-block">'
         +'<span style="color:#b83232;font-weight:700">我选：'+esc(item.my||'?')+(myOpt?' — '+esc(myOpt.text):'')+'</span>'
         +' &nbsp;→&nbsp; '
         +'<span style="color:#2e7d52;font-weight:700">正确：'+esc(item.answer||'?')+(correctOpt?' — '+esc(correctOpt.text):'')+'</span>'
+        +'</div>'
+        +(annNote?'<div style="margin-top:6px;font-size:12px;background:#fffbe6;border:1px solid #f0d060;border-radius:5px;padding:5px 8px">📝 注释：'+esc(annNote)+'</div>':'')
+        +(aiCached?'<div style="margin-top:8px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:6px;padding:8px 10px"><div style="font-size:11px;font-weight:700;color:#6040b0;margin-bottom:4px">🤖 AI解析</div><div style="font-size:12px;line-height:1.7;white-space:pre-wrap;color:#333;max-height:200px;overflow-y:auto">'+esc(aiCached)+'</div></div>':'')
+        +'<div style="margin-top:8px;display:flex;gap:6px">'
+        +'<button class="btn small blue" style="font-size:11px" data-idx="'+i+'" data-kw="'+esc(kw)+'" onclick="hfWrongLoadAI(parseInt(this.dataset.idx),this.dataset.kw)">🔍 AI解析</button>'
+        +'<button class="btn small" style="font-size:11px;background:#e8effa;color:#1a4fa0;border:1px solid #b8d0f0" data-idx="'+i+'" data-kw="'+esc(kw)+'" onclick="(function(el){document.querySelectorAll(\'.hfw-cb\').forEach(function(c){c.checked=false;});el.closest(\'.hfw-cb\')&&(el.closest(\'.hfw-cb\').checked=true);var cb=el.closest(\'div[id]\').previousSibling.querySelector(\'.hfw-cb\');if(cb)cb.checked=true;hfWrongAddToBatch(this.dataset.kw);})(this)">📂 单题加批次</button>'
+        +'</div>'
+        +'<div id="hfwai-'+i+'" style="margin-top:6px"></div>'
         +'</div>'
         +'</div>';
     });
@@ -4245,7 +4355,6 @@ function showSavedHfResult(kw){
   }
   html+='</div>';
 
-  // Insert before search results
   var existing=document.getElementById('hf-result-panel');
   if(existing) existing.remove();
   var div=document.createElement('div');
@@ -4253,6 +4362,32 @@ function showSavedHfResult(kw){
   div.innerHTML=html;
   area.insertBefore(div, area.firstChild);
 }
+
+async function hfWrongLoadAI(idx, kw){
+  var res=DB.hfResults&&DB.hfResults[kw]; if(!res)return;
+  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
+  var item=wrongItems[idx]; if(!item)return;
+  var aiEl=document.getElementById('hfwai-'+idx); if(!aiEl)return;
+  // Check cache first
+  var foundQid=null;
+  DB.batches.forEach(function(b){b.questions.forEach(function(q){if(q.body===item.body)foundQid=q.id;});});
+  var cached=foundQid?(DB.analysisCache&&DB.analysisCache[foundQid]||''):'';
+  if(cached){
+    aiEl.innerHTML='<div style="background:#f0ebff;border:1px solid #d4c9f5;border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.7;white-space:pre-wrap;color:#333;max-height:200px;overflow-y:auto">'+esc(cached)+'</div>';
+    return;
+  }
+  aiEl.innerHTML='<div style="padding:6px 8px;background:#f8f6ff;border-radius:6px;color:#6040b0;font-size:12px">🤖 解析中…</div>';
+  var opts=item.opts?item.opts.map(function(o){return o.letter+'. '+o.text;}).join('\n'):'';
+  var prompt='分析PCE针灸题目：\n题目：'+item.body+'\n选项：\n'+opts+'\n正确答案：'+(item.answer||'?')+'\n学生选：'+(item.my||'?')+'\n\n格式：\n【解题逻辑】推导思路2-3句\n【混淆点】Markdown表格对比\n【一句话记忆】口诀';
+  try{
+    var txt=await callClaude(prompt);
+    if(foundQid){DB.analysisCache[foundQid]=txt;saveDB();}
+    aiEl.innerHTML='<div style="background:#f0ebff;border:1px solid #d4c9f5;border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.7;white-space:pre-wrap;color:#333;max-height:200px;overflow-y:auto">'+esc(txt)+'</div>';
+  }catch(e){
+    aiEl.innerHTML='<div style="padding:6px 8px;background:#fdeaea;border-radius:6px;color:#b83232;font-size:12px">❌ '+esc(e.message)+'</div>';
+  }
+}
+
 
 function genWeakPointAnalysis(kw){
   var res=DB.hfResults&&DB.hfResults[kw]; if(!res) return;
