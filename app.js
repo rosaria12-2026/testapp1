@@ -4124,6 +4124,33 @@ function showHfWrong(){
   setTimeout(function(){var r=document.getElementById('search-results');if(r)r.scrollIntoView({behavior:'smooth'});},200);
 }
 
+function copyHfWrongText(kw){
+  var res=DB.hfResults&&DB.hfResults[kw]; if(!res){showToast('没有数据');return;}
+  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
+  if(!wrongItems.length){showToast('没有错题');return;}
+  var txt='【'+kw+'】错题 '+wrongItems.length+'道\n'
+    +'答对：'+res.correct+'/'+res.total+'题\n\n';
+  wrongItems.forEach(function(item,i){
+    txt+=(i+1)+'. '+item.body+'\n';
+    if(item.opts&&item.opts.length){
+      item.opts.forEach(function(o){ txt+=o.letter+'. '+o.text+'\n'; });
+    }
+    var correctOpt=item.opts?item.opts.find(function(o){return o.letter===item.answer;}):null;
+    var myOpt=item.opts?item.opts.find(function(o){return o.letter===item.my;}):null;
+    txt+='我选：'+item.my+(myOpt?' ('+myOpt.text+')':'')+'\n';
+    txt+='正确：'+item.answer+(correctOpt?' ('+correctOpt.text+')':'')+'\n\n';
+  });
+  navigator.clipboard.writeText(txt).then(function(){
+    showToast('✓ 已复制 '+wrongItems.length+' 道错题到剪贴板');
+  }).catch(function(){
+    // Fallback: show in alert
+    var ta=document.createElement('textarea');
+    ta.value=txt; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('✓ 已复制');
+  });
+}
+
 function showSavedHfResult(kw){
   var res=DB.hfResults&&DB.hfResults[kw]; if(!res) return;
   var area=document.getElementById('search-results'); if(!area) return;
@@ -4138,14 +4165,35 @@ function showSavedHfResult(kw){
     +'</div>';
 
   if(wrongItems.length){
-    html+='<div style="font-size:12px;font-weight:700;color:#b83232;margin-bottom:6px">✗ 错题（'+wrongItems.length+'题）</div>';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+      +'<span style="font-size:12px;font-weight:700;color:#b83232">✗ 错题（'+wrongItems.length+'题）</span>'
+      +'<button onclick="copyHfWrongText(\''+esc(kw)+'\')" style="padding:5px 14px;border-radius:8px;border:none;background:#b83232;color:#fff;font-size:12px;cursor:pointer;font-weight:700">📋 一键复制全部错题</button>'
+      +'</div>';
     wrongItems.forEach(function(item,i){
-      html+='<div style="background:#fdeaea;border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:13px">'
-        +'<div style="color:#333;margin-bottom:4px">'+esc(item.body.slice(0,60))+(item.body.length>60?'…':'')+'</div>'
-        +'<div style="color:#b83232">我选：'+esc(item.my||'?')+' · 正确：'+esc(item.answer||'?')+'</div>'
+      var correctOpt=item.opts?item.opts.find(function(o){return o.letter===item.answer;}):null;
+      var myOpt=item.opts?item.opts.find(function(o){return o.letter===item.my;}):null;
+      var optsHtml='';
+      if(item.opts&&item.opts.length){
+        optsHtml='<div style="margin:6px 0 4px 0;display:flex;flex-direction:column;gap:2px">';
+        item.opts.forEach(function(o){
+          var isAns=o.letter===item.answer, isMy=o.letter===item.my&&!isAns;
+          optsHtml+='<div style="font-size:12px;padding:2px 6px;border-radius:4px;'
+            +(isAns?'background:#e8f5ed;color:#2e7d52;font-weight:700;':isMy?'background:#fdeaea;color:#b83232;font-weight:700;':'color:#555;')
+            +'">'+esc(o.letter+'. '+o.text)+(isAns?' ✓':'')+(isMy?' ← 我选':'')+'</div>';
+        });
+        optsHtml+='</div>';
+      }
+      html+='<div style="background:#fdeaea;border:1px solid #f5c5c5;border-radius:8px;padding:10px 12px;margin-bottom:8px">'
+        +'<div style="font-size:13px;color:#333;line-height:1.6;margin-bottom:4px;white-space:pre-wrap">'+esc(item.body)+'</div>'
+        +optsHtml
+        +'<div style="font-size:12px;margin-top:4px;padding:4px 8px;background:#fff;border-radius:4px;display:inline-block">'
+        +'<span style="color:#b83232;font-weight:700">我选：'+esc(item.my||'?')+(myOpt?' — '+esc(myOpt.text):'')+'</span>'
+        +' &nbsp;→&nbsp; '
+        +'<span style="color:#2e7d52;font-weight:700">正确：'+esc(item.answer||'?')+(correctOpt?' — '+esc(correctOpt.text):'')+'</span>'
+        +'</div>'
         +'</div>';
     });
-    html+='<button data-kw="'+esc(kw)+'" onclick="genWeakPointAnalysis(this.dataset.kw)" style="margin-top:8px;padding:8px 16px;background:#6040b0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">🧠 AI分析弱项</button>';
+    html+='<button data-kw="'+esc(kw)+'" onclick="genWeakPointAnalysis(this.dataset.kw)" style="margin-top:4px;padding:8px 16px;background:#6040b0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">🧠 AI分析弱项</button>';
   } else {
     html+='<div style="color:#2e7d52;font-size:13px">✓ 全部答对！</div>';
   }
