@@ -4208,77 +4208,70 @@ function hfWrongSelAll(checked){
 }
 
 function hfWrongAddToBatch(kw){
-  var res=DB.hfResults&&DB.hfResults[kw]; if(!res)return;
+  var res=DB.hfResults&&DB.hfResults[kw]; if(!res){showToast('找不到数据');return;}
   var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
   var selected=[];
   document.querySelectorAll('.hfw-cb:checked').forEach(function(cb){
     var i=parseInt(cb.dataset.idx);
-    if(wrongItems[i]&&wrongItems[i].opts) selected.push(wrongItems[i]);
+    if(wrongItems[i]) selected.push(wrongItems[i]);
   });
   if(!selected.length){
-    selected=wrongItems.filter(function(x){return x.opts&&x.opts.length;});
+    selected=wrongItems.slice();
   }
-  if(!selected.length){showToast('没有可加入的题目（需要有选项数据）');return;}
-  var qs=selected.map(function(item){
-    return {id:uid(),num:null,body:item.body,opts:item.opts,answer:item.answer,caseText:null};
-  });
+  if(!selected.length){showToast('没有错题可加入');return;}
+  // Store pending items globally so add functions can access
+  window._hfwPending = {kw:kw, selected:selected};
   var old=document.getElementById('hfw-batch-sel'); if(old)old.remove();
-  // Build scrollable batch list
-  var listHtml='<div style="max-height:220px;overflow-y:auto;border:1px solid #d4c9f5;border-radius:6px;margin:8px 0;background:#fff">';
-  listHtml+='<div onclick="hfWrongDoAddNew(\''+esc(kw)+'\')" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #eee;color:#6040b0;font-weight:700;font-size:13px">＋ 新建批次</div>';
-  DB.batches.slice().reverse().forEach(function(b,ri){
-    var bi=DB.batches.length-1-ri;
-    listHtml+='<div onclick="hfWrongDoAddExist(\''+esc(kw)+'\','+bi+')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f0efe9;font-size:13px;color:#333">'+esc(b.name)+'<span style="font-size:11px;color:#aaa;margin-left:6px">'+b.questions.length+'题</span></div>';
-  });
-  listHtml+='</div>';
+  // Build as fixed overlay so it always shows regardless of panel state
   var sel=document.createElement('div');
   sel.id='hfw-batch-sel';
-  sel.style.cssText='padding:12px 14px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px;margin-top:10px';
-  sel.innerHTML='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
-    +'<span style="font-size:13px;font-weight:700;color:#6040b0">选择批次加入 '+qs.length+' 题：</span>'
-    +'<button onclick="document.getElementById(\'hfw-batch-sel\').remove()" style="border:none;background:none;cursor:pointer;color:#aaa;font-size:16px;margin-left:auto">✕</button>'
+  sel.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:min(480px,90vw);background:#fff;border:2px solid #d4c9f5;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,0.18);padding:16px';
+  var listHtml='<div style="max-height:280px;overflow-y:auto;border:1px solid #e8e4f8;border-radius:8px;margin-top:10px">';
+  listHtml+='<div onclick="hfWrongDoAddNew()" style="padding:12px 14px;cursor:pointer;border-bottom:1px solid #eee;color:#6040b0;font-weight:700;font-size:14px;background:#f8f6ff">＋ 新建批次</div>';
+  DB.batches.slice().reverse().forEach(function(b,ri){
+    var bi=DB.batches.length-1-ri;
+    listHtml+='<div onclick="hfWrongDoAddExist('+bi+')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f3f0;font-size:13px;color:#333;display:flex;justify-content:space-between;align-items:center">'
+      +'<span>'+esc(b.name)+'</span>'
+      +'<span style="font-size:11px;color:#aaa;flex-shrink:0;margin-left:8px">'+b.questions.length+'题</span>'
+      +'</div>';
+  });
+  listHtml+='</div>';
+  sel.innerHTML='<div style="display:flex;align-items:center;margin-bottom:4px">'
+    +'<span style="font-size:14px;font-weight:700;color:#6040b0">📂 加入批次（'+selected.length+'题）</span>'
+    +'<button onclick="document.getElementById(\'hfw-batch-sel\').remove();document.getElementById(\'hfw-batch-bg\')&&document.getElementById(\'hfw-batch-bg\').remove()" style="margin-left:auto;border:none;background:none;cursor:pointer;color:#aaa;font-size:20px;line-height:1">✕</button>'
     +'</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:4px">点击批次名称直接加入</div>'
     +listHtml;
-  // Insert after the toolbar div inside hf-result-panel
-  var panel=document.getElementById('hf-result-panel');
-  if(panel) panel.appendChild(sel);
-  else document.body.appendChild(sel);
-  // no auto-scroll
+  // Dim background
+  var bg=document.createElement('div');
+  bg.id='hfw-batch-bg';
+  bg.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);z-index:9998';
+  bg.onclick=function(){sel.remove();bg.remove();};
+  document.body.appendChild(bg);
+  document.body.appendChild(sel);
 }
 
-function hfWrongDoAddNew(kw){
-  var res=DB.hfResults&&DB.hfResults[kw]; if(!res)return;
-  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
-  var selected=[];
-  document.querySelectorAll('.hfw-cb:checked').forEach(function(cb){
-    var i=parseInt(cb.dataset.idx);
-    if(wrongItems[i]&&wrongItems[i].opts) selected.push(wrongItems[i]);
-  });
-  if(!selected.length) selected=wrongItems.filter(function(x){return x.opts&&x.opts.length;});
-  var qs=selected.map(function(item){
-    return {id:uid(),num:null,body:item.body,opts:item.opts,answer:item.answer,caseText:null};
+function hfWrongDoAddNew(){
+  var p=window._hfwPending; if(!p||!p.selected){showToast('数据丢失，请重试');return;}
+  var qs=p.selected.map(function(item){
+    return {id:uid(),num:null,body:item.body,opts:item.opts||[],answer:item.answer,caseText:null};
   });
   var name=prompt('新批次名称：','错题-'+new Date().toLocaleDateString('zh-CN'));
   if(!name||!name.trim())return;
   var newBatch={id:uid(),name:name.trim(),questions:qs,progress:{idx:0,answers:new Array(qs.length).fill(null),dk:{}},date:Date.now()};
   DB.batches.push(newBatch); saveDB(); renderHome();
   var s=document.getElementById('hfw-batch-sel'); if(s)s.remove();
+  var bg=document.getElementById('hfw-batch-bg'); if(bg)bg.remove();
+  window._hfwPending=null;
   showToast('✓ 已新建批次「'+name.trim()+'」加入'+qs.length+'题');
 }
 
-function hfWrongDoAddExist(kw, bi){
-  var res=DB.hfResults&&DB.hfResults[kw]; if(!res)return;
-  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
-  var selected=[];
-  document.querySelectorAll('.hfw-cb:checked').forEach(function(cb){
-    var i=parseInt(cb.dataset.idx);
-    if(wrongItems[i]&&wrongItems[i].opts) selected.push(wrongItems[i]);
+function hfWrongDoAddExist(bi){
+  var p=window._hfwPending; if(!p||!p.selected){showToast('数据丢失，请重试');return;}
+  var qs=p.selected.map(function(item){
+    return {id:uid(),num:null,body:item.body,opts:item.opts||[],answer:item.answer,caseText:null};
   });
-  if(!selected.length) selected=wrongItems.filter(function(x){return x.opts&&x.opts.length;});
-  var qs=selected.map(function(item){
-    return {id:uid(),num:null,body:item.body,opts:item.opts,answer:item.answer,caseText:null};
-  });
-  var batch=DB.batches[bi]; if(!batch)return;
+  var batch=DB.batches[bi]; if(!batch){showToast('找不到批次');return;}
   var existBodies=new Set(batch.questions.map(function(q){return q.body;}));
   var added=0;
   qs.forEach(function(q){
@@ -4290,6 +4283,8 @@ function hfWrongDoAddExist(kw, bi){
   });
   saveDB(); renderHome();
   var s=document.getElementById('hfw-batch-sel'); if(s)s.remove();
+  var bg=document.getElementById('hfw-batch-bg'); if(bg)bg.remove();
+  window._hfwPending=null;
   showToast('✓ 已加入「'+batch.name+'」'+added+'题（重复跳过'+(qs.length-added)+'题）');
 }
 
