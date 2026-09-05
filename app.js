@@ -4245,8 +4245,12 @@ function searchSaveBatch(){
   // Tag as HF questions
   if(!DB.hfQids) DB.hfQids={};
   selected.forEach(function(q){DB.hfQids[q.id]=true;}); saveDB();
-  var name=prompt('新批次名称：','搜索结果 — '+new Date().toLocaleDateString('zh-CN'));
+  var name=prompt('新批次名称：','高频-'+new Date().toLocaleDateString('zh-CN'));
   if(!name||!name.trim()) return;
+  if(name.indexOf('高频')>=0){
+    if(!DB.hfQids) DB.hfQids={};
+    selected.forEach(function(q){DB.hfQids[q.id]=true;});
+  }
   var batch={
     id:uid(), name:name.trim(),
     questions:selected,
