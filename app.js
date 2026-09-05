@@ -2130,22 +2130,24 @@ function showProgress(msg, pct){
 }
 
 function uploadInChunks(col, batches){
-  var chunkSize=8;
+  // Pack 10 batches per Firestore doc: batches_p0, batches_p1, ...
+  // 52 batches = 6 docs instead of 52 separate requests
+  var packSize=10;
   var total=batches.length;
-  var done=0;
-  function uploadChunk(i){
-    if(i>=total) return Promise.resolve();
-    var chunk=batches.slice(i,i+chunkSize);
-    var ops=chunk.map(function(b){
-      return col.doc('batch_'+b.id).set({id:b.id,name:b.name,date:b.date,questions:b.questions,progress:b.progress});
-    });
-    return Promise.all(ops).then(function(){
-      done+=chunk.length;
-      showProgress('上传批次 '+done+'/'+total, 30+done/total*60);
-      return uploadChunk(i+chunkSize);
-    });
+  var numPacks=Math.ceil(total/packSize);
+  var ops=[];
+  for(var pi=0;pi<numPacks;pi++){
+    var slice=batches.slice(pi*packSize,(pi+1)*packSize);
+    ops.push(col.doc('batches_p'+pi).set({batches:slice,ts:Date.now()}));
   }
-  return uploadChunk(0);
+  ops.push(col.doc('batch_index').set({
+    ids:batches.map(function(b){return b.id;}),
+    numPacks:numPacks,
+    ts:Date.now()
+  }));
+  return Promise.all(ops).then(function(){
+    showProgress('上传批次完成 '+total+'个', 90);
+  });
 }
 
 function cloudUpload(){
@@ -2176,16 +2178,45 @@ function cloudUpload(){
   });
 }
 
+function downloadPackedBatches(col, numPacks){
+  // Download batches_p0 ... batches_p(n-1), each holds 10 batches
+  var allBatches=[];
+  function fetchPack(pi){
+    if(pi>=numPacks) return Promise.resolve(allBatches);
+    return col.doc('batches_p'+pi).get().then(function(doc){
+      if(doc&&doc.exists){
+        var arr=doc.data().batches||[];
+        allBatches=allBatches.concat(arr);
+      }
+      showProgress('下载批次包 '+(pi+1)+'/'+numPacks, 40+(pi+1)/numPacks*50);
+      return new Promise(function(resolve){
+        setTimeout(function(){ resolve(fetchPack(pi+1)); }, 500);
+      });
+    }).catch(function(){
+      // retry once
+      return new Promise(function(resolve){
+        setTimeout(function(){
+          col.doc('batches_p'+pi).get().then(function(doc){
+            if(doc&&doc.exists) allBatches=allBatches.concat(doc.data().batches||[]);
+            resolve(fetchPack(pi+1));
+          }).catch(function(){ resolve(fetchPack(pi+1)); });
+        }, 1500);
+      });
+    });
+  }
+  return fetchPack(0);
+}
+
 function downloadInChunks(col, batchIds){
+  // Legacy: individual batch_xxx docs (old uploads)
   var chunkSize=2;
   var total=batchIds.length;
   var done=0;
   var allDocs=[];
-  // Fetch one doc with up to maxRetry retries
   function fetchOneDoc(id, maxRetry){
     maxRetry=maxRetry||3;
     function attempt(n){
-      return col.doc('batch_'+id).get().catch(function(e){
+      return col.doc('batch_'+id).get().catch(function(){
         if(n>=maxRetry) return null;
         return new Promise(function(resolve){
           setTimeout(function(){ attempt(n+1).then(resolve); }, 1200*n);
@@ -2255,15 +2286,26 @@ function cloudDownload(){
     DB.fillProgress=typeof m5.fillProgress==='string'?JSON.parse(m5.fillProgress||'{}'):(m5.fillProgress||{});
     DB.analysisCache=a0.cache||{};
 
-    var batchIds=batchIdxDoc&&batchIdxDoc.exists?batchIdxDoc.data().ids||[]:[];
+    var batchIdxData=batchIdxDoc&&batchIdxDoc.exists?batchIdxDoc.data():{};
+    var batchIds=batchIdxData.ids||[];
+    var numPacks=batchIdxData.numPacks||0;
     if(!batchIds.length){
       saveDB(); renderHome();
       showProgress('✓ 下载完成（无批次）', 100); return;
     }
+    // New packed format: use numPacks; legacy: individual docs
+    if(numPacks>0){
+      return downloadPackedBatches(col, numPacks);
+    }
     return downloadInChunks(col, batchIds);
-  }).then(function(docs){
-    if(!docs) return;
-    DB.batches=docs.filter(function(d){return d&&d.exists;}).map(function(d){return d.data();});
+  }).then(function(result){
+    if(!result) return;
+    // Packed: result is array of batch objects; legacy: array of Firestore docs
+    if(result.length && result[0] && typeof result[0].id==='string'){
+      DB.batches=result; // packed format
+    } else {
+      DB.batches=result.filter(function(d){return d&&d.exists;}).map(function(d){return d.data();}); // legacy
+    }
     saveDB(); renderHome();
     showProgress('✓ 下载完成！'+DB.batches.length+'批次 · '+DB.notes.length+'笔记 · '+Object.keys(DB.wrongMap).length+'错题', 100);
   }).catch(function(e){
