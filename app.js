@@ -3318,10 +3318,10 @@ function renderSearch(){
     +'</div>';
 
   HF_KEYWORDS.forEach(function(cat, ci){
+    var catWrong=(function(){var c=0;if(DB.hfResults){cat.words.forEach(function(w){if(DB.hfResults[w])c+=DB.hfResults[w].wrongCount||0;});}return c;})();
     html+='<div style="margin-bottom:10px">'
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'
       +'<span style="font-size:11px;font-weight:700;color:#888">'+esc(cat.name)+'</span>'+(catWrong>0?'<span style="background:#b83232;color:#fff;border-radius:8px;font-size:10px;padding:1px 5px;margin-left:3px">✗'+catWrong+'</span>':'')
-    var catWrong=(function(){var c=0;if(DB.hfResults){cat.words.forEach(function(w){if(DB.hfResults[w])c+=DB.hfResults[w].wrongCount||0;});}return c;})();
       +'<button class="cat-sel-btn" data-cat="'+ci+'" onclick="selectCat(this)" style="font-size:10px;padding:1px 6px;border:1px solid #ddd;border-radius:10px;background:#f5f5f5;cursor:pointer;color:#888">全选此类</button>'
       +'</div>'
       +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
