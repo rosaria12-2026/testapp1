@@ -3658,6 +3658,19 @@ function doSearch(){
   renderSearchResults(kw);
 }
 
+// Helper: find which saved batches contain this question (by id or body match)
+function qGetBatches(qid, body){
+  var found=[];
+  var seen={};
+  DB.batches.forEach(function(b){
+    var match=b.questions.some(function(q){
+      return q.id===qid || (body&&q.body===body);
+    });
+    if(match&&!seen[b.id]){seen[b.id]=true;found.push({id:b.id,name:b.name});}
+  });
+  return found;
+}
+
 function renderSearchResults(kw){
   var area = document.getElementById('search-results'); if(!area) return;
   if(!_searchResults.length){
@@ -3694,13 +3707,17 @@ function renderSearchResults(kw){
     }).join('') : '';
 
     var isDoneHf=!!(DB.hfQids&&DB.hfQids[r.q.id]);
-    var grayStyle=isDoneHf?';opacity:0.45;filter:grayscale(70%);':''; 
-    html+='<div class="sr-item" data-donehf="'+(isDoneHf?'1':'0')+'" data-ri="'+ri+'"'
+    // Gray out ANY question already saved into any batch (by qid)
+    var inBatches=qGetBatches(r.q.id, r.q.body);
+    var isInAnyBatch=inBatches.length>0;
+    var grayStyle=isInAnyBatch?';opacity:0.4;filter:grayscale(60%);':'';
+    var inBatchBadge=isInAnyBatch?'<span style="font-size:10px;background:#e8e4f8;color:#6040b0;padding:1px 6px;border-radius:8px;margin-left:4px;flex-shrink:0">📄 '+esc(inBatches[0].name)+(inBatches.length>1?' +'+( inBatches.length-1):'')+'</span>':'';
+    html+='<div class="sr-item" data-donehf="'+(isInAnyBatch?'1':'0')+'" data-ri="'+ri+'"'
       +' style="background:#fff;border:1px solid #e8e4de;border-radius:10px;padding:12px 14px;margin-bottom:8px'+grayStyle+'">'
       +'<div style="display:flex;align-items:flex-start;gap:10px">'
       +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:3px;flex-shrink:0;width:16px;height:16px">'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:11px;color:#888;margin-bottom:4px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题</div>'
+      +'<div style="font-size:11px;color:#888;margin-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题'+inBatchBadge+'</div>'
       +'<div style="font-size:14px;line-height:1.7;color:#222;margin-bottom:6px;user-select:text">'+esc(r.q.body||'')+'</div>'
       // Correct answer (hidden when in quiz mode, shown by default)
       +(r.q.answer?'<div class="sr-answer-'+ri+'" style="font-size:13px;color:#2e7d52;font-weight:700;margin-bottom:6px;background:#e8f5ed;padding:5px 10px;border-radius:6px">✓ '+esc(r.q.answer)+'. '+(correctOpt?esc(correctOpt.text):'')+'</div>':'')
@@ -4228,10 +4245,14 @@ function hfWrongAddToBatch(kw){
   sel.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:min(480px,90vw);background:#fff;border:2px solid #d4c9f5;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,0.18);padding:16px';
   var listHtml='<div style="max-height:280px;overflow-y:auto;border:1px solid #e8e4f8;border-radius:8px;margin-top:10px">';
   listHtml+='<div onclick="hfWrongDoAddNew()" style="padding:12px 14px;cursor:pointer;border-bottom:1px solid #eee;color:#6040b0;font-weight:700;font-size:14px;background:#f8f6ff">＋ 新建批次</div>';
+  // Show which batches already contain selected items
+  var selBodies=new Set(selected.map(function(x){return x.body;}));
   DB.batches.slice().reverse().forEach(function(b,ri){
     var bi=DB.batches.length-1-ri;
+    var overlap=b.questions.filter(function(q){return selBodies.has(q.body);}).length;
+    var overlapBadge=overlap>0?'<span style="font-size:10px;background:#fffbe6;color:#8a6000;padding:1px 6px;border-radius:8px;margin-left:6px">📄已有'+overlap+'题</span>':'';
     listHtml+='<div onclick="hfWrongDoAddExist('+bi+')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f3f0;font-size:13px;color:#333;display:flex;justify-content:space-between;align-items:center">'
-      +'<span>'+esc(b.name)+'</span>'
+      +'<span>'+esc(b.name)+overlapBadge+'</span>'
       +'<span style="font-size:11px;color:#aaa;flex-shrink:0;margin-left:8px">'+b.questions.length+'题</span>'
       +'</div>';
   });
