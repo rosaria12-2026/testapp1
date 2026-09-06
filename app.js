@@ -3658,11 +3658,12 @@ function doSearch(){
   renderSearchResults(kw);
 }
 
-// Helper: find which saved batches contain this question (by id or body match)
+// Helper: find which HIGH-FREQ batches (name contains "高频") contain this question
 function qGetBatches(qid, body){
   var found=[];
   var seen={};
   DB.batches.forEach(function(b){
+    if(!b.name||b.name.indexOf('高频')<0) return; // only 高频 batches
     var match=b.questions.some(function(q){
       return q.id===qid || (body&&q.body===body);
     });
