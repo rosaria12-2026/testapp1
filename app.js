@@ -3658,14 +3658,17 @@ function doSearch(){
   renderSearchResults(kw);
 }
 
-// Helper: find which HIGH-FREQ batches (name contains "高频") contain this question
-function qGetBatches(qid, body){
+// Helper: find which HIGH-FREQ batches contain this question
+// Match by: original qid, OR srcBatchId+srcQIdx (for questions added via search)
+function qGetBatches(qid, srcBatchId, srcQIdx){
   var found=[];
   var seen={};
   DB.batches.forEach(function(b){
-    if(!b.name||b.name.indexOf('高频')<0) return; // only 高频 batches
+    if(!b.name||b.name.indexOf('高频')<0) return;
     var match=b.questions.some(function(q){
-      return q.id===qid || (body&&q.body===body);
+      if(q.id===qid) return true;
+      if(srcBatchId!=null&&srcQIdx!=null&&q.srcBatchId===srcBatchId&&q.srcQIdx===srcQIdx) return true;
+      return false;
     });
     if(match&&!seen[b.id]){seen[b.id]=true;found.push({id:b.id,name:b.name});}
   });
@@ -3709,7 +3712,7 @@ function renderSearchResults(kw){
 
     var isDoneHf=!!(DB.hfQids&&DB.hfQids[r.q.id]);
     // Gray out ANY question already saved into any batch (by qid)
-    var inBatches=qGetBatches(r.q.id, r.q.body);
+    var inBatches=qGetBatches(r.q.id, r.batchId, r.qIdx);
     var isInAnyBatch=inBatches.length>0;
     var grayStyle=isInAnyBatch?';opacity:0.4;filter:grayscale(60%);':'';
     var inBatchBadge=isInAnyBatch?'<span style="font-size:10px;background:#e8e4f8;color:#6040b0;padding:1px 6px;border-radius:8px;margin-left:4px;flex-shrink:0">📄 '+esc(inBatches[0].name)+(inBatches.length>1?' +'+( inBatches.length-1):'')+'</span>':'';
@@ -4551,6 +4554,9 @@ function searchDoAddToBatch(){
   var added=0;
   selected.forEach(function(q){
     if(!existIds.has(q.id)){
+      // Tag with source info for gray detection
+      var r=_searchResults.find(function(x){return x.q.id===q.id;});
+      if(r){q.srcBatchId=r.batchId;q.srcQIdx=r.qIdx;}
       batch.questions.push(q);
       if(batch.progress&&batch.progress.answers) batch.progress.answers.push(null);
       added++;
@@ -4591,10 +4597,16 @@ function searchSaveBatch(){
     if(!DB.hfQids) DB.hfQids={};
     selected.forEach(function(q){DB.hfQids[q.id]=true;});
   }
+  // Tag each question with its source batchId+qIdx for gray detection
+  var taggedQs=selected.map(function(q){
+    var r=_searchResults.find(function(x){return x.q.id===q.id;});
+    if(r){q.srcBatchId=r.batchId;q.srcQIdx=r.qIdx;}
+    return q;
+  });
   var batch={
     id:uid(), name:name.trim(),
-    questions:selected,
-    progress:{idx:0, answers:new Array(selected.length).fill(null), dk:{}},
+    questions:taggedQs,
+    progress:{idx:0, answers:new Array(taggedQs.length).fill(null), dk:{}},
     date:Date.now()
   };
   DB.batches.push(batch); saveDB();
