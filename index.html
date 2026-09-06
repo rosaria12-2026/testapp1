@@ -55,6 +55,7 @@
         <button class="btn" onclick="startFirstBatch(true)">从头重做</button>
         <button class="btn orange" onclick="showPage('review');renderReview()">复习错题/不会</button>
         <button class="btn blue" onclick="showPage('mock');renderMockSetup()">模拟考试</button>
+        <button class="btn small" onclick="fixHfSrcTags()" style="background:#e8e4f8;color:#6040b0;border:1px solid #d4c9f5">🔧 补高频灰色标记</button>
       </div>
     </div>
   </section>
@@ -240,7 +241,7 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 </div>
 <div id="toast"></div>
 
-<script src="app.js?v=144"></script>
+<script src="app.js?v=145"></script>
 <script>
   document.querySelector('.tab[data-page="notes"]').addEventListener('click', function(){ renderNotes(); });
   document.querySelector('.tab[data-page="review"]').addEventListener('click', function(){ renderReview(); });
