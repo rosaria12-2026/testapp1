@@ -4123,18 +4123,19 @@ function checkInlineQuiz(){
     DB.hfResults[kw]={ts:Date.now(),items:resultItems,wrongCount:wrongCount,total:total,correct:correct};
   }
   saveDB();
-  // Copy wrong button
+  // Show summary bar at TOP — fixed position so always visible
+  var oldSum=document.getElementById('inline-summary-bar'); if(oldSum) oldSum.remove();
+  var wrongCount2=_searchResults.length-correct;
+  var sumBar=document.createElement('div');
+  sumBar.id='inline-summary-bar';
+  sumBar.style.cssText='position:sticky;top:0;z-index:999;background:#fff;border:1.5px solid #e8e4de;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 2px 12px rgba(0,0,0,0.10)';
+  sumBar.innerHTML='<span style="font-size:14px;font-weight:700;color:#333">✓ 核对完成</span>'
+    +'<span style="font-size:13px;color:#2e7d52;font-weight:700">答对 '+correct+'/'+answered+' 题</span>'
+    +(wrongCount2>0?'<span style="font-size:13px;color:#b83232;font-weight:700">✗ 错 '+wrongCount2+' 题</span>':'')
+    +(wrongCount2>0?'<button onclick="copyWrongQuestions()" style="padding:6px 14px;border-radius:8px;border:none;background:#b83232;color:#fff;font-size:13px;font-weight:700;cursor:pointer">📋 一键复制错题</button>':'')
+    +'<button onclick="this.parentNode.remove()" style="margin-left:auto;border:none;background:none;cursor:pointer;color:#aaa;font-size:18px">✕</button>';
   var area=document.getElementById('search-results');
-  if(area){
-    var oldBtn=document.getElementById('copy-wrong-btn'); if(oldBtn) oldBtn.remove();
-    var copyBtn=document.createElement('button');
-    copyBtn.id='copy-wrong-btn';
-    copyBtn.className='btn';
-    copyBtn.style.cssText='background:#b83232;color:#fff;margin-top:8px;display:block;width:100%';
-    copyBtn.textContent='✗ 一键复制错题（'+(_searchResults.length-correct)+'道）';
-    copyBtn.onclick=copyWrongQuestions;
-    area.appendChild(copyBtn);
-  }
+  if(area) area.insertBefore(sumBar, area.firstChild);
   showToast('✓ 核对完成！答对'+correct+'/'+answered+'（共'+total+'题）',4000);
 }
 
