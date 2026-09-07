@@ -2298,10 +2298,7 @@ function cloudDownload(){
       saveDB(); renderHome();
       showProgress('✓ 下载完成（无批次）', 100); return;
     }
-    // New packed format: use numPacks; legacy: individual docs
-    if(numPacks>0){
-      return downloadPackedBatches(col, numPacks);
-    }
+    // Always use individual batch docs
     return downloadInChunks(col, batchIds);
   }).then(function(result){
     if(!result) return;
