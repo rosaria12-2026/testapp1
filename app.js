@@ -2164,7 +2164,7 @@ function cloudUpload(){
     col.doc('meta4').set({fillBatches:DB.fillBatches||[],fillWrong:DB.fillWrong||[],kwCards:DB.kwCards||{},searchHistory:DB.searchHistory||{},ts:Date.now()}),
     col.doc('meta5').set({studyPages:JSON.stringify(DB.studyPages||[]),customKw:JSON.stringify(DB.customKw||[]),kwNotes:DB.kwNotes||{},hfQids:DB.hfQids||{},hfWrong:DB.hfWrong||{},hfResults:JSON.stringify(DB.hfResults||{}),fillProgress:JSON.stringify(DB.fillProgress||{}),ts:Date.now()}),
     col.doc('analysis_0').set({cache:DB.analysisCache||{},ts:Date.now()}),
-    col.doc('batch_index').set({ids:DB.batches.map(function(b){return b.id;}),ts:Date.now()})
+    col.doc('batch_index').set({ids:DB.batches.map(function(b){return b.id;}),numPacks:Math.ceil(DB.batches.length/10),ts:Date.now()})
   ];
 
   Promise.all(metaOps).then(function(){
