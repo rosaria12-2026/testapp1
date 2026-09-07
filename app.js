@@ -3358,6 +3358,7 @@ function renderSearch(){
     +'<span style="font-size:11px;color:#aaa">点词即搜 · 或勾选多词后一起做</span>'
     +'<div style="margin-left:auto;display:flex;gap:6px">'
     +'<span id="sel-count" style="font-size:12px;color:#6040b0;display:none">已选 <b id="sel-num">0</b> 词</span>'
+    +'<div id="sel-words-area" style="display:none;flex-wrap:wrap;gap:4px;align-items:center"></div>'
     +'<button id="start-multi-btn" onclick="startMultiSearch()" style="display:none;padding:4px 12px;border-radius:8px;border:none;background:#6040b0;color:#fff;font-size:12px;cursor:pointer">▶ 做选中题目</button>'
     +'<button onclick="clearSelections()" style="display:none;padding:4px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-size:11px;cursor:pointer;color:#888" id="clear-sel-btn">清除选择</button>'
     +'</div>'
@@ -3436,6 +3437,14 @@ function updateSelCount(){
   if(sb) sb.style.display=n?'inline':'none';
   if(cb2) cb2.style.display=n?'inline':'none';
   if(sn) sn.textContent=n;
+  var wtagArea=document.getElementById('sel-words-area');
+  if(wtagArea){
+    var chk=document.querySelectorAll('.kw-cb:checked');
+    var tags='';
+    chk.forEach(function(cb){tags+='<span style="padding:2px 8px;background:#6040b0;color:#fff;border-radius:10px;font-size:11px">'+esc(cb.dataset.word)+'</span>';});
+    wtagArea.innerHTML=tags;
+    wtagArea.style.display=n?'flex':'none';
+  }
 }
 
 function selectCat(btn){
@@ -3696,7 +3705,13 @@ function renderSearchResults(kw){
     +'</div>'
     +'</div>';
 
-  _searchResults.forEach(function(r,ri){
+  // Sort: non-gray first, gray last
+  var sorted=_searchResults.slice().sort(function(a,b){
+    var ag=qGetBatches(a.q.id,a.batchId,a.qIdx).length>0?1:0;
+    var bg=qGetBatches(b.q.id,b.batchId,b.qIdx).length>0?1:0;
+    return ag-bg;
+  });
+  sorted.forEach(function(r,ri){
     var annNote = DB.qNotes&&DB.qNotes['ann_'+r.q.id]||'';
     var correctOpt = r.q.opts ? r.q.opts.find(function(o){return o.letter===r.q.answer;}) : null;
     var optsHtml = r.q.opts&&r.q.opts.length ? r.q.opts.map(function(o){
@@ -4035,10 +4050,16 @@ function saveCardToNotes(kw, txt){
 var _inlineAnswers = {};
 var _inlineMode = false;
 
+function updateInlineCounter(){
+  var total=_searchResults.length;
+  var done=Object.keys(_inlineAnswers).length;
+  var left=total-done;
+  var el=document.getElementById('inline-counter');
+  if(el){el.textContent='还剩 '+left+' 题未做';el.style.color=left===0?'#2e7d52':'#e8623a';}
+}
 function startInlineQuiz(){
   _inlineAnswers={};
   _inlineMode=true;
-  // Hide correct answers, show option buttons
   _searchResults.forEach(function(r,ri){
     var ansEl=document.querySelector('.sr-answer-'+ri);
     var optsEl=document.querySelector('.iq-opts-'+ri);
@@ -4047,6 +4068,17 @@ function startInlineQuiz(){
     if(optsEl) optsEl.style.display='flex';
     if(resEl) resEl.style.display='none';
   });
+  var area=document.getElementById('search-results');
+  var oldC=document.getElementById('inline-counter-bar'); if(oldC) oldC.remove();
+  if(area){
+    var bar=document.createElement('div');
+    bar.id='inline-counter-bar';
+    bar.style.cssText='position:sticky;top:0;z-index:998;background:#fff3e0;border:1.5px solid #f0b060;border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px';
+    bar.innerHTML='<span style="font-size:13px;color:#888">📝 做题模式</span>'
+      +'<span id="inline-counter" style="font-size:14px;font-weight:700;color:#e8623a">还剩 '+_searchResults.length+' 题未做</span>'
+      +'<button onclick="checkInlineQuiz()" style="margin-left:auto;padding:6px 16px;border-radius:8px;border:none;background:#2e7d52;color:#fff;font-size:13px;font-weight:700;cursor:pointer">✓ 一键核对</button>';
+    area.insertBefore(bar, area.firstChild);
+  }
   showToast('📝 做题模式：选完后点「✓ 一键核对」');
   // Add check button to first div in search-results
   var area=document.getElementById('search-results');
@@ -4067,6 +4099,7 @@ function startInlineQuiz(){
 
 function pickInlineOpt(ri, letter){
   _inlineAnswers[ri]=letter;
+  updateInlineCounter();
   // Highlight selected option
   document.querySelectorAll('.iq-opt[data-ri="'+ri+'"]').forEach(function(b){
     var isMe=b.dataset.l===letter;
