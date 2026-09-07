@@ -2039,9 +2039,19 @@ function backBtn(){
 // FIREBASE + AUTO-LOGIN
 // ═══════════════════════════════════════════════════════
 function saveFirebaseConfig(){
-  var raw=document.getElementById('firebase-config').value.trim(); if(!raw){showToast('请粘贴配置');return;}
-  try{var cfg=JSON.parse(raw);localStorage.setItem('firebase_cfg',JSON.stringify(cfg));showToast('✓ 已保存，请刷新后自动登录');}
-  catch(e){showToast('JSON格式错误');}
+  var raw=document.getElementById('firebase-config').value.trim();
+  if(!raw){showToast('请粘贴配置');return;}
+  try{
+    var cfg=JSON.parse(raw);
+    // Accept both {firebaseConfig:{...}} and direct format
+    if(cfg.firebaseConfig) cfg=cfg.firebaseConfig;
+    if(!cfg.projectId||!cfg.apiKey){
+      showToast('❌ 配置缺少 projectId 或 apiKey，请检查');
+      return;
+    }
+    localStorage.setItem('firebase_cfg',JSON.stringify(cfg));
+    showToast('✓ 已保存，请刷新后自动登录');
+  }catch(e){showToast('JSON格式错误：'+e.message);}
 }
 function loadFirebaseConfigToBox(){
   var s=localStorage.getItem('firebase_cfg');
