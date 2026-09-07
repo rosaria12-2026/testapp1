@@ -2214,7 +2214,7 @@ function downloadPackedBatches(col, numPacks){
 
 function downloadInChunks(col, batchIds){
   // Legacy: individual batch_xxx docs (old uploads)
-  var chunkSize=2;
+  var chunkSize=1;
   var total=batchIds.length;
   var done=0;
   var allDocs=[];
@@ -2239,7 +2239,7 @@ function downloadInChunks(col, batchIds){
       done+=chunk.length;
       showProgress('下载批次 '+done+'/'+total+'…', 40+done/total*50);
       return new Promise(function(resolve){
-        setTimeout(function(){ resolve(fetchChunk(i+chunkSize)); }, 800);
+        setTimeout(function(){ resolve(fetchChunk(i+chunkSize)); }, 1200);
       });
     });
   }
@@ -3701,6 +3701,12 @@ function renderSearchResults(kw){
     return;
   }
 
+  // Sort: non-gray first, gray last
+  _searchResults.sort(function(a,b){
+    var aGray=DB.hfQids&&DB.hfQids[a.q.id]?1:0;
+    var bGray=DB.hfQids&&DB.hfQids[b.q.id]?1:0;
+    return aGray-bGray;
+  });
   var doneHfCount=_searchResults.filter(function(r){return DB.hfQids&&DB.hfQids[r.q.id];}).length;
   var html='<div style="background:#fff;border:1px solid #e8e4de;border-radius:12px;padding:14px 16px;margin-bottom:12px">'
     +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
