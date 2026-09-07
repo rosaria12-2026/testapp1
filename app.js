@@ -2179,25 +2179,30 @@ function cloudUpload(){
 }
 
 function downloadPackedBatches(col, numPacks){
-  // Download batches_p0 ... batches_p(n-1), each holds 10 batches
   var allBatches=[];
   function fetchPack(pi){
     if(pi>=numPacks) return Promise.resolve(allBatches);
     return col.doc('batches_p'+pi).get().then(function(doc){
       if(doc&&doc.exists){
-        var arr=doc.data().batches||[];
+        var arr=(doc.data().batches||[]).filter(function(b){
+          return b&&b.id&&Array.isArray(b.questions);
+        });
         allBatches=allBatches.concat(arr);
       }
       showProgress('下载批次包 '+(pi+1)+'/'+numPacks, 40+(pi+1)/numPacks*50);
       return new Promise(function(resolve){
-        setTimeout(function(){ resolve(fetchPack(pi+1)); }, 500);
+        setTimeout(function(){ resolve(fetchPack(pi+1)); }, 600);
       });
     }).catch(function(){
-      // retry once
       return new Promise(function(resolve){
         setTimeout(function(){
           col.doc('batches_p'+pi).get().then(function(doc){
-            if(doc&&doc.exists) allBatches=allBatches.concat(doc.data().batches||[]);
+            if(doc&&doc.exists){
+              var arr=(doc.data().batches||[]).filter(function(b){
+                return b&&b.id&&Array.isArray(b.questions);
+              });
+              allBatches=allBatches.concat(arr);
+            }
             resolve(fetchPack(pi+1));
           }).catch(function(){ resolve(fetchPack(pi+1)); });
         }, 1500);
@@ -2302,9 +2307,14 @@ function cloudDownload(){
     if(!result) return;
     // Packed: result is array of batch objects; legacy: array of Firestore docs
     if(result.length && result[0] && typeof result[0].id==='string'){
-      DB.batches=result; // packed format
+      // packed format — already filtered in downloadPackedBatches
+      DB.batches=result.filter(function(b){return b&&b.id&&Array.isArray(b.questions);});
     } else {
-      DB.batches=result.filter(function(d){return d&&d.exists;}).map(function(d){return d.data();}); // legacy
+      // legacy format — array of Firestore docs
+      DB.batches=result.filter(function(d){return d&&d.exists;}).map(function(d){
+        var data=d.data();
+        return (data&&data.id&&Array.isArray(data.questions))?data:null;
+      }).filter(Boolean);
     }
     saveDB(); renderHome();
     showProgress('✓ 下载完成！'+DB.batches.length+'批次 · '+DB.notes.length+'笔记 · '+Object.keys(DB.wrongMap).length+'错题', 100);
