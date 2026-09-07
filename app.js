@@ -2172,7 +2172,7 @@ function cloudUpload(){
     col.doc('meta2').set({notes:DB.notes||[],qNotes:DB.qNotes||{},ts:Date.now()}),
     col.doc('meta3').set({wrongMap:DB.wrongMap||{},dkMap:DB.dkMap||{},starMap:DB.starMap||{},answerKeys:DB.answerKeys||{},ts:Date.now()}),
     col.doc('meta4').set({fillBatches:DB.fillBatches||[],fillWrong:DB.fillWrong||[],kwCards:DB.kwCards||{},searchHistory:DB.searchHistory||{},ts:Date.now()}),
-    col.doc('meta5').set({studyPages:JSON.stringify(DB.studyPages||[]),customKw:JSON.stringify(DB.customKw||[]),kwNotes:DB.kwNotes||{},hfQids:DB.hfQids||{},hfWrong:DB.hfWrong||{},hfResults:JSON.stringify(DB.hfResults||{}),fillProgress:JSON.stringify(DB.fillProgress||{}),ts:Date.now()}),
+    col.doc('meta5').set({studyPages:JSON.stringify(DB.studyPages||[]),customKw:JSON.stringify(DB.customKw||[]),kwNotes:JSON.stringify(DB.kwNotes||{}),hfQids:DB.hfQids||{},hfWrong:DB.hfWrong||{},hfResults:JSON.stringify(DB.hfResults||{}),fillProgress:JSON.stringify(DB.fillProgress||{}),ts:Date.now()}),
     col.doc('analysis_0').set({cache:DB.analysisCache||{},ts:Date.now()}),
     // batch_index written by uploadInChunks with numPacks
   ];
@@ -2259,18 +2259,6 @@ function downloadInChunks(col, batchIds){
 function cloudDownload(){
   if(typeof firebase==='undefined'){showToast('请先配置Firebase');return;}
   var user=firebase.auth().currentUser; if(!user){showToast('请先登录');return;}
-  // DIAGNOSTIC
-  try{
-    var pid=firebase.app().options.projectId;
-    var uid2=user.uid;
-    var col2=firebase.firestore().collection('users').doc(uid2).collection('data');
-    col2.doc('batch_index').get().then(function(d){
-      alert('诊断：\nprojectId='+pid+'\nuid='+uid2+'\nbatch_index存在='+d.exists+'\n数据='+JSON.stringify(d.exists?d.data():{}).slice(0,200));
-    }).catch(function(e){
-      alert('诊断失败：\nprojectId='+pid+'\nuid='+uid2+'\n错误='+e.code+' | '+e.message);
-    });
-    return; // stop here for diagnostic
-  }catch(e2){alert('初始化错误：'+e2.message);}
   showProgress('下载中… 获取数据', 5);
   var col=firebase.firestore().collection('users').doc(user.uid).collection('data');
 
@@ -2306,7 +2294,7 @@ function cloudDownload(){
     DB.searchHistory=m4.searchHistory||{};
     DB.studyPages=typeof m5.studyPages==='string'?JSON.parse(m5.studyPages||'[]'):(m5.studyPages||[]);
     DB.customKw=typeof m5.customKw==='string'?JSON.parse(m5.customKw||'[]'):(m5.customKw||[]);
-    DB.kwNotes=m5.kwNotes||{};
+    DB.kwNotes=typeof m5.kwNotes==='string'?JSON.parse(m5.kwNotes||'{}'):(m5.kwNotes||{});
     DB.hfQids=m5.hfQids||{};
     DB.hfWrong=m5.hfWrong||{};
     DB.hfResults=typeof m5.hfResults==='string'?JSON.parse(m5.hfResults||'{}'):(m5.hfResults||{});
