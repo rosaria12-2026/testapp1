@@ -2298,7 +2298,11 @@ function cloudDownload(){
       saveDB(); renderHome();
       showProgress('✓ 下载完成（无批次）', 100); return;
     }
-    // Always use individual batch docs
+    // New packed format
+    if(numPacks>0){
+      return downloadPackedBatches(col, numPacks);
+    }
+    // Legacy old format
     return downloadInChunks(col, batchIds);
   }).then(function(result){
     if(!result) return;
