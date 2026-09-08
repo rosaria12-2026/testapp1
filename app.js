@@ -3705,6 +3705,23 @@ function qGetBatches(qid, srcBatchId, srcQIdx){
   return found;
 }
 
+
+function copyQOnly(ri){
+  var r=_searchResults[ri]; if(!r) return;
+  var txt=r.q.body+'\n';
+  if(r.q.opts&&r.q.opts.length){
+    r.q.opts.forEach(function(o){ txt+=o.letter+'. '+o.text+'\n'; });
+  }
+  navigator.clipboard.writeText(txt.trim()).then(function(){
+    showToast('✓ 已复制题目');
+  }).catch(function(){
+    var ta=document.createElement('textarea');
+    ta.value=txt.trim(); document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('✓ 已复制题目');
+  });
+}
+
 function renderSearchResults(kw){
   var area = document.getElementById('search-results'); if(!area) return;
   if(!_searchResults.length){
@@ -3763,7 +3780,9 @@ function renderSearchResults(kw){
       +'<div style="display:flex;align-items:flex-start;gap:10px">'
       +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:3px;flex-shrink:0;width:16px;height:16px">'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:11px;color:#888;margin-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题'+inBatchBadge+'</div>'
+      +'<div style="font-size:11px;color:#888;margin-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题'+inBatchBadge
+      +'<button onclick="copyQOnly('+ri+')" style="margin-left:auto;padding:2px 8px;border-radius:6px;border:1px solid #ddd;background:#f8f8f8;font-size:11px;color:#555;cursor:pointer;flex-shrink:0">📋 复制题目</button>'
+      +'</div>'
       +'<div style="font-size:14px;line-height:1.7;color:#222;margin-bottom:6px;user-select:text">'+esc(r.q.body||'')+'</div>'
       // Correct answer (hidden when in quiz mode, shown by default)
       +(r.q.answer?'<div class="sr-answer-'+ri+'" style="font-size:13px;color:#2e7d52;font-weight:700;margin-bottom:6px;background:#e8f5ed;padding:5px 10px;border-radius:6px">✓ '+esc(r.q.answer)+'. '+(correctOpt?esc(correctOpt.text):'')+'</div>':'')
@@ -4078,11 +4097,16 @@ var _inlineAnswers = {};
 var _inlineMode = false;
 
 function updateInlineCounter(){
-  var total=_searchResults.length;
-  var done=Object.keys(_inlineAnswers).length;
-  var left=total-done;
+  // Count only non-gray (not in hf batch) questions
+  var nonGray=_searchResults.filter(function(r){return qGetBatches(r.q.id,r.batchId,r.qIdx).length===0;});
+  var nonGrayTotal=nonGray.length;
+  var nonGrayDone=nonGray.filter(function(r,ri){
+    var origRi=_searchResults.indexOf(r);
+    return _inlineAnswers[origRi]!=null;
+  }).length;
+  var left=nonGrayTotal-nonGrayDone;
   var el=document.getElementById('inline-counter');
-  if(el){el.textContent='还剩 '+left+' 题未做';el.style.color=left===0?'#2e7d52':'#e8623a';}
+  if(el){el.textContent='还剩 '+left+' 题未做（共'+nonGrayTotal+'题）';el.style.color=left===0?'#2e7d52':'#e8623a';}
 }
 function startInlineQuiz(){
   _inlineAnswers={};
@@ -4102,7 +4126,7 @@ function startInlineQuiz(){
     bar.id='inline-counter-bar';
     bar.style.cssText='position:sticky;top:0;z-index:998;background:#fff3e0;border:1.5px solid #f0b060;border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px';
     bar.innerHTML='<span style="font-size:13px;color:#888">📝 做题模式</span>'
-      +'<span id="inline-counter" style="font-size:14px;font-weight:700;color:#e8623a">还剩 '+_searchResults.length+' 题未做</span>'
+      +'<span id="inline-counter" style="font-size:14px;font-weight:700;color:#e8623a">还剩 '+(function(){return _searchResults.filter(function(r){return qGetBatches(r.q.id,r.batchId,r.qIdx).length===0;}).length;})()+' 题未做</span>'
       +'<button onclick="checkInlineQuiz()" style="margin-left:auto;padding:6px 16px;border-radius:8px;border:none;background:#2e7d52;color:#fff;font-size:13px;font-weight:700;cursor:pointer">✓ 一键核对</button>';
     area.insertBefore(bar, area.firstChild);
   }
