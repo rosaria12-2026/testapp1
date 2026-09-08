@@ -3688,6 +3688,7 @@ function runSemanticSearch(){
 }
 
 function doSearch(){
+  _inlineDisplayResults=[]; // v156: new search gets a fresh display mapping.
   var kw = (document.getElementById('search-kw')||{}).value||'';
   kw = kw.trim();
   if(!kw){ showToast('请输入关键词'); return; }
@@ -3804,6 +3805,11 @@ function renderSearchResults(kw){
     var bg=qGetBatches(b.q.id,b.batchId,b.qIdx).length>0?1:0;
     return ag-bg;
   });
+
+  // v156: freeze the exact DOM/display order. ri on the page refers to THIS array,
+  // never to _searchResults (whose order can differ).
+  _inlineDisplayResults=sorted.slice();
+
   sorted.forEach(function(r,ri){
     var annNote = DB.qNotes&&DB.qNotes['ann_'+r.q.id]||'';
     var correctOpt = r.q.opts ? r.q.opts.find(function(o){return o.letter===r.q.answer;}) : null;
@@ -4144,6 +4150,10 @@ function saveCardToNotes(kw, txt){
 
 var _inlineAnswers = {};
 var _inlineMode = false;
+// v156: exact order currently rendered on the 高频搜索 page.
+// IMPORTANT: renderSearchResults() may sort into a different order than _searchResults.
+// All inline-answer operations must use this displayed order, otherwise answers slide to another question.
+var _inlineDisplayResults = [];
 
 // Use a stable question key instead of the current search-result position.
 // renderSearchResults() sorts/reorders _searchResults, so position-based answers
@@ -4204,7 +4214,8 @@ function getCanonicalInlineQuestion(r){
 
 function updateInlineCounter(){
   // Count only non-gray (not in hf batch) questions
-  var nonGray=_searchResults.filter(function(r){return qGetBatches(r.q.id,r.batchId,r.qIdx).length===0;});
+  var rows=_inlineDisplayResults.length?_inlineDisplayResults:_searchResults;
+  var nonGray=rows.filter(function(r){return qGetBatches(r.q.id,r.batchId,r.qIdx).length===0;});
   var nonGrayTotal=nonGray.length;
   var nonGrayDone=nonGray.filter(function(r){
     return _inlineAnswers[inlineAnswerKey(r)]!=null;
@@ -4216,7 +4227,8 @@ function updateInlineCounter(){
 function startInlineQuiz(){
   _inlineAnswers={};
   _inlineMode=true;
-  _searchResults.forEach(function(r,ri){
+  var rows=_inlineDisplayResults.length?_inlineDisplayResults:_searchResults;
+  rows.forEach(function(r,ri){
     var ansEl=document.querySelector('.sr-answer-'+ri);
     var optsEl=document.querySelector('.iq-opts-'+ri);
     var resEl=document.querySelector('.iq-result-'+ri);
@@ -4231,7 +4243,7 @@ function startInlineQuiz(){
     bar.id='inline-counter-bar';
     bar.style.cssText='position:sticky;top:0;z-index:998;background:#fff3e0;border:1.5px solid #f0b060;border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px';
     bar.innerHTML='<span style="font-size:13px;color:#888">📝 做题模式</span>'
-      +'<span id="inline-counter" style="font-size:14px;font-weight:700;color:#e8623a">还剩 '+(function(){return _searchResults.filter(function(r){return qGetBatches(r.q.id,r.batchId,r.qIdx).length===0;}).length;})()+' 题未做</span>'
+      +'<span id="inline-counter" style="font-size:14px;font-weight:700;color:#e8623a">还剩 '+(function(){return rows.filter(function(r){return qGetBatches(r.q.id,r.batchId,r.qIdx).length===0;}).length;})()+' 题未做</span>'
       +'<button onclick="checkInlineQuiz()" style="margin-left:auto;padding:6px 16px;border-radius:8px;border:none;background:#2e7d52;color:#fff;font-size:13px;font-weight:700;cursor:pointer">✓ 一键核对</button>';
     area.insertBefore(bar, area.firstChild);
   }
@@ -4254,7 +4266,9 @@ function startInlineQuiz(){
 }
 
 function pickInlineOpt(ri, letter){
-  var r=_searchResults[ri];
+  // ri comes from the rendered card, so resolve it against the frozen DISPLAY order.
+  var rows=_inlineDisplayResults.length?_inlineDisplayResults:_searchResults;
+  var r=rows[ri];
   if(!r) return;
   _inlineAnswers[inlineAnswerKey(r)]=letter;
   updateInlineCounter();
@@ -4269,33 +4283,35 @@ function pickInlineOpt(ri, letter){
 }
 
 function checkInlineQuiz(){
-  var correct=0, total=_searchResults.length, answered=0;
-  _searchResults.forEach(function(r,ri){
+  // v156: check in exactly the same order the user clicked on screen.
+  var rows=_inlineDisplayResults.length?_inlineDisplayResults:_searchResults;
+  var correct=0, total=rows.length, answered=0;
+  rows.forEach(function(r,ri){
     var my=_inlineAnswers[inlineAnswerKey(r)];
     if(my) answered++;
     var cq=getCanonicalInlineQuestion(r)||r.q;
     var isOk=my&&cq.answer&&my.toUpperCase()===cq.answer.toUpperCase();
     if(isOk) correct++;
-    // Color options
+    // Color options using canonical original answer.
     document.querySelectorAll('.iq-opt[data-ri="'+ri+'"]').forEach(function(b){
-      if(b.dataset.l===r.q.answer){b.style.background='#e8f5ed';b.style.borderColor='#2e7d52';b.style.color='#2e7d52';b.style.fontWeight='700';}
+      if(b.dataset.l===cq.answer){b.style.background='#e8f5ed';b.style.borderColor='#2e7d52';b.style.color='#2e7d52';b.style.fontWeight='700';}
       else if(b.dataset.l===my&&!isOk){b.style.background='#fdeaea';b.style.borderColor='#b83232';b.style.color='#b83232';}
     });
     // Show result
     var resEl=document.querySelector('.iq-result-'+ri);
     if(resEl){
       resEl.style.display='block';
-      if(!my) resEl.innerHTML='<span style="color:#888">未作答 — 答案：'+esc(r.q.answer||'?')+'</span>';
+      if(!my) resEl.innerHTML='<span style="color:#888">未作答 — 答案：'+esc(cq.answer||'?')+'</span>';
       else if(isOk) resEl.innerHTML='<span style="color:#2e7d52;font-weight:700">✓ 正确！</span>';
-      else resEl.innerHTML='<span style="color:#b83232;font-weight:700">✗ 你选：'+esc(my)+' · 正确：'+esc(r.q.answer||'?')+'</span>';
+      else resEl.innerHTML='<span style="color:#b83232;font-weight:700">✗ 你选：'+esc(my)+' · 正确：'+esc(cq.answer||'?')+'</span>';
     }
-    // Update wrongMap and hfWrong
-    if(my&&r.q.answer){
+    // Update wrongMap and hfWrong; original batch progress.answers is untouched.
+    if(my&&cq.answer){
       if(!DB.hfWrong) DB.hfWrong={};
       if(isOk){
         delete DB.wrongMap[cq.id];
       } else {
-        DB.wrongMap[cq.id]={q:r.q,batchId:r.batchId,batchName:r.batchName,myAns:my};
+        DB.wrongMap[cq.id]={q:cq,batchId:r.batchId,batchName:r.batchName,myAns:my};
         DB.hfWrong[cq.id]=(DB.hfWrong[cq.id]||0)+1;
       }
     }
@@ -4306,7 +4322,7 @@ function checkInlineQuiz(){
   if(kw){
     if(!DB.hfResults) DB.hfResults={};
     var wrongCount=0;
-    var resultItems=_searchResults.map(function(r,ri){
+    var resultItems=rows.map(function(r,ri){
       var my=_inlineAnswers[inlineAnswerKey(r)]||'';
       var ref=getOriginalQuestionRef(r);
       var cq=ref&&ref.q?ref.q:r.q;
