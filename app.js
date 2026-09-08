@@ -4099,9 +4099,58 @@ var _inlineMode = false;
 // Use a stable question key instead of the current search-result position.
 // renderSearchResults() sorts/reorders _searchResults, so position-based answers
 // can otherwise slide onto a different question.
+// 高频复习的稳定身份：优先锁定【原始批次ID + 原题索引】。
+// 这里只“定位原题”，绝不写回原批次 progress.answers。
+function getOriginalQuestionRef(r){
+  if(!r || !r.q) return null;
+  var q=r.q, b, i, idx;
+
+  if(q.srcBatchId){
+    for(i=0;i<DB.batches.length;i++){
+      b=DB.batches[i];
+      if(b.id!==q.srcBatchId) continue;
+      if(q.srcQIdx!=null && b.questions && b.questions[q.srcQIdx]){
+        var x=b.questions[q.srcQIdx];
+        if(x.id===q.id || x.body===q.body)
+          return {batchId:b.id,qIdx:q.srcQIdx,q:x};
+      }
+      idx=(b.questions||[]).findIndex(function(x){return x.id===q.id;});
+      if(idx>=0) return {batchId:b.id,qIdx:idx,q:b.questions[idx]};
+    }
+  }
+
+  for(i=0;i<DB.batches.length;i++){
+    b=DB.batches[i];
+    if(b.id===r.batchId && !(b.name && b.name.indexOf('高频')>=0)){
+      if(r.qIdx!=null && b.questions && b.questions[r.qIdx]){
+        var d=b.questions[r.qIdx];
+        if(d.id===q.id || d.body===q.body)
+          return {batchId:b.id,qIdx:r.qIdx,q:d};
+      }
+      idx=(b.questions||[]).findIndex(function(x){return x.id===q.id;});
+      if(idx>=0) return {batchId:b.id,qIdx:idx,q:b.questions[idx]};
+    }
+  }
+
+  for(i=0;i<DB.batches.length;i++){
+    b=DB.batches[i];
+    if(b.name && b.name.indexOf('高频')>=0) continue;
+    idx=(b.questions||[]).findIndex(function(x){return x.id===q.id;});
+    if(idx>=0) return {batchId:b.id,qIdx:idx,q:b.questions[idx]};
+  }
+
+  return {batchId:r.batchId||'',qIdx:r.qIdx!=null?r.qIdx:'',q:q};
+}
+
 function inlineAnswerKey(r){
-  if(!r) return '';
-  return String(r.batchId||'')+'|'+String(r.q&&r.q.id||'')+'|'+String(r.qIdx!=null?r.qIdx:'');
+  var ref=getOriginalQuestionRef(r);
+  if(!ref) return '';
+  return String(ref.batchId||'')+'|'+String(ref.qIdx);
+}
+
+function getCanonicalInlineQuestion(r){
+  var ref=getOriginalQuestionRef(r);
+  return ref&&ref.q ? ref.q : (r&&r.q?r.q:null);
 }
 
 function updateInlineCounter(){
@@ -4175,7 +4224,8 @@ function checkInlineQuiz(){
   _searchResults.forEach(function(r,ri){
     var my=_inlineAnswers[inlineAnswerKey(r)];
     if(my) answered++;
-    var isOk=my&&r.q.answer&&my.toUpperCase()===r.q.answer.toUpperCase();
+    var cq=getCanonicalInlineQuestion(r)||r.q;
+    var isOk=my&&cq.answer&&my.toUpperCase()===cq.answer.toUpperCase();
     if(isOk) correct++;
     // Color options
     document.querySelectorAll('.iq-opt[data-ri="'+ri+'"]').forEach(function(b){
@@ -4194,10 +4244,10 @@ function checkInlineQuiz(){
     if(my&&r.q.answer){
       if(!DB.hfWrong) DB.hfWrong={};
       if(isOk){
-        delete DB.wrongMap[r.q.id];
+        delete DB.wrongMap[cq.id];
       } else {
-        DB.wrongMap[r.q.id]={q:r.q,batchId:r.batchId,batchName:r.batchName,myAns:my};
-        DB.hfWrong[r.q.id]=(DB.hfWrong[r.q.id]||0)+1;
+        DB.wrongMap[cq.id]={q:r.q,batchId:r.batchId,batchName:r.batchName,myAns:my};
+        DB.hfWrong[cq.id]=(DB.hfWrong[cq.id]||0)+1;
       }
     }
   });
@@ -4209,9 +4259,15 @@ function checkInlineQuiz(){
     var wrongCount=0;
     var resultItems=_searchResults.map(function(r,ri){
       var my=_inlineAnswers[inlineAnswerKey(r)]||'';
-      var isOk=my&&r.q.answer&&my.toUpperCase()===r.q.answer.toUpperCase();
+      var ref=getOriginalQuestionRef(r);
+      var cq=ref&&ref.q?ref.q:r.q;
+      var isOk=my&&cq.answer&&my.toUpperCase()===cq.answer.toUpperCase();
       if(my&&!isOk) wrongCount++;
-      return {qid:r.q.id,body:r.q.body,opts:r.q.opts,answer:r.q.answer,my:my,hfMy:my,ok:isOk,batchName:r.batchName};
+      return {
+        qid:cq.id,body:cq.body,opts:cq.opts,answer:cq.answer,
+        my:my,hfMy:my,ok:isOk,batchName:r.batchName,
+        srcBatchId:ref?ref.batchId:'',srcQIdx:ref?ref.qIdx:''
+      };
     });
     DB.hfResults[kw]={ts:Date.now(),items:resultItems,wrongCount:wrongCount,total:total,correct:correct};
   }
