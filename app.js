@@ -2318,7 +2318,9 @@ function cloudDownload(){
       var items=rec&&Array.isArray(rec.items)?rec.items:[];
       var n=0;
       items.forEach(function(x){
-        if(x && x.srcBatchId && x.srcQIdx!==undefined && x.srcQIdx!==null && x.srcQIdx!=='') n++;
+        if(x && x.srcBatchId &&
+           ((x.srcQNum!==undefined&&x.srcQNum!==null&&x.srcQNum!=='') ||
+            (x.srcQIdx!==undefined&&x.srcQIdx!==null&&x.srcQIdx!==''))) n++;
       });
       return n;
     }
@@ -3757,10 +3759,13 @@ function qGetBatches(qid, srcBatchId, srcQIdx){
 
 
 function copyQOnly(ri){
-  var r=_searchResults[ri]; if(!r) return;
-  var txt=r.q.body+'\n';
-  if(r.q.opts&&r.q.opts.length){
-    r.q.opts.forEach(function(o){ txt+=o.letter+'. '+o.text+'\n'; });
+  var rows=_inlineDisplayResults.length?_inlineDisplayResults:_searchResults;
+  var r=rows[ri]; if(!r) return;
+  var ref=getOriginalQuestionRef(r);
+  var q=(ref&&ref.q)?ref.q:r.q;
+  var txt=q.body+'\n';
+  if(q.opts&&q.opts.length){
+    q.opts.forEach(function(o){ txt+=o.letter+'. '+o.text+'\n'; });
   }
   navigator.clipboard.writeText(txt.trim()).then(function(){
     showToast('✓ 已复制题目');
@@ -3811,14 +3816,21 @@ function renderSearchResults(kw){
   _inlineDisplayResults=sorted.slice();
 
   sorted.forEach(function(r,ri){
-    var annNote = DB.qNotes&&DB.qNotes['ann_'+r.q.id]||'';
-    var correctOpt = r.q.opts ? r.q.opts.find(function(o){return o.letter===r.q.answer;}) : null;
-    var optsHtml = r.q.opts&&r.q.opts.length ? r.q.opts.map(function(o){
-      var isAns=o.letter===r.q.answer;
+    var originalRef=getOriginalQuestionRef(r);
+    var displayQ=(originalRef&&originalRef.q)?originalRef.q:r.q;
+    var displayBatchName=(originalRef&&originalRef.batchName)?originalRef.batchName:r.batchName;
+    var displayQNum=(originalRef&&originalRef.qNum!==undefined&&originalRef.qNum!==null&&originalRef.qNum!=='')
+      ? originalRef.qNum
+      : ((displayQ.num!==undefined&&displayQ.num!==null&&displayQ.num!=='')?displayQ.num:(r.qIdx+1));
+
+    var annNote = DB.qNotes&&DB.qNotes['ann_'+displayQ.id]||'';
+    var correctOpt = displayQ.opts ? displayQ.opts.find(function(o){return o.letter===displayQ.answer;}) : null;
+    var optsHtml = displayQ.opts&&displayQ.opts.length ? displayQ.opts.map(function(o){
+      var isAns=o.letter===displayQ.answer;
       return '<div style="padding:3px 0;color:'+(isAns?'#2e7d52':'#333')+';font-weight:'+(isAns?'700':'400')+';font-size:13px">'+esc(o.letter+'. '+o.text)+(isAns?' <span style="background:#2e7d52;color:#fff;border-radius:3px;padding:0 4px;font-size:11px">✓</span>':'')+'</div>';
     }).join('') : '';
     // Inline quiz options (hidden until startInlineQuiz)
-    var inlineOpts = r.q.opts&&r.q.opts.length ? r.q.opts.map(function(o){
+    var inlineOpts = displayQ.opts&&displayQ.opts.length ? displayQ.opts.map(function(o){
       return '<button class="iq-opt" data-ri="'+ri+'" data-l="'+esc(o.letter)+'" onclick="pickInlineOpt(parseInt(this.dataset.ri),this.dataset.l)" '
         +'style="padding:6px 10px;border:1.5px solid #ddd;border-radius:8px;margin:2px;font-size:13px;cursor:pointer;background:#fafaf8;color:#333">'
         +esc(o.letter+'. '+o.text)+'</button>';
@@ -3833,14 +3845,14 @@ function renderSearchResults(kw){
     html+='<div class="sr-item" data-donehf="'+(isInAnyBatch?'1':'0')+'" data-ri="'+ri+'"'
       +' style="background:#fff;border:1px solid #e8e4de;border-radius:10px;padding:12px 14px;margin-bottom:8px'+grayStyle+'">'
       +'<div style="display:flex;align-items:flex-start;gap:10px">'
-      +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" style="margin-top:3px;flex-shrink:0;width:16px;height:16px">'
+      +'<input type="checkbox" class="search-cb" data-ri="'+ri+'" data-gray="'+(isInAnyBatch?'1':'0')+'" '+(isInAnyBatch?'disabled ':'')+'style="margin-top:3px;flex-shrink:0;width:16px;height:16px">'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:11px;color:#888;margin-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'+esc(r.batchName)+' · 第'+(r.qIdx+1)+'题'+inBatchBadge
+      +'<div style="font-size:11px;color:#888;margin-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'+esc(displayBatchName)+' · 第'+esc(String(displayQNum))+'题'+inBatchBadge
       +'<button onclick="copyQOnly('+ri+')" style="margin-left:auto;padding:2px 8px;border-radius:6px;border:1px solid #ddd;background:#f8f8f8;font-size:11px;color:#555;cursor:pointer;flex-shrink:0">📋 复制题目</button>'
       +'</div>'
-      +'<div style="font-size:14px;line-height:1.7;color:#222;margin-bottom:6px;user-select:text">'+esc(r.q.body||'')+'</div>'
+      +'<div style="font-size:14px;line-height:1.7;color:#222;margin-bottom:6px;user-select:text">'+esc(displayQ.body||'')+'</div>'
       // Correct answer (hidden when in quiz mode, shown by default)
-      +(r.q.answer?'<div class="sr-answer-'+ri+'" style="font-size:13px;color:#2e7d52;font-weight:700;margin-bottom:6px;background:#e8f5ed;padding:5px 10px;border-radius:6px">✓ '+esc(r.q.answer)+'. '+(correctOpt?esc(correctOpt.text):'')+'</div>':'')
+      +(displayQ.answer?'<div class="sr-answer-'+ri+'" style="font-size:13px;color:#2e7d52;font-weight:700;margin-bottom:6px;background:#e8f5ed;padding:5px 10px;border-radius:6px">✓ '+esc(displayQ.answer)+'. '+(correctOpt?esc(correctOpt.text):'')+'</div>':'')
       // Inline quiz options (hidden by default)
       +'<div class="iq-opts-'+ri+'" style="display:none;margin-bottom:6px;flex-wrap:wrap">'+inlineOpts+'</div>'
       +'<div class="iq-result-'+ri+'" style="display:none;margin-bottom:6px;font-size:13px"></div>'
@@ -4162,49 +4174,94 @@ var _inlineDisplayResults = [];
 // 这里只“定位原题”，绝不写回原批次 progress.answers。
 function getOriginalQuestionRef(r){
   if(!r || !r.q) return null;
-  var q=r.q, b, i, idx;
+  var q=r.q, b, i, idx, numIdx;
 
+  function makeRef(batch, qIdx){
+    var qq=batch&&batch.questions?batch.questions[qIdx]:null;
+    return qq ? {
+      batchId:batch.id,
+      batchName:batch.name||'',
+      qIdx:qIdx,
+      qNum:(qq.num!==undefined&&qq.num!==null&&qq.num!=='')?qq.num:(qIdx+1),
+      q:qq
+    } : null;
+  }
+
+  // 1. Derived/high-frequency copy: go back to its ORIGINAL batch.
   if(q.srcBatchId){
     for(i=0;i<DB.batches.length;i++){
       b=DB.batches[i];
       if(b.id!==q.srcBatchId) continue;
+
+      // v157: strongest identity = original batch + original question number.
+      var wantedNum=(q.srcQNum!==undefined&&q.srcQNum!==null&&q.srcQNum!=='') ? q.srcQNum :
+                    ((q.num!==undefined&&q.num!==null&&q.num!=='') ? q.num : null);
+      if(wantedNum!==null){
+        numIdx=(b.questions||[]).findIndex(function(x){
+          return x && String(x.num)===String(wantedNum) &&
+                 (x.id===q.id || x.body===q.body || !q.id);
+        });
+        if(numIdx<0){
+          numIdx=(b.questions||[]).findIndex(function(x){ return x && String(x.num)===String(wantedNum); });
+        }
+        if(numIdx>=0) return makeRef(b,numIdx);
+      }
+
+      // Old records may only have srcQIdx.
       if(q.srcQIdx!=null && b.questions && b.questions[q.srcQIdx]){
         var x=b.questions[q.srcQIdx];
-        if(x.id===q.id || x.body===q.body)
-          return {batchId:b.id,qIdx:q.srcQIdx,q:x};
+        if(x.id===q.id || x.body===q.body) return makeRef(b,q.srcQIdx);
       }
+
       idx=(b.questions||[]).findIndex(function(x){return x.id===q.id;});
-      if(idx>=0) return {batchId:b.id,qIdx:idx,q:b.questions[idx]};
+      if(idx>=0) return makeRef(b,idx);
     }
   }
 
+  // 2. Search result already belongs to an original (non-HF) batch.
   for(i=0;i<DB.batches.length;i++){
     b=DB.batches[i];
     if(b.id===r.batchId && !(b.name && b.name.indexOf('高频')>=0)){
+      if(q.num!==undefined&&q.num!==null&&q.num!==''){
+        numIdx=(b.questions||[]).findIndex(function(x){
+          return x && String(x.num)===String(q.num) && (x.id===q.id || x.body===q.body);
+        });
+        if(numIdx<0) numIdx=(b.questions||[]).findIndex(function(x){return x && String(x.num)===String(q.num);});
+        if(numIdx>=0) return makeRef(b,numIdx);
+      }
       if(r.qIdx!=null && b.questions && b.questions[r.qIdx]){
         var d=b.questions[r.qIdx];
-        if(d.id===q.id || d.body===q.body)
-          return {batchId:b.id,qIdx:r.qIdx,q:d};
+        if(d.id===q.id || d.body===q.body) return makeRef(b,r.qIdx);
       }
       idx=(b.questions||[]).findIndex(function(x){return x.id===q.id;});
-      if(idx>=0) return {batchId:b.id,qIdx:idx,q:b.questions[idx]};
+      if(idx>=0) return makeRef(b,idx);
     }
   }
 
+  // 3. Last fallback: locate same qid in any original batch.
   for(i=0;i<DB.batches.length;i++){
     b=DB.batches[i];
     if(b.name && b.name.indexOf('高频')>=0) continue;
     idx=(b.questions||[]).findIndex(function(x){return x.id===q.id;});
-    if(idx>=0) return {batchId:b.id,qIdx:idx,q:b.questions[idx]};
+    if(idx>=0) return makeRef(b,idx);
   }
 
-  return {batchId:r.batchId||'',qIdx:r.qIdx!=null?r.qIdx:'',q:q};
+  return {
+    batchId:r.batchId||'',
+    batchName:r.batchName||'',
+    qIdx:r.qIdx!=null?r.qIdx:'',
+    qNum:(q.num!==undefined&&q.num!==null&&q.num!=='')?q.num:(r.qIdx!=null?r.qIdx+1:''),
+    q:q
+  };
 }
 
 function inlineAnswerKey(r){
   var ref=getOriginalQuestionRef(r);
   if(!ref) return '';
-  return String(ref.batchId||'')+'|'+String(ref.qIdx);
+  // v157: question identity is ORIGINAL BATCH + ORIGINAL QUESTION NUMBER.
+  // qIdx is only a fallback for old/imported questions without q.num.
+  var n=(ref.qNum!==undefined&&ref.qNum!==null&&ref.qNum!=='') ? ('N'+ref.qNum) : ('I'+ref.qIdx);
+  return String(ref.batchId||'')+'|'+String(n);
 }
 
 function getCanonicalInlineQuestion(r){
@@ -4331,7 +4388,9 @@ function checkInlineQuiz(){
       return {
         qid:cq.id,body:cq.body,opts:cq.opts,answer:cq.answer,
         my:my,hfMy:my,ok:isOk,batchName:r.batchName,
-        srcBatchId:ref?ref.batchId:'',srcQIdx:ref?ref.qIdx:''
+        srcBatchId:ref?ref.batchId:'',
+        srcQIdx:ref?ref.qIdx:'',
+        srcQNum:ref?ref.qNum:''
       };
     });
     DB.hfResults[kw]={ts:Date.now(),items:resultItems,wrongCount:wrongCount,total:total,correct:correct};
@@ -4758,20 +4817,45 @@ function toggleSearchDetail(ri){
 }
 
 function searchToggleAll(checked){
-  document.querySelectorAll('.search-cb').forEach(function(cb){ cb.checked=checked; });
+  // v157: “全选” = only selectable NON-GRAY questions.
+  document.querySelectorAll('.search-cb').forEach(function(cb){
+    if(cb.dataset.gray==='1' || cb.disabled){
+      cb.checked=false;
+      return;
+    }
+    cb.checked=checked;
+  });
 }
 
-function searchGetSelected(){
+function searchGetSelectedResults(){
   var selected=[];
+  var rows=_inlineDisplayResults.length?_inlineDisplayResults:_searchResults;
   document.querySelectorAll('.search-cb:checked').forEach(function(cb){
+    if(cb.dataset.gray==='1' || cb.disabled) return;
     var ri=parseInt(cb.dataset.ri);
-    if(_searchResults[ri]) selected.push(_searchResults[ri].q);
+    if(rows[ri]) selected.push(rows[ri]);
   });
   return selected;
 }
 
+function searchGetSelected(){
+  return searchGetSelectedResults().map(function(r){return r.q;});
+}
+
+function cloneQuestionForDerivedBatch(r){
+  var ref=getOriginalQuestionRef(r);
+  var srcQ=(ref&&ref.q)?ref.q:r.q;
+  var q;
+  try{ q=JSON.parse(JSON.stringify(srcQ)); }
+  catch(e){ q=Object.assign({},srcQ); }
+  q.srcBatchId=ref?ref.batchId:r.batchId;
+  q.srcQIdx=ref?ref.qIdx:r.qIdx;
+  q.srcQNum=ref?ref.qNum:((srcQ.num!==undefined&&srcQ.num!==null)?srcQ.num:(r.qIdx+1));
+  return q;
+}
+
 function searchAddToBatch(){
-  var selected=searchGetSelected();
+  var selected=searchGetSelectedResults();
   if(!selected.length){ showToast('请先勾选题目'); return; }
   if(!DB.batches.length){ showToast('还没有批次，请先新建一个'); return; }
   // Show batch selector
@@ -4791,17 +4875,19 @@ function searchAddToBatch(){
 function searchDoAddToBatch(){
   var sel=document.getElementById('search-target-batch'); if(!sel)return;
   var batch=DB.batches[parseInt(sel.value)]; if(!batch)return;
-  var selected=searchGetSelected();
+  var selected=searchGetSelectedResults();
   if(!selected.length){ showToast('请先勾选题目'); return; }
   // Avoid duplicates by question id
   var existIds=new Set(batch.questions.map(function(q){return q.id;}));
   var added=0;
-  selected.forEach(function(q){
-    if(!existIds.has(q.id)){
-      // Tag with source info for gray detection
-      var r=_searchResults.find(function(x){return x.q.id===q.id;});
-      if(r){q.srcBatchId=r.batchId;q.srcQIdx=r.qIdx;}
+  selected.forEach(function(r){
+    var sourceRef=getOriginalQuestionRef(r);
+    var sourceQ=(sourceRef&&sourceRef.q)?sourceRef.q:r.q;
+    if(!existIds.has(sourceQ.id)){
+      // v157: clone the question; NEVER mutate/reuse the original question object.
+      var q=cloneQuestionForDerivedBatch(r);
       batch.questions.push(q);
+      existIds.add(q.id);
       if(batch.progress&&batch.progress.answers) batch.progress.answers.push(null);
       added++;
     }
@@ -4864,23 +4950,33 @@ function startSearchQuiz(hideAnswer){
 }
 
 function searchSaveBatch(){
-  var selected=searchGetSelected();
+  var selected=searchGetSelectedResults();
   if(!selected.length){ showToast('请先勾选题目'); return; }
   // Tag as HF questions
   if(!DB.hfQids) DB.hfQids={};
-  selected.forEach(function(q){DB.hfQids[q.id]=true;}); saveDB();
+  selected.forEach(function(r){
+    var ref=getOriginalQuestionRef(r);
+    var q=(ref&&ref.q)?ref.q:r.q;
+    DB.hfQids[q.id]=true;
+  });
+  saveDB();
+
   var name=prompt('新批次名称：','高频-'+new Date().toLocaleDateString('zh-CN'));
   if(!name||!name.trim()) return;
+
   if(name.indexOf('高频')>=0){
     if(!DB.hfQids) DB.hfQids={};
-    selected.forEach(function(q){DB.hfQids[q.id]=true;});
+    selected.forEach(function(r){
+      var ref=getOriginalQuestionRef(r);
+      var q=(ref&&ref.q)?ref.q:r.q;
+      DB.hfQids[q.id]=true;
+    });
   }
-  // Tag each question with its source batchId+qIdx for gray detection
-  var taggedQs=selected.map(function(q){
-    var r=_searchResults.find(function(x){return x.q.id===q.id;});
-    if(r){q.srcBatchId=r.batchId;q.srcQIdx=r.qIdx;}
-    return q;
-  });
+
+  // v157: every derived question is an independent CLONE carrying
+  // original batchId + original qNum (+ qIdx fallback).
+  var taggedQs=selected.map(function(r){ return cloneQuestionForDerivedBatch(r); });
+
   var batch={
     id:uid(), name:name.trim(),
     questions:taggedQs,
