@@ -4096,13 +4096,20 @@ function saveCardToNotes(kw, txt){
 var _inlineAnswers = {};
 var _inlineMode = false;
 
+// Use a stable question key instead of the current search-result position.
+// renderSearchResults() sorts/reorders _searchResults, so position-based answers
+// can otherwise slide onto a different question.
+function inlineAnswerKey(r){
+  if(!r) return '';
+  return String(r.batchId||'')+'|'+String(r.q&&r.q.id||'')+'|'+String(r.qIdx!=null?r.qIdx:'');
+}
+
 function updateInlineCounter(){
   // Count only non-gray (not in hf batch) questions
   var nonGray=_searchResults.filter(function(r){return qGetBatches(r.q.id,r.batchId,r.qIdx).length===0;});
   var nonGrayTotal=nonGray.length;
-  var nonGrayDone=nonGray.filter(function(r,ri){
-    var origRi=_searchResults.indexOf(r);
-    return _inlineAnswers[origRi]!=null;
+  var nonGrayDone=nonGray.filter(function(r){
+    return _inlineAnswers[inlineAnswerKey(r)]!=null;
   }).length;
   var left=nonGrayTotal-nonGrayDone;
   var el=document.getElementById('inline-counter');
@@ -4149,7 +4156,9 @@ function startInlineQuiz(){
 }
 
 function pickInlineOpt(ri, letter){
-  _inlineAnswers[ri]=letter;
+  var r=_searchResults[ri];
+  if(!r) return;
+  _inlineAnswers[inlineAnswerKey(r)]=letter;
   updateInlineCounter();
   // Highlight selected option
   document.querySelectorAll('.iq-opt[data-ri="'+ri+'"]').forEach(function(b){
@@ -4164,7 +4173,7 @@ function pickInlineOpt(ri, letter){
 function checkInlineQuiz(){
   var correct=0, total=_searchResults.length, answered=0;
   _searchResults.forEach(function(r,ri){
-    var my=_inlineAnswers[ri];
+    var my=_inlineAnswers[inlineAnswerKey(r)];
     if(my) answered++;
     var isOk=my&&r.q.answer&&my.toUpperCase()===r.q.answer.toUpperCase();
     if(isOk) correct++;
@@ -4199,7 +4208,7 @@ function checkInlineQuiz(){
     if(!DB.hfResults) DB.hfResults={};
     var wrongCount=0;
     var resultItems=_searchResults.map(function(r,ri){
-      var my=_inlineAnswers[ri]||'';
+      var my=_inlineAnswers[inlineAnswerKey(r)]||'';
       var isOk=my&&r.q.answer&&my.toUpperCase()===r.q.answer.toUpperCase();
       if(my&&!isOk) wrongCount++;
       return {qid:r.q.id,body:r.q.body,opts:r.q.opts,answer:r.q.answer,my:my,ok:isOk,batchName:r.batchName};
@@ -4226,7 +4235,7 @@ function checkInlineQuiz(){
 function copyWrongQuestions(){
   var txt='';
   _searchResults.forEach(function(r,ri){
-    var my=_inlineAnswers[ri];
+    var my=_inlineAnswers[inlineAnswerKey(r)];
     if(!my) return;
     var isOk=r.q.answer&&my.toUpperCase()===r.q.answer.toUpperCase();
     if(isOk) return;
