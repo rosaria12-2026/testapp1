@@ -2259,6 +2259,16 @@ function downloadInChunks(col, batchIds){
 function cloudDownload(){
   if(typeof firebase==='undefined'){showToast('请先配置Firebase');return;}
   var user=firebase.auth().currentUser; if(!user){showToast('请先登录');return;}
+
+  // v155: keep a snapshot of local 高频历史 before downloading.
+  // Cloud data must not blindly overwrite a newer/repaired local HF record.
+  var localHfResultsBeforeDownload={};
+  try{
+    localHfResultsBeforeDownload=JSON.parse(JSON.stringify(DB.hfResults||{}));
+  }catch(e){
+    localHfResultsBeforeDownload=DB.hfResults||{};
+  }
+
   showProgress('下载中… 获取数据', 5);
   var col=firebase.firestore().collection('users').doc(user.uid).collection('data');
 
@@ -2297,7 +2307,46 @@ function cloudDownload(){
     DB.kwNotes=typeof m5.kwNotes==='string'?JSON.parse(m5.kwNotes||'{}'):(m5.kwNotes||{});
     DB.hfQids=m5.hfQids||{};
     DB.hfWrong=m5.hfWrong||{};
-    DB.hfResults=typeof m5.hfResults==='string'?JSON.parse(m5.hfResults||'{}'):(m5.hfResults||{});
+
+    // v155: merge 高频历史 instead of replacing it wholesale.
+    // Rule:
+    // 1. A local record with more stable source bindings (srcBatchId/srcQIdx)
+    //    is considered repaired and wins over an older/unbound cloud copy.
+    // 2. Otherwise the newer ts wins; equal timestamps keep local.
+    var cloudHfResults=typeof m5.hfResults==='string'?JSON.parse(m5.hfResults||'{}'):(m5.hfResults||{});
+    function hfStableBindingCount(rec){
+      var items=rec&&Array.isArray(rec.items)?rec.items:[];
+      var n=0;
+      items.forEach(function(x){
+        if(x && x.srcBatchId && x.srcQIdx!==undefined && x.srcQIdx!==null && x.srcQIdx!=='') n++;
+      });
+      return n;
+    }
+    var mergedHfResults={};
+    var hfKeys={};
+    Object.keys(cloudHfResults||{}).forEach(function(k){hfKeys[k]=1;});
+    Object.keys(localHfResultsBeforeDownload||{}).forEach(function(k){hfKeys[k]=1;});
+    Object.keys(hfKeys).forEach(function(k){
+      var cloudRec=(cloudHfResults||{})[k];
+      var localRec=(localHfResultsBeforeDownload||{})[k];
+      if(!localRec){mergedHfResults[k]=cloudRec;return;}
+      if(!cloudRec){mergedHfResults[k]=localRec;return;}
+
+      var localStable=hfStableBindingCount(localRec);
+      var cloudStable=hfStableBindingCount(cloudRec);
+      var localTs=Number(localRec.ts||localRec.time||localRec.date||0);
+      var cloudTs=Number(cloudRec.ts||cloudRec.time||cloudRec.date||0);
+
+      if(localStable>cloudStable){
+        mergedHfResults[k]=localRec;
+      }else if(cloudStable>localStable){
+        mergedHfResults[k]=cloudRec;
+      }else{
+        mergedHfResults[k]=(cloudTs>localTs)?cloudRec:localRec;
+      }
+    });
+    DB.hfResults=mergedHfResults;
+
     DB.fillProgress=typeof m5.fillProgress==='string'?JSON.parse(m5.fillProgress||'{}'):(m5.fillProgress||{});
     DB.analysisCache=a0.cache||{};
 
@@ -4343,7 +4392,10 @@ function showHfWrong(){
 
 function copyHfWrongText(kw){
   var res=DB.hfResults&&DB.hfResults[kw]; if(!res){showToast('没有数据');return;}
-  var wrongItems=res.items.filter(function(x){return x.my&&!x.ok;});
+  var wrongItems=res.items.filter(function(x){
+    var my=x&&(x.hfMy||x.my||'');
+    return my && !x.ok;
+  });
   if(!wrongItems.length){showToast('没有错题');return;}
   var txt='【'+kw+'】错题 '+wrongItems.length+'道\n'
     +'答对：'+res.correct+'/'+res.total+'题\n\n';
@@ -4520,8 +4572,34 @@ function showSavedHfResult(kw){
       +'</div>';
 
     wrongItems.forEach(function(item,i){
+      // v155: 高频“我选” is its own value; never read original batch progress.answers.
+      var displayMy=item.hfMy||item.my||'';
+
+      // If source identity exists, always re-read question/options/correct answer
+      // from that exact original batch position.
+      var displayItem=item;
+      if(item.srcBatchId && item.srcQIdx!==undefined && item.srcQIdx!==null && item.srcQIdx!==''){
+        var srcBatch=DB.batches.find(function(b){return b.id===item.srcBatchId;});
+        var srcQ=srcBatch&&srcBatch.questions?srcBatch.questions[Number(item.srcQIdx)]:null;
+        if(srcQ && (srcQ.id===item.qid || srcQ.body===item.body)){
+          displayItem={
+            qid:srcQ.id,
+            body:srcQ.body,
+            opts:srcQ.opts,
+            answer:srcQ.answer,
+            my:displayMy,
+            hfMy:displayMy,
+            ok:displayMy&&srcQ.answer&&displayMy.toUpperCase()===srcQ.answer.toUpperCase(),
+            batchName:item.batchName,
+            srcBatchId:item.srcBatchId,
+            srcQIdx:item.srcQIdx
+          };
+        }
+      }
+      item=displayItem;
+      item.my=displayMy;
       var correctOpt=item.opts?item.opts.find(function(o){return o.letter===item.answer;}):null;
-      var myOpt=item.opts?item.opts.find(function(o){return o.letter===item.my;}):null;
+      var myOpt=item.opts?item.opts.find(function(o){return o.letter===displayMy;}):null;
       // Full options html (shown when expanded)
       var optsHtml='';
       if(item.opts&&item.opts.length){
