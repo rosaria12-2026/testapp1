@@ -4211,7 +4211,7 @@ function checkInlineQuiz(){
       var my=_inlineAnswers[inlineAnswerKey(r)]||'';
       var isOk=my&&r.q.answer&&my.toUpperCase()===r.q.answer.toUpperCase();
       if(my&&!isOk) wrongCount++;
-      return {qid:r.q.id,body:r.q.body,opts:r.q.opts,answer:r.q.answer,my:my,ok:isOk,batchName:r.batchName};
+      return {qid:r.q.id,body:r.q.body,opts:r.q.opts,answer:r.q.answer,my:my,hfMy:my,ok:isOk,batchName:r.batchName};
     });
     DB.hfResults[kw]={ts:Date.now(),items:resultItems,wrongCount:wrongCount,total:total,correct:correct};
   }
