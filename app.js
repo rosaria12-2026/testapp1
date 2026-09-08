@@ -4654,9 +4654,43 @@ function searchDoAddToBatch(){
   if(sel2&&sel2.parentNode) sel2.parentNode.remove();
 }
 
+// Search quiz must always use the original source question as the answer authority.
+// "高频" batches are derived/review batches only; they must never become the answer source.
+function getCanonicalSearchQuestion(r){
+  var q=r&&r.q?r.q:r;
+  if(!q) return q;
+
+  // Best source: explicit source tag recorded when a question was saved into a 高频 batch.
+  var srcBatchId=q.srcBatchId;
+  var srcQIdx=q.srcQIdx;
+  if(srcBatchId){
+    for(var i=0;i<DB.batches.length;i++){
+      var srcBatch=DB.batches[i];
+      if(srcBatch.id!==srcBatchId) continue;
+      if(srcQIdx!=null && srcBatch.questions && srcBatch.questions[srcQIdx]){
+        var byIdx=srcBatch.questions[srcQIdx];
+        if(byIdx.id===q.id || byIdx.body===q.body) return byIdx;
+      }
+      var byId=(srcBatch.questions||[]).find(function(x){return x.id===q.id;});
+      if(byId) return byId;
+    }
+  }
+
+  // Fallback: same question id in a non-高频 batch = original/master copy.
+  for(var bi=0;bi<DB.batches.length;bi++){
+    var b=DB.batches[bi];
+    if(b.name && b.name.indexOf('高频')>=0) continue;
+    var master=(b.questions||[]).find(function(x){return x.id===q.id;});
+    if(master) return master;
+  }
+
+  // Last resort: keep the search result itself.
+  return q;
+}
+
 function startSearchQuiz(hideAnswer){
   if(!_searchResults.length){showToast('没有搜索结果');return;}
-  var qs=_searchResults.map(function(r){return r.q;});
+  var qs=_searchResults.map(function(r){return getCanonicalSearchQuestion(r);}).filter(Boolean);
   var seen={}, unique=[];
   qs.forEach(function(q){if(!seen[q.id]){seen[q.id]=true;unique.push(q);}});
   if(!unique.length){showToast('没有题目');return;}
