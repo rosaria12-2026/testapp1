@@ -3720,7 +3720,7 @@ function doSearch(){
   var exclHf=document.getElementById('search-excl-hf')&&document.getElementById('search-excl-hf').checked;
   _searchResults = [];
   DB.batches.forEach(function(batch){
-    if(exclHf && batch.name && batch.name.indexOf('高频')>=0) return;
+    if(exclHf && batch.name && (batch.name.indexOf('高频')>=0 || batch.name.indexOf('九月')>=0)) return;
     (batch.questions||[]).forEach(function(q, qi){
       var matchedIn = [];
       if(inBody && matches(q.body)) matchedIn.push('题目');
