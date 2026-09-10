@@ -3717,7 +3717,10 @@ function doSearch(){
   var exclHf=document.getElementById('search-excl-hf')&&document.getElementById('search-excl-hf').checked;
   _searchResults = [];
   DB.batches.forEach(function(batch){
-    if(exclHf && batch.name && (batch.name.indexOf('高频')>=0 || batch.name.indexOf('九月')>=0)) return;
+    // v161: batches whose name contains “九月” are ALWAYS excluded from high-frequency search.
+    if(batch.name && batch.name.indexOf('九月')>=0) return;
+    // “排除高频批次” checkbox controls only batches whose name contains “高频”.
+    if(exclHf && batch.name && batch.name.indexOf('高频')>=0) return;
     (batch.questions||[]).forEach(function(q, qi){
       var matchedIn = [];
       if(inBody && matches(q.body)) matchedIn.push('题目');
