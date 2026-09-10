@@ -2139,30 +2139,70 @@ function showProgress(msg, pct){
   // else silent
 }
 
-function uploadInChunks(col, batches){
-  // Pack 10 batches per Firestore doc: batches_p0, batches_p1, ...
-  // 52 batches = 6 docs instead of 52 separate requests
-  var packSize=10;
-  var total=batches.length;
-  var numPacks=Math.ceil(total/packSize);
-  var ops=[];
-  for(var pi=0;pi<numPacks;pi++){
-    var slice=batches.slice(pi*packSize,(pi+1)*packSize);
-    ops.push(col.doc('batches_p'+pi).set({batches:slice,ts:Date.now()}));
-  }
-  ops.push(col.doc('batch_index').set({
-    ids:batches.map(function(b){return b.id;}),
-    numPacks:numPacks,
-    ts:Date.now()
-  }));
-  return Promise.all(ops).then(function(){
-    showProgress('上传批次完成 '+total+'个', 90);
+function uploadInChunks(col,batches){
+  // v163: DATA-SAFE batch packing.
+  // IMPORTANT: this function NEVER mutates DB.batches or any question/progress object.
+  // It only groups the existing batch objects into smaller Firestore documents.
+  batches=Array.isArray(batches)?batches:[];
+
+  // Keep substantial headroom below Firestore's 1 MiB/document limit.
+  // Size is measured on the actual JSON payload that will be written.
+  var MAX_PACK_BYTES=500000;
+  var packs=[],cur=[];
+
+  batches.forEach(function(batch){
+    var test=cur.concat([batch]);
+    var payload={batches:test};
+    var bytes=new Blob([JSON.stringify(payload)]).size;
+
+    if(cur.length && bytes>MAX_PACK_BYTES){
+      packs.push(cur);
+      cur=[batch];
+    }else{
+      cur=test;
+    }
+
+    // Safety check: a single batch itself must also fit.
+    var singleBytes=new Blob([JSON.stringify({batches:[batch]})]).size;
+    if(singleBytes>900000){
+      throw new Error('单个批次过大，无法安全上传：'+(batch.name||'未命名批次')+
+        '（约'+(singleBytes/1024/1024).toFixed(2)+'MB）。本机资料未修改。');
+    }
+  });
+  if(cur.length)packs.push(cur);
+
+  // Snapshot the exact current batch IDs. Do not modify source batches.
+  var batchIds=batches.map(function(b){return b.id;});
+  var stamp=Date.now();
+
+  // Upload ALL new pack documents first.
+  // Use a generation-specific prefix so a failed upload cannot overwrite
+  // the pack documents referenced by the previous cloud index.
+  var generation='g'+stamp;
+  var prefix='batches_'+generation+'_p';
+
+  var writes=packs.map(function(pack,i){
+    return col.doc(prefix+i).set({
+      batches:pack,
+      generation:generation,
+      packIndex:i,
+      ts:stamp
+    });
+  });
+
+  return Promise.all(writes).then(function(){
+    // COMMIT LAST: only after every pack succeeded do we switch batch_index.
+    // Therefore an interrupted/failed upload leaves the previous cloud index intact.
+    return col.doc('batch_index').set({
+      ids:batchIds,
+      numPacks:packs.length,
+      packPrefix:prefix,
+      generation:generation,
+      ts:stamp
+    });
   });
 }
 
-
-// ===== v162 云端大数据分包 =====
-// Firestore 单文档有大小上限；将 hfResults / studyPages 分成安全的小包。
 function v162PackObject(obj,maxBytes){
   maxBytes=maxBytes||500000;
   obj=obj||{};
@@ -2446,7 +2486,7 @@ function cloudDownload(){
         showProgress('✓ 下载完成（无批次）',100);
         return null;
       }
-      if(numPacks>0) return downloadPackedBatches(col,numPacks);
+      if(numPacks>0) return downloadPackedBatches(col,numPacks,batchIdxData.packPrefix||'batches_p');
       return downloadInChunks(col,batchIds);
     });
   }).then(function(result){
