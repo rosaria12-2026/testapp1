@@ -3564,10 +3564,8 @@ function hfSearch(cbOrBtn){
   var word = cbOrBtn.dataset.word;
   if(!word) return;
   if(!DB.searchHistory) DB.searchHistory={};
-  if(DB.searchHistory[word]){
-    delete DB.searchHistory[word];
-    saveDB(); refreshHfHighlights(); return;
-  }
+  // v159: clicking an already highlighted keyword keeps it highlighted
+  // and simply runs the search again.
   DB.searchHistory[word]=Date.now();
   saveDB(); refreshHfHighlights();
   var inp=document.getElementById('search-kw'); if(inp) inp.value=word;
@@ -3578,7 +3576,6 @@ function hfSearch(cbOrBtn){
   if(DB.hfResults&&DB.hfResults[word]){
     setTimeout(function(){showSavedHfResult(word);},300);
   }
-  setTimeout(function(){var res=document.getElementById('search-results');if(res)res.scrollIntoView({behavior:'smooth',block:'start'});},400);
 }
 
 function refreshHfHighlights(){
@@ -3953,8 +3950,7 @@ function mountCustomKw(){
       var inp=document.getElementById('search-kw'); if(inp) inp.value=w;
       doSearch();
       if(DB.kwCards&&DB.kwCards[w]) setTimeout(function(){genKeywordCard(w);},200);
-      setTimeout(function(){var res=document.getElementById('search-results');if(res)res.scrollIntoView({behavior:'smooth',block:'start'});},400);
-      mountCustomKw(); refreshHfHighlights();
+          mountCustomKw(); refreshHfHighlights();
     };
     area.appendChild(btn);
   });
