@@ -2160,24 +2160,105 @@ function uploadInChunks(col, batches){
   });
 }
 
+
+// ===== v162 云端大数据分包 =====
+// Firestore 单文档有大小上限；将 hfResults / studyPages 分成安全的小包。
+function v162PackObject(obj,maxBytes){
+  maxBytes=maxBytes||500000;
+  obj=obj||{};
+  var packs=[],cur={};
+  Object.keys(obj).forEach(function(k){
+    var test={};
+    Object.keys(cur).forEach(function(x){test[x]=cur[x];});
+    test[k]=obj[k];
+    if(Object.keys(cur).length && new Blob([JSON.stringify(test)]).size>maxBytes){
+      packs.push(cur); cur={};
+    }
+    cur[k]=obj[k];
+  });
+  if(Object.keys(cur).length||!packs.length)packs.push(cur);
+  return packs;
+}
+function v162PackArray(arr,maxBytes){
+  maxBytes=maxBytes||500000;
+  arr=Array.isArray(arr)?arr:[];
+  var packs=[],cur=[];
+  arr.forEach(function(v){
+    var test=cur.concat([v]);
+    if(cur.length && new Blob([JSON.stringify(test)]).size>maxBytes){
+      packs.push(cur);cur=[];
+    }
+    cur.push(v);
+  });
+  if(cur.length||!packs.length)packs.push(cur);
+  return packs;
+}
+function v162UploadLargeMeta(col,hfPacks,studyPacks){
+  var ops=[];
+  hfPacks.forEach(function(p,i){
+    ops.push(col.doc('hfResults_p'+i).set({data:JSON.stringify(p),ts:Date.now()}));
+  });
+  studyPacks.forEach(function(p,i){
+    ops.push(col.doc('studyPages_p'+i).set({data:JSON.stringify(p),ts:Date.now()}));
+  });
+  return Promise.all(ops);
+}
+function v162DownloadLargeMeta(col,m5){
+  if(!m5||!m5.v162Packed) return Promise.resolve(null);
+  var jobs=[],hfCount=Number(m5.hfResultsPacks||0),spCount=Number(m5.studyPagesPacks||0);
+  for(var i=0;i<hfCount;i++) jobs.push(col.doc('hfResults_p'+i).get());
+  for(var j=0;j<spCount;j++) jobs.push(col.doc('studyPages_p'+j).get());
+  return Promise.all(jobs).then(function(docs){
+    var hf={},sp=[],n=0;
+    for(var a=0;a<hfCount;a++,n++){
+      if(docs[n]&&docs[n].exists){
+        var x=JSON.parse((docs[n].data().data)||'{}');
+        Object.keys(x).forEach(function(k){hf[k]=x[k];});
+      }
+    }
+    for(var b=0;b<spCount;b++,n++){
+      if(docs[n]&&docs[n].exists){
+        var y=JSON.parse((docs[n].data().data)||'[]');
+        if(Array.isArray(y))sp=sp.concat(y);
+      }
+    }
+    return {hfResults:hf,studyPages:sp};
+  });
+}
+
 function cloudUpload(){
   if(typeof firebase==='undefined'){showToast('请先配置Firebase');return;}
   var user=firebase.auth().currentUser; if(!user){showToast('请先登录');return;}
   showProgress('上传中… 准备数据', 5);
   var col=firebase.firestore().collection('users').doc(user.uid).collection('data');
 
-  // Step 1: Upload meta docs
+  // v162: large fields are packed separately; meta5 stays small.
+  var hfPacks=v162PackObject(DB.hfResults||{},500000);
+  var studyPacks=v162PackArray(DB.studyPages||[],500000);
+
   var metaOps=[
     col.doc('meta').set({stats:DB.stats||{},lastPos:DB.lastPos||null,ts:Date.now()}),
     col.doc('meta2').set({notes:DB.notes||[],qNotes:DB.qNotes||{},ts:Date.now()}),
     col.doc('meta3').set({wrongMap:DB.wrongMap||{},dkMap:DB.dkMap||{},starMap:DB.starMap||{},answerKeys:DB.answerKeys||{},ts:Date.now()}),
     col.doc('meta4').set({fillBatches:DB.fillBatches||[],fillWrong:DB.fillWrong||[],kwCards:DB.kwCards||{},searchHistory:DB.searchHistory||{},ts:Date.now()}),
-    col.doc('meta5').set({studyPages:JSON.stringify(DB.studyPages||[]),customKw:JSON.stringify(DB.customKw||[]),kwNotes:JSON.stringify(DB.kwNotes||{}),hfQids:DB.hfQids||{},hfWrong:DB.hfWrong||{},hfResults:JSON.stringify(DB.hfResults||{}),fillProgress:JSON.stringify(DB.fillProgress||{}),ts:Date.now()}),
-    col.doc('analysis_0').set({cache:DB.analysisCache||{},ts:Date.now()}),
-    // batch_index written by uploadInChunks with numPacks
+    col.doc('meta5').set({
+      customKw:JSON.stringify(DB.customKw||[]),
+      kwNotes:JSON.stringify(DB.kwNotes||{}),
+      hfQids:DB.hfQids||{},
+      hfWrong:DB.hfWrong||{},
+      fillProgress:JSON.stringify(DB.fillProgress||{}),
+      v162Packed:true,
+      hfResultsPacks:hfPacks.length,
+      studyPagesPacks:studyPacks.length,
+      ts:Date.now()
+    }),
+    col.doc('analysis_0').set({cache:DB.analysisCache||{},ts:Date.now()})
   ];
 
   Promise.all(metaOps).then(function(){
+    showProgress('上传高频/学习页分包…', 15);
+    return v162UploadLargeMeta(col,hfPacks,studyPacks);
+  }).then(function(){
     showProgress('上传批次中…', 25);
     return uploadInChunks(col, DB.batches);
   }).then(function(){
@@ -2302,7 +2383,7 @@ function cloudDownload(){
     DB.fillWrong=m4.fillWrong||[];
     DB.kwCards=m4.kwCards||{};
     DB.searchHistory=m4.searchHistory||{};
-    DB.studyPages=typeof m5.studyPages==='string'?JSON.parse(m5.studyPages||'[]'):(m5.studyPages||[]);
+    DB.studyPages=m5.v162Packed?(DB.studyPages||[]):(typeof m5.studyPages==='string'?JSON.parse(m5.studyPages||'[]'):(m5.studyPages||[]));
     DB.customKw=typeof m5.customKw==='string'?JSON.parse(m5.customKw||'[]'):(m5.customKw||[]);
     DB.kwNotes=typeof m5.kwNotes==='string'?JSON.parse(m5.kwNotes||'{}'):(m5.kwNotes||{});
     DB.hfQids=m5.hfQids||{};
@@ -2313,7 +2394,7 @@ function cloudDownload(){
     // 1. A local record with more stable source bindings (srcBatchId/srcQIdx)
     //    is considered repaired and wins over an older/unbound cloud copy.
     // 2. Otherwise the newer ts wins; equal timestamps keep local.
-    var cloudHfResults=typeof m5.hfResults==='string'?JSON.parse(m5.hfResults||'{}'):(m5.hfResults||{});
+    var cloudHfResults=m5.v162Packed?{}:(typeof m5.hfResults==='string'?JSON.parse(m5.hfResults||'{}'):(m5.hfResults||{}));
     function hfStableBindingCount(rec){
       var items=rec&&Array.isArray(rec.items)?rec.items:[];
       var n=0;
@@ -2324,30 +2405,26 @@ function cloudDownload(){
       });
       return n;
     }
-    var mergedHfResults={};
-    var hfKeys={};
-    Object.keys(cloudHfResults||{}).forEach(function(k){hfKeys[k]=1;});
-    Object.keys(localHfResultsBeforeDownload||{}).forEach(function(k){hfKeys[k]=1;});
-    Object.keys(hfKeys).forEach(function(k){
-      var cloudRec=(cloudHfResults||{})[k];
-      var localRec=(localHfResultsBeforeDownload||{})[k];
-      if(!localRec){mergedHfResults[k]=cloudRec;return;}
-      if(!cloudRec){mergedHfResults[k]=localRec;return;}
-
-      var localStable=hfStableBindingCount(localRec);
-      var cloudStable=hfStableBindingCount(cloudRec);
-      var localTs=Number(localRec.ts||localRec.time||localRec.date||0);
-      var cloudTs=Number(cloudRec.ts||cloudRec.time||cloudRec.date||0);
-
-      if(localStable>cloudStable){
-        mergedHfResults[k]=localRec;
-      }else if(cloudStable>localStable){
-        mergedHfResults[k]=cloudRec;
-      }else{
-        mergedHfResults[k]=(cloudTs>localTs)?cloudRec:localRec;
-      }
-    });
-    DB.hfResults=mergedHfResults;
+    function mergeHfResults(cloudHfResults){
+      var mergedHfResults={};
+      var hfKeys={};
+      Object.keys(cloudHfResults||{}).forEach(function(k){hfKeys[k]=1;});
+      Object.keys(localHfResultsBeforeDownload||{}).forEach(function(k){hfKeys[k]=1;});
+      Object.keys(hfKeys).forEach(function(k){
+        var cloudRec=(cloudHfResults||{})[k];
+        var localRec=(localHfResultsBeforeDownload||{})[k];
+        if(!localRec){mergedHfResults[k]=cloudRec;return;}
+        if(!cloudRec){mergedHfResults[k]=localRec;return;}
+        var localStable=hfStableBindingCount(localRec);
+        var cloudStable=hfStableBindingCount(cloudRec);
+        var localTs=Number(localRec.ts||localRec.time||localRec.date||0);
+        var cloudTs=Number(cloudRec.ts||cloudRec.time||cloudRec.date||0);
+        if(localStable>cloudStable) mergedHfResults[k]=localRec;
+        else if(cloudStable>localStable) mergedHfResults[k]=cloudRec;
+        else mergedHfResults[k]=(cloudTs>localTs)?cloudRec:localRec;
+      });
+      return mergedHfResults;
+    }
 
     DB.fillProgress=typeof m5.fillProgress==='string'?JSON.parse(m5.fillProgress||'{}'):(m5.fillProgress||{});
     DB.analysisCache=a0.cache||{};
@@ -2355,16 +2432,23 @@ function cloudDownload(){
     var batchIdxData=batchIdxDoc&&batchIdxDoc.exists?batchIdxDoc.data():{};
     var batchIds=batchIdxData.ids||[];
     var numPacks=batchIdxData.numPacks||0;
-    if(!batchIds.length){
-      saveDB(); renderHome();
-      showProgress('✓ 下载完成（无批次）', 100); return;
-    }
-    // New packed format
-    if(numPacks>0){
-      return downloadPackedBatches(col, numPacks);
-    }
-    // Legacy old format
-    return downloadInChunks(col, batchIds);
+
+    // v162: first reconstruct large metadata packs; old cloud remains compatible.
+    return v162DownloadLargeMeta(col,m5).then(function(big){
+      if(big){
+        cloudHfResults=big.hfResults||{};
+        DB.studyPages=big.studyPages||[];
+      }
+      DB.hfResults=mergeHfResults(cloudHfResults);
+
+      if(!batchIds.length){
+        saveDB(); renderHome();
+        showProgress('✓ 下载完成（无批次）',100);
+        return null;
+      }
+      if(numPacks>0) return downloadPackedBatches(col,numPacks);
+      return downloadInChunks(col,batchIds);
+    });
   }).then(function(result){
     if(!result) return;
     // Packed: result is array of batch objects; legacy: array of Firestore docs
