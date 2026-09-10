@@ -3737,21 +3737,48 @@ function doSearch(){
   renderSearchResults(kw);
 }
 
-// Helper: find which HIGH-FREQ batches contain this question
-// Match by: original qid, OR srcBatchId+srcQIdx (for questions added via search)
-function qGetBatches(qid, srcBatchId, srcQIdx){
+// v160: find which HIGH-FREQ batches contain this ORIGINAL question.
+// Primary identity = original batchId + original qNum.
+// Fallbacks = original batchId + qIdx, then qid (for old data compatibility).
+function qGetBatches(qid, srcBatchId, srcQIdx, srcQNum){
   var found=[];
   var seen={};
+  var hasNum = srcQNum!==undefined && srcQNum!==null && srcQNum!=='';
+  var hasIdx = srcQIdx!==undefined && srcQIdx!==null && srcQIdx!=='';
   DB.batches.forEach(function(b){
     if(!b.name||b.name.indexOf('高频')<0) return;
-    var match=b.questions.some(function(q){
-      if(q.id===qid) return true;
-      if(srcBatchId!=null&&srcQIdx!=null&&q.srcBatchId===srcBatchId&&q.srcQIdx===srcQIdx) return true;
+    var match=(b.questions||[]).some(function(q){
+      var qb=q.srcBatchId;
+      var qn=q.srcQNum;
+      var qi=q.srcQIdx;
+
+      if(srcBatchId!=null && srcBatchId!=='' && hasNum &&
+         qb===srcBatchId && qn!==undefined && qn!==null && qn!=='' &&
+         String(qn)===String(srcQNum)) return true;
+
+      if(srcBatchId!=null && srcBatchId!=='' && hasIdx &&
+         qb===srcBatchId && qi!==undefined && qi!==null && qi!=='' &&
+         String(qi)===String(srcQIdx)) return true;
+
+      // Old saved HF questions may have no source tags; keep qid as compatibility fallback.
+      if(qid && q.id===qid) return true;
       return false;
     });
     if(match&&!seen[b.id]){seen[b.id]=true;found.push({id:b.id,name:b.name});}
   });
   return found;
+}
+
+function qGetBatchesForResult(r){
+  if(!r) return [];
+  var ref=getOriginalQuestionRef(r);
+  var q=(ref&&ref.q)?ref.q:r.q;
+  return qGetBatches(
+    q&&q.id,
+    ref?ref.batchId:r.batchId,
+    ref?ref.qIdx:r.qIdx,
+    ref?ref.qNum:(q&&q.num)
+  );
 }
 
 
@@ -3803,8 +3830,8 @@ function renderSearchResults(kw){
 
   // Sort: non-gray first, gray last
   var sorted=_searchResults.slice().sort(function(a,b){
-    var ag=qGetBatches(a.q.id,a.batchId,a.qIdx).length>0?1:0;
-    var bg=qGetBatches(b.q.id,b.batchId,b.qIdx).length>0?1:0;
+    var ag=qGetBatchesForResult(a).length>0?1:0;
+    var bg=qGetBatchesForResult(b).length>0?1:0;
     return ag-bg;
   });
 
@@ -3835,7 +3862,7 @@ function renderSearchResults(kw){
 
     var isDoneHf=!!(DB.hfQids&&DB.hfQids[r.q.id]);
     // Gray out ANY question already saved into any batch (by qid)
-    var inBatches=qGetBatches(r.q.id, r.batchId, r.qIdx);
+    var inBatches=qGetBatchesForResult(r);
     var isInAnyBatch=inBatches.length>0;
     var grayStyle=isInAnyBatch?';opacity:0.4;filter:grayscale(60%);':'';
     var inBatchBadge=isInAnyBatch?'<span style="font-size:10px;background:#e8e4f8;color:#6040b0;padding:1px 6px;border-radius:8px;margin-left:4px;flex-shrink:0">📄 '+esc(inBatches[0].name)+(inBatches.length>1?' +'+( inBatches.length-1):'')+'</span>':'';
@@ -4268,7 +4295,7 @@ function getCanonicalInlineQuestion(r){
 function updateInlineCounter(){
   // Count only non-gray (not in hf batch) questions
   var rows=_inlineDisplayResults.length?_inlineDisplayResults:_searchResults;
-  var nonGray=rows.filter(function(r){return qGetBatches(r.q.id,r.batchId,r.qIdx).length===0;});
+  var nonGray=rows.filter(function(r){return qGetBatchesForResult(r).length===0;});
   var nonGrayTotal=nonGray.length;
   var nonGrayDone=nonGray.filter(function(r){
     return _inlineAnswers[inlineAnswerKey(r)]!=null;
@@ -4296,7 +4323,7 @@ function startInlineQuiz(){
     bar.id='inline-counter-bar';
     bar.style.cssText='position:sticky;top:0;z-index:998;background:#fff3e0;border:1.5px solid #f0b060;border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px';
     bar.innerHTML='<span style="font-size:13px;color:#888">📝 做题模式</span>'
-      +'<span id="inline-counter" style="font-size:14px;font-weight:700;color:#e8623a">还剩 '+(function(){return rows.filter(function(r){return qGetBatches(r.q.id,r.batchId,r.qIdx).length===0;}).length;})()+' 题未做</span>'
+      +'<span id="inline-counter" style="font-size:14px;font-weight:700;color:#e8623a">还剩 '+(function(){return rows.filter(function(r){return qGetBatchesForResult(r).length===0;}).length;})()+' 题未做</span>'
       +'<button onclick="checkInlineQuiz()" style="margin-left:auto;padding:6px 16px;border-radius:8px;border:none;background:#2e7d52;color:#fff;font-size:13px;font-weight:700;cursor:pointer">✓ 一键核对</button>';
     area.insertBefore(bar, area.firstChild);
   }
@@ -4873,26 +4900,63 @@ function searchDoAddToBatch(){
   var batch=DB.batches[parseInt(sel.value)]; if(!batch)return;
   var selected=searchGetSelectedResults();
   if(!selected.length){ showToast('请先勾选题目'); return; }
-  // Avoid duplicates by question id
-  var existIds=new Set(batch.questions.map(function(q){return q.id;}));
-  var added=0;
+
+  if(!batch.questions) batch.questions=[];
+  if(!batch.progress) batch.progress={idx:0,answers:[],dk:{}};
+  if(!Array.isArray(batch.progress.answers)) batch.progress.answers=[];
+
+  // v160: duplicate detection uses the same stable identity as gray-state detection:
+  // original batchId + original qNum, with qIdx/qid only as compatibility fallbacks.
+  function alreadyInTarget(r){
+    var ref=getOriginalQuestionRef(r);
+    var srcQ=(ref&&ref.q)?ref.q:r.q;
+    var bid=ref?ref.batchId:r.batchId;
+    var qnum=ref?ref.qNum:(srcQ&&srcQ.num);
+    var qidx=ref?ref.qIdx:r.qIdx;
+    var hasNum=qnum!==undefined&&qnum!==null&&qnum!=='';
+    var hasIdx=qidx!==undefined&&qidx!==null&&qidx!=='';
+
+    return batch.questions.some(function(q){
+      if(bid!=null&&bid!==''&&hasNum&&q.srcBatchId===bid &&
+         q.srcQNum!==undefined&&q.srcQNum!==null&&q.srcQNum!=='' &&
+         String(q.srcQNum)===String(qnum)) return true;
+
+      if(bid!=null&&bid!==''&&hasIdx&&q.srcBatchId===bid &&
+         q.srcQIdx!==undefined&&q.srcQIdx!==null&&q.srcQIdx!=='' &&
+         String(q.srcQIdx)===String(qidx)) return true;
+
+      if(srcQ&&srcQ.id&&q.id===srcQ.id) return true;
+      return false;
+    });
+  }
+
+  var added=0, skipped=0;
   selected.forEach(function(r){
-    var sourceRef=getOriginalQuestionRef(r);
-    var sourceQ=(sourceRef&&sourceRef.q)?sourceRef.q:r.q;
-    if(!existIds.has(sourceQ.id)){
-      // v157: clone the question; NEVER mutate/reuse the original question object.
-      var q=cloneQuestionForDerivedBatch(r);
-      batch.questions.push(q);
-      existIds.add(q.id);
-      if(batch.progress&&batch.progress.answers) batch.progress.answers.push(null);
-      added++;
-    }
+    if(alreadyInTarget(r)){ skipped++; return; }
+
+    // Clone only; NEVER mutate/reuse the original question object.
+    var q=cloneQuestionForDerivedBatch(r);
+    batch.questions.push(q);
+    batch.progress.answers.push(null);
+    added++;
   });
+
+  // Keep answer array aligned with question count without touching existing answers.
+  while(batch.progress.answers.length<batch.questions.length) batch.progress.answers.push(null);
+
   saveDB();
-  showToast('✓ 已加入「'+batch.name+'」'+added+'题（重复跳过'+(selected.length-added)+'题）');
-  // Remove the selector UI
+
+  // Remove selector first.
   var sel2=document.getElementById('search-target-batch');
   if(sel2&&sel2.parentNode) sel2.parentNode.remove();
+
+  // Re-render current search immediately so successfully saved questions turn gray now.
+  var kw=(document.getElementById('search-kw')||{}).value||'';
+  if(kw.trim()) renderSearchResults(kw.trim());
+
+  // Verify against the same gray-state rule after save.
+  var verified=selected.filter(function(r){return qGetBatchesForResult(r).length>0;}).length;
+  showToast('✓ 已加入「'+batch.name+'」'+added+'题；已识别变灰 '+verified+'/'+selected.length+'（重复跳过'+skipped+'题）',5000);
 }
 
 // Search quiz must always use the original source question as the answer authority.
