@@ -3659,6 +3659,13 @@ function clearSelections(){
   updateSelCount();
 }
 
+// v164: one centralized rule for ALL high-frequency/search result builders.
+// Any batch whose name contains “九月” must never enter search results.
+// This only filters display/search; it NEVER deletes or edits the batch itself.
+function isSeptemberBatch(batch){
+  return !!(batch && batch.name && batch.name.indexOf('九月')>=0);
+}
+
 function startMultiSearch(){
   var cbs=document.querySelectorAll('.kw-cb:checked');
   if(!cbs.length){showToast('请先勾选词语');return;}
@@ -3668,6 +3675,7 @@ function startMultiSearch(){
   _searchResults=[];
   var inBody=true,inOpts=true,inAns=true,inAI=true,inNote=true;
   DB.batches.forEach(function(batch){
+    if(isSeptemberBatch(batch)) return; // v164 permanent exclusion
     (batch.questions||[]).forEach(function(q,qi){
       var matched=[];
       words.forEach(function(word){
@@ -3791,6 +3799,7 @@ function runSemanticSearch(){
   if(!inBody&&!inOpts&&!inAns&&!inAI&&!inNote){inBody=true;inOpts=true;}
 
   DB.batches.forEach(function(batch){
+    if(isSeptemberBatch(batch)) return; // v164 permanent exclusion
     (batch.questions||[]).forEach(function(q,qi){
       var matchedIn=[], matchedTerms=[];
       terms.forEach(function(term){
@@ -3841,8 +3850,8 @@ function doSearch(){
   var exclHf=document.getElementById('search-excl-hf')&&document.getElementById('search-excl-hf').checked;
   _searchResults = [];
   DB.batches.forEach(function(batch){
-    // v161: batches whose name contains “九月” are ALWAYS excluded from high-frequency search.
-    if(batch.name && batch.name.indexOf('九月')>=0) return;
+    // v164: permanent exclusion, shared with every search entry point.
+    if(isSeptemberBatch(batch)) return;
     // “排除高频批次” checkbox controls only batches whose name contains “高频”.
     if(exclHf && batch.name && batch.name.indexOf('高频')>=0) return;
     (batch.questions||[]).forEach(function(q, qi){
@@ -4603,6 +4612,7 @@ function showHfWrong(){
   if(!wrongIds.length){showToast('没有错误'+n+'次及以上的高频题');return;}
   _searchResults=[];
   DB.batches.forEach(function(batch){
+    if(isSeptemberBatch(batch)) return; // v164 permanent exclusion
     (batch.questions||[]).forEach(function(q,qi){
       if(wrongIds.indexOf(q.id)>=0){
         _searchResults.push({batchId:batch.id,batchName:batch.name,q:q,qIdx:qi,
