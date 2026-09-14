@@ -12,7 +12,61 @@ var DB = (function(){
 function makeDB() {
   return { batches:[], wrongMap:{}, dkMap:{}, stats:{done:0,correct:0}, analysisCache:{}, notes:[], starMap:{}, answerKeys:{}, lastPos:null, hlCache:{}, studyPages:[], qNotes:{}, fillBatches:[], fillWrong:[], fillProgress:{}, kwCards:{}, searchHistory:{}, customKw:[], kwNotes:{}, hfQids:{}, hfWrong:{}, hfResults:{} };
 }
-function saveDB() { try { localStorage.setItem(DBKEY, JSON.stringify(DB)); } catch(e){} }
+// v166 — IndexedDB durable mirror. Existing in-memory DB and quiz logic stay unchanged.
+// The old localStorage DB is NEVER deleted.
+var V166_IDB_NAME='PCE_LocalDB_v166', V166_STORE='state', V166_KEY='main';
+var _v166SaveTimer=null, _v166LastSaveError=null;
+
+function v166Open(){
+  return new Promise(function(resolve,reject){
+    var r=indexedDB.open(V166_IDB_NAME,1);
+    r.onupgradeneeded=function(){var d=r.result;if(!d.objectStoreNames.contains(V166_STORE))d.createObjectStore(V166_STORE);};
+    r.onsuccess=function(){resolve(r.result);};
+    r.onerror=function(){reject(r.error||new Error('IndexedDB打开失败'));};
+  });
+}
+function v166Put(obj){
+  return v166Open().then(function(d){return new Promise(function(resolve,reject){
+    var tx=d.transaction(V166_STORE,'readwrite');
+    tx.objectStore(V166_STORE).put(obj,V166_KEY);
+    tx.oncomplete=function(){d.close();resolve(true);};
+    tx.onerror=tx.onabort=function(){var e=tx.error||new Error('IndexedDB保存失败');d.close();reject(e);};
+  });});
+}
+function v166Get(){
+  return v166Open().then(function(d){return new Promise(function(resolve,reject){
+    var tx=d.transaction(V166_STORE,'readonly'), r=tx.objectStore(V166_STORE).get(V166_KEY);
+    r.onsuccess=function(){var v=r.result||null;d.close();resolve(v);};
+    r.onerror=function(){var e=r.error||new Error('IndexedDB读取失败');d.close();reject(e);};
+  });});
+}
+function v166Stats(o){
+  o=o||{};var bs=Array.isArray(o.batches)?o.batches:[], qs=0;
+  bs.forEach(function(b){qs+=Array.isArray(b.questions)?b.questions.length:0;});
+  return {batches:bs.length,questions:qs,hfResults:Object.keys(o.hfResults||{}).length,
+          studyPages:Array.isArray(o.studyPages)?o.studyPages.length:0};
+}
+function v166WriteNow(){
+  var snap;
+  try{snap=JSON.parse(JSON.stringify(DB));}catch(e){return Promise.reject(e);}
+  return v166Put(snap).then(function(){_v166LastSaveError=null;return true;}).catch(function(e){
+    _v166LastSaveError=e;console.error('V166 IndexedDB保存失败',e);
+    try{showToast('⚠️ IndexedDB保存失败：'+(e.message||e),7000);}catch(_){}
+    throw e;
+  });
+}
+function saveDB(){
+  // Keep the old synchronous API so the rest of the answer app does not change.
+  if(_v166SaveTimer)clearTimeout(_v166SaveTimer);
+  _v166SaveTimer=setTimeout(function(){_v166SaveTimer=null;v166WriteNow().catch(function(){});},80);
+
+  // Legacy mirror only. Quota failure no longer blocks the IndexedDB save.
+  try{localStorage.setItem(DBKEY,JSON.stringify(DB));}
+  catch(e){
+    if(e&&e.name==='QuotaExceededError')console.warn('V166: localStorage已满；IndexedDB继续保存');
+    else console.error('V166 localStorage镜像失败',e);
+  }
+}
 
 // migrate old keys
 ['analysisCache','notes','starMap','answerKeys','hlCache','qNotes'].forEach(function(k){ if(!DB[k]) DB[k] = k==='notes'?[]:({}); });
@@ -5198,7 +5252,42 @@ function searchSaveBatch(){
 }
 
 // ═══════════════════════════════════════════════════════
-// INIT
+// v166 SAFE STARTUP / MIGRATION
 // ═══════════════════════════════════════════════════════
-renderHome();
+function v166Bootstrap(){
+  var legacy;
+  try{legacy=JSON.parse(JSON.stringify(DB));}catch(e){legacy=null;}
+
+  return v166Get().then(function(saved){
+    var ls=v166Stats(legacy||DB), ss=v166Stats(saved);
+    if(saved && ss.batches>=ls.batches && ss.questions>=ls.questions){
+      // IndexedDB is at least as complete as the legacy copy: restore it into the SAME DB object.
+      Object.keys(DB).forEach(function(k){delete DB[k];});
+      Object.keys(saved).forEach(function(k){DB[k]=saved[k];});
+      console.log('✅ V166 从IndexedDB载入',v166Stats(DB));
+      return true;
+    }
+
+    // First migration or legacy is more complete: COPY only, never delete legacy.
+    return v166Put(legacy||DB).then(function(){return v166Get();}).then(function(check){
+      var a=v166Stats(legacy||DB), b=v166Stats(check);
+      if(a.batches!==b.batches || a.questions!==b.questions ||
+         a.hfResults!==b.hfResults || a.studyPages!==b.studyPages){
+        throw new Error('IndexedDB迁移校验未通过；旧localStorage仍完整保留');
+      }
+      console.log('✅ V166 首次迁移校验成功',b);
+      try{showToast('✓ 大容量本地数据库迁移成功；旧资料仍保留',5000);}catch(_){}
+      return true;
+    });
+  }).catch(function(e){
+    _v166LastSaveError=e;console.error('V166迁移/读取失败',e);
+    try{showToast('⚠️ IndexedDB未启用；旧资料仍保留：'+(e.message||e),8000);}catch(_){}
+    return false;
+  });
+}
+
+v166Bootstrap().then(function(){
+  renderHome();
+  setTimeout(function(){ initApiKeyInput(); initCloudInputs(); },150);
+});
 setTimeout(function(){ initApiKeyInput(); initCloudInputs(); }, 150);
