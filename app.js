@@ -5014,29 +5014,39 @@ function cloneQuestionForDerivedBatch(r){
   return q;
 }
 
+var _searchAddSnapshot=[];
+
 function searchAddToBatch(){
   var selected=searchGetSelectedResults();
   if(!selected.length){ showToast('请先勾选题目'); return; }
   if(!DB.batches.length){ showToast('还没有批次，请先新建一个'); return; }
-  // Show batch selector
+
+  // v165: freeze the exact selected result objects NOW.
+  _searchAddSnapshot=selected.slice();
+
   var area=document.getElementById('search-results'); if(!area)return;
+  var old=document.getElementById('search-add-panel');
+  if(old&&old.parentNode) old.parentNode.removeChild(old);
+
   var opts=DB.batches.map(function(b,i){
     return '<option value="'+i+'">'+esc(b.name)+' ('+b.questions.length+'题)</option>';
   }).join('');
   var sel=document.createElement('div');
+  sel.id='search-add-panel';
   sel.style.cssText='padding:12px;background:#f0ebff;border:1px solid #d4c9f5;border-radius:8px;margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
   sel.innerHTML='<span style="font-size:13px;font-weight:700;color:#6040b0">选择目标批次：</span>'
+    +'<span style="font-size:12px;color:#6040b0">已锁定 '+_searchAddSnapshot.length+' 题</span>'
     +'<select id="search-target-batch" style="padding:6px 10px;border:1px solid #d4c9f5;border-radius:6px;font-size:13px">'+opts+'</select>'
     +'<button class="btn primary" onclick="searchDoAddToBatch()">确认加入</button>'
-    +'<button class="btn small" onclick="this.parentNode.remove()">取消</button>';
+    +'<button class="btn small" onclick="_searchAddSnapshot=[];this.parentNode.remove()">取消</button>';
   area.insertBefore(sel, area.firstChild);
 }
 
 function searchDoAddToBatch(){
   var sel=document.getElementById('search-target-batch'); if(!sel)return;
   var batch=DB.batches[parseInt(sel.value)]; if(!batch)return;
-  var selected=searchGetSelectedResults();
-  if(!selected.length){ showToast('请先勾选题目'); return; }
+  var selected=Array.isArray(_searchAddSnapshot)?_searchAddSnapshot.slice():[];
+  if(!selected.length){ showToast('加入清单已失效，请重新勾选后再点「加入批次」'); return; }
 
   if(!batch.questions) batch.questions=[];
   if(!batch.progress) batch.progress={idx:0,answers:[],dk:{}};
@@ -5094,6 +5104,7 @@ function searchDoAddToBatch(){
   // Verify against the same gray-state rule after save.
   var verified=selected.filter(function(r){return qGetBatchesForResult(r).length>0;}).length;
   showToast('✓ 已加入「'+batch.name+'」'+added+'题；已识别变灰 '+verified+'/'+selected.length+'（重复跳过'+skipped+'题）',5000);
+  _searchAddSnapshot=[];
 }
 
 // Search quiz must always use the original source question as the answer authority.
