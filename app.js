@@ -2022,27 +2022,119 @@ function renderMockQ(){
 function mockPick(l){ MK.ans[MK.cur]=l; document.querySelectorAll('#mock-area .opt').forEach(function(b){var lt=b.querySelector('.opt-letter');if(lt)b.classList.toggle('sel',lt.textContent===l);}); }
 function mPrev(){ if(MK.cur>0){clearInterval(MK.interval);MK.cur--;renderMockQ();} }
 function mNext(){ clearInterval(MK.interval); if(MK.cur<MK.qs.length-1){MK.cur++;renderMockQ();}else finishMock(); }
+function mockQuestionText(i){
+  var q=MK.qs&&MK.qs[i]; if(!q) return '';
+  var txt=q.body+'\n';
+  if(q.opts&&q.opts.length){
+    q.opts.forEach(function(o){txt+=o.letter+'. '+o.text+'\n';});
+  }
+  return txt.trim();
+}
+
+function mockCopyQuestion(i,ev){
+  if(ev&&ev.stopPropagation) ev.stopPropagation();
+  var txt=mockQuestionText(i);
+  if(!txt){showToast('没有可复制的题目');return;}
+  navigator.clipboard.writeText(txt).then(function(){
+    showToast('✓ 已复制题目');
+  }).catch(function(){
+    var ta=document.createElement('textarea');
+    ta.value=txt; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('✓ 已复制题目');
+  });
+}
+
+function mockBackToResults(){
+  if(MK&&MK._resultHTML){
+    document.getElementById('mock-area').innerHTML=MK._resultHTML;
+  }else{
+    renderMockSetup();
+  }
+}
+
+function mockReviewQuestion(i){
+  if(!MK.qs||!MK.qs[i]) return;
+  MK.cur=i;
+  var q=MK.qs[i], my=MK.ans[i]||'';
+  var ans=(q.answer||'').toUpperCase();
+  var hasAns=!!ans;
+  var ok=hasAns&&my&&my.toUpperCase()===ans;
+
+  var opts=(q.opts||[]).map(function(o){
+    var letter=(o.letter||'').toUpperCase();
+    var bg='#fafaf8', border='#ddd', color='#333', extra='';
+    if(hasAns&&letter===ans){
+      bg='#e8f5ed'; border='#2e7d52'; color='#2e7d52'; extra=' ✓ 正确答案';
+    }
+    if(my&&letter===my.toUpperCase()&&(!hasAns||letter!==ans)){
+      bg='#fdeaea'; border='#b83232'; color='#b83232'; extra=' ← 我选';
+    }else if(my&&letter===my.toUpperCase()&&letter===ans){
+      extra=' ✓ 我选 / 正确';
+    }
+    return '<div style="padding:9px 11px;margin:5px 0;border:1.5px solid '+border+
+      ';border-radius:8px;background:'+bg+';color:'+color+';font-size:14px">'
+      +'<b>'+esc(o.letter)+'.</b> '+esc(o.text)
+      +(extra?'<span style="font-size:11px;font-weight:700;margin-left:6px">'+esc(extra)+'</span>':'')
+      +'</div>';
+  }).join('');
+
+  document.getElementById('mock-area').innerHTML=
+    '<div class="card">'
+    +'<div class="row" style="gap:8px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="mockBackToResults()">← 返回成绩页</button>'
+    +'<div class="title spacer">模拟考第 '+(i+1)+' / '+MK.qs.length+' 题</div>'
+    +'<button class="btn blue" onclick="mockCopyQuestion('+i+',event)">📋 一键复制</button>'
+    +'</div>'
+    +(q.caseText?'<div style="background:#fffbe6;border:1.5px solid #f0d060;border-radius:8px;padding:12px;margin:12px 0;font-size:14px;line-height:1.8;white-space:pre-wrap"><div style="font-size:11px;font-weight:700;color:#8a6000;margin-bottom:4px">📋 病例资料</div>'+esc(q.caseText)+'</div>':'')
+    +'<div class="qbody" style="margin-top:12px">'+esc(q.body)+'</div>'
+    +'<div style="margin-top:10px">'+opts+'</div>'
+    +'<div style="margin-top:10px;padding:8px 10px;border-radius:8px;background:#f8f7f3;font-size:13px">'
+    +'我选：<b>'+(my?esc(my):'未作答')+'</b>'
+    +(hasAns?'　正确答案：<b>'+esc(ans)+'</b>':'')
+    +(hasAns&&my?'　'+(ok?'<span style="color:#2e7d52;font-weight:700">✓ 正确</span>':'<span style="color:#b83232;font-weight:700">✗ 错误</span>'):'')
+    +'</div>'
+    +'<div class="row actions" style="margin-top:12px">'
+    +'<button class="btn small" '+(i<=0?'disabled ':'')+'onclick="mockReviewQuestion('+(i-1)+')">← 上一题</button>'
+    +'<button class="btn small primary" '+(i>=MK.qs.length-1?'disabled ':'')+'onclick="mockReviewQuestion('+(i+1)+')">下一题 →</button>'
+    +'<button class="btn spacer" onclick="mockBackToResults()">返回成绩页</button>'
+    +'</div></div>';
+}
+
 function finishMock(){
   clearInterval(MK.interval);
   var elapsed=Math.round((Date.now()-MK.start)/1000),hh=Math.floor(elapsed/3600),mm=Math.floor((elapsed%3600)/60),ss=elapsed%60;
   var timeStr=(hh?hh+'h ':'')+mm+'m '+ss+'s', correct=0, wrong=0, withAns=MK.qs.filter(function(q){return !!q.answer;}).length, rows='';
   MK.qs.forEach(function(q,i){
     var my=MK.ans[i],hasAns=!!q.answer,ok=hasAns&&my&&my.toUpperCase()===(q.answer||'').toUpperCase();
-    if(ok)correct++; if(hasAns&&my&&!ok){wrong++;DB.wrongMap[q.id]={q:q,batchId:'mock',batchName:'模拟考试',myAns:my};}
-    rows+='<tr><td>'+(i+1)+'</td><td>'+esc(q.body.replace(/\n/g,' ').slice(0,40))+'</td><td>'+(my||'—')+'</td><td>'+(hasAns?'<b>'+q.answer+'</b>':'—')+'</td><td>'+(hasAns&&my?(ok?'<span style="color:green">✓</span>':'<span style="color:red">✗</span>'):'—')+'</td></tr>';
+    if(ok)correct++;
+    if(hasAns&&my&&!ok){
+      wrong++;
+      DB.wrongMap[q.id]={q:q,batchId:'mock',batchName:'模拟考试',myAns:my};
+    }
+    rows+='<tr onclick="mockReviewQuestion('+i+')" style="cursor:pointer">'
+      +'<td>'+(i+1)+'</td>'
+      +'<td>'+esc(q.body.replace(/\n/g,' ').slice(0,55))+'</td>'
+      +'<td>'+(my||'—')+'</td>'
+      +'<td>'+(hasAns?'<b>'+q.answer+'</b>':'—')+'</td>'
+      +'<td>'+(hasAns&&my?(ok?'<span style="color:green">✓</span>':'<span style="color:red">✗</span>'):'—')+'</td>'
+      +'<td onclick="event.stopPropagation()"><button class="btn small blue" onclick="mockCopyQuestion('+i+',event)">📋 复制</button></td>'
+      +'</tr>';
   });
   saveDB(); renderHome(); var rate=withAns?Math.round(correct/withAns*100):0;
-  document.getElementById('mock-area').innerHTML='<div class="card"><div class="title">模拟考试结果</div>'
+
+  var html='<div class="card"><div class="title">模拟考试结果</div>'
+    +'<div class="sub" style="margin-top:4px">点击任意题目可回到完整原题；可上一题/下一题并返回成绩页。</div>'
     +'<div class="grid"><div class="stat"><div class="k">总题</div><div class="v">'+MK.qs.length+'</div></div><div class="stat"><div class="k">答对</div><div class="v" style="color:green">'+correct+'</div></div><div class="stat"><div class="k">答错</div><div class="v redtext">'+wrong+'</div></div><div class="stat"><div class="k">正确率</div><div class="v">'+rate+'%</div></div><div class="stat"><div class="k">用时</div><div class="v">'+timeStr+'</div></div><div class="stat"><div class="k">PCE预估</div><div class="v">'+(rate>=70?'🟢 通过':'🔴 需加强')+'</div></div></div>'
     +(rate<70?'<div style="margin:10px 0;padding:10px;background:#fff8f0;border:1px solid #f5d9a0;border-radius:8px;font-size:13px">建议：正确率 '+rate+'%，PCE约70%通过。重点AI解析错题，反复练习不会题。</div>':'')
     +'<div class="row mt"><button class="btn primary" onclick="renderMockSetup()">再考一次</button><button class="btn" onclick="navTo(\'review\');renderReview()">查看错题</button></div>'
-    +'<div class="tablewrap"><table><thead><tr><th>题号</th><th>题目</th><th>我选</th><th>答案</th><th>结果</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'
+    +'<div class="tablewrap"><table><thead><tr><th>题号</th><th>题目</th><th>我选</th><th>答案</th><th>结果</th><th>复制</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'
     +backBtn();
+
+  MK._resultHTML=html;
+  document.getElementById('mock-area').innerHTML=html;
 }
 
-// ═══════════════════════════════════════════════════════
-// HOME
-// ═══════════════════════════════════════════════════════
 function syncHfQids(){
   if(!DB.hfQids) DB.hfQids={};
   DB.batches.forEach(function(b){
