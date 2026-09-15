@@ -1845,26 +1845,57 @@ function exportNotesPDF(){
 // ═══════════════════════════════════════════════════════
 // REVIEW — with back button and PDF export
 // ═══════════════════════════════════════════════════════
-function renderReview(){
-  var list=document.getElementById('review-list'); list.innerHTML='';
-  var wrongEntries=Object.values(DB.wrongMap), dkEntries=Object.values(DB.dkMap).filter(function(e){return !DB.wrongMap[e.q.id];});
-  if(!wrongEntries.length&&!dkEntries.length){
-    list.innerHTML='<div class="card"><div class="row"><button class="btn" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">复习库</div></div>'
-      +'<div class="sub" style="margin-top:8px">复习库暂无内容。</div></div>'+backBtn();
-    return;
-  }
-  var ctrl='<div class="card"><div class="row"><button class="btn" onclick="navBack()">← 返回</button><div class="title spacer" style="margin-left:10px">复习库</div></div>'
-    +'<div class="row" style="margin-top:10px;flex-wrap:wrap;gap:6px">'
-    +'<button class="btn small" onclick="rvSelectAll(true)">全选</button>'
-    +'<button class="btn small" onclick="rvSelectAll(false)">全不选</button>'
-    +'<button class="btn purple" onclick="printSelectedPDF()">📄 生成PDF</button>'
-    +'<button class="btn red spacer" onclick="clearReview()">清空复习库</button>'
-    +'</div></div>';
-  list.innerHTML=ctrl;
-  if(dkEntries.length){ var h='<div class="card"><div class="row"><div class="title">❓ 不会的题</div><span class="sub spacer">共 '+dkEntries.length+' 道</span></div><div>'; dkEntries.forEach(function(e){h+=rvItemHTML(e,'dk');}); h+='</div></div>'; list.innerHTML+=h; }
-  if(wrongEntries.length){ var h2='<div class="card"><div class="row"><div class="title">✗ 错题库</div><span class="sub spacer">共 '+wrongEntries.length+' 道</span><button class="btn blue small" onclick="analyzeAllWrong()">AI全部解析</button></div><div>'; wrongEntries.forEach(function(e){h2+=rvItemHTML(e,'wrong');}); h2+='</div></div>'; list.innerHTML+=h2; }
-  list.innerHTML+=backBtn();
+var _reviewListMode='wrong';
+function reviewItems(mode){
+  var map=mode==='dk'?(DB.dkMap||{}):(DB.wrongMap||{});
+  return Object.keys(map).map(function(id){
+    var x=map[id]||{},q=x.q||null;
+    if(!q)DB.batches.some(function(b){var hit=(b.questions||[]).find(function(z){return z.id===id;});if(hit){q=hit;return true;}return false;});
+    return q?{id:id,q:q,meta:x}:null;
+  }).filter(Boolean);
 }
+function reviewToggleAll(master){document.querySelectorAll('.review-list-cb').forEach(function(cb){cb.checked=!!master.checked;});}
+function reviewSelectedItems(){
+  var items=reviewItems(_reviewListMode),out=[];
+  document.querySelectorAll('.review-list-cb:checked').forEach(function(cb){var i=parseInt(cb.dataset.i);if(items[i])out.push(items[i]);});
+  return out;
+}
+function reviewCopySelected(){
+  var arr=reviewSelectedItems();if(!arr.length){showToast('请先勾选题目');return;}
+  var txt=arr.map(function(x,n){
+    var q=x.q,s=(n+1)+'. '+q.body+'\n';
+    (q.opts||[]).forEach(function(o){s+=o.letter+'. '+o.text+'\n';});
+    s+='正确答案：'+(q.answer||'未设置');
+    if(x.meta&&x.meta.myAns)s+='\n我选：'+x.meta.myAns;
+    return s;
+  }).join('\n\n──────────\n\n');
+  navigator.clipboard.writeText(txt).then(function(){showToast('✓ 已复制 '+arr.length+' 题');}).catch(function(){
+    var ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);showToast('✓ 已复制 '+arr.length+' 题');
+  });
+}
+function reviewStartQuestions(qs,startAt){
+  if(!qs.length){showToast('没有可作答的题目');return;}
+  QZ={batchId:'__review_selected__',qs:qs,cur:startAt||0,ans:new Array(qs.length).fill(null),checked:new Array(qs.length).fill(false)};
+  navTo('quiz');renderQuizQ();
+}
+function reviewStartSelected(){var arr=reviewSelectedItems();if(!arr.length){showToast('请先勾选题目');return;}reviewStartQuestions(arr.map(function(x){return x.q;}),0);}
+function reviewOpenOne(mode,i){_reviewListMode=mode;var arr=reviewItems(mode);if(!arr[i])return;reviewStartQuestions(arr.map(function(x){return x.q;}),i);}
+function renderReviewList(mode){
+  _reviewListMode=mode;var arr=reviewItems(mode),title=mode==='dk'?'不会的题目集合':'错题集';
+  var rows=arr.map(function(x,i){
+    return '<tr onclick="reviewOpenOne(\''+mode+'\','+i+')" style="cursor:pointer"><td onclick="event.stopPropagation()"><input class="review-list-cb" data-i="'+i+'" type="checkbox"></td><td>'+(i+1)+'</td><td>'+esc((x.q.body||'').replace(/\n/g,' ').slice(0,100))+'</td><td>'+(x.meta&&x.meta.myAns?esc(x.meta.myAns):'—')+'</td><td><b>'+esc(x.q.answer||'—')+'</b></td></tr>';
+  }).join('');
+  document.getElementById('review-area').innerHTML='<div class="card"><div class="row"><button class="btn" onclick="renderReview()">← 返回</button><div class="title spacer">'+title+'（'+arr.length+'）</div></div>'
+    +'<div class="row mt" style="gap:8px;flex-wrap:wrap"><label class="btn" style="cursor:pointer"><input type="checkbox" onchange="reviewToggleAll(this)"> 全选</label><button class="btn primary" onclick="reviewStartSelected()">▶ 作答勾选题目</button><button class="btn blue" onclick="reviewCopySelected()">📋 复制勾选题目</button></div>'
+    +'<div class="sub" style="margin-top:8px">点击题目直接进入该题；也可全选或部分勾选后集中作答/复制。</div><div class="tablewrap"><table><thead><tr><th>选</th><th>#</th><th>题目</th><th>我选</th><th>答案</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+}
+function renderReview(){
+  var wrongN=Object.keys(DB.wrongMap||{}).length,dkN=Object.keys(DB.dkMap||{}).length;
+  document.getElementById('review-area').innerHTML='<div class="card"><div class="title">错题 / 不会题复习</div><div class="sub" style="margin-top:6px">先点集合看列表，再点题目进入作答。</div>'
+    +'<div class="grid" style="margin-top:14px"><button class="stat" style="cursor:pointer;text-align:left;border:1px solid #ddd" onclick="renderReviewList(\'wrong\')"><div class="k">❌ 错题集</div><div class="v">'+wrongN+'</div><div class="sub">点一下查看列表</div></button>'
+    +'<button class="stat" style="cursor:pointer;text-align:left;border:1px solid #ddd" onclick="renderReviewList(\'dk\')"><div class="k">🤔 不会的题目集合</div><div class="v">'+dkN+'</div><div class="sub">点一下查看列表</div></button></div></div>'+backBtn();
+}
+
 function rvItemHTML(entry,type){
   var q=entry.q, myAns=entry.myAns||'?', preview=q.body.replace(/\n/g,' ').slice(0,55);
   var tag=type==='dk'?'<span style="background:#fff3cd;color:#c47a1a;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;flex-shrink:0">❓不会</span>':'<span style="background:#fdeaea;color:#b83232;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;flex-shrink:0">✗ 我选'+myAns+'</span>';
