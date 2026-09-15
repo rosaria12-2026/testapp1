@@ -1875,8 +1875,27 @@ function reviewCopySelected(){
 }
 function reviewStartQuestions(qs,startAt){
   if(!qs.length){showToast('没有可作答的题目');return;}
-  QZ={batchId:'__review_selected__',qs:qs,cur:startAt||0,ans:new Array(qs.length).fill(null),checked:new Array(qs.length).fill(false)};
-  navTo('quiz');renderQuizQ();
+
+  // Normal renderQuizQ() reads QZ.batch.questions + QZ.order.
+  // Build a temporary review batch ONLY in memory; do not add it to DB.batches
+  // and do not alter original batch progress/answers.
+  var tempBatch={
+    id:'__review_selected__',
+    name:_reviewListMode==='dk'?'不会题复习':'错题复习',
+    questions:qs,
+    progress:{answers:new Array(qs.length).fill(null)}
+  };
+  QZ={
+    batch:tempBatch,
+    order:qs.map(function(_,i){return i;}),
+    pos:Math.max(0,Math.min(startAt||0,qs.length-1)),
+    selected:null,
+    checked:false,
+    answered:false,
+    isReviewSet:true
+  };
+  navTo('quiz');
+  renderQuizQ();
 }
 function reviewStartSelected(){var arr=reviewSelectedItems();if(!arr.length){showToast('请先勾选题目');return;}reviewStartQuestions(arr.map(function(x){return x.q;}),0);}
 function reviewOpenOne(mode,i){_reviewListMode=mode;var arr=reviewItems(mode);if(!arr[i])return;reviewStartQuestions(arr.map(function(x){return x.q;}),i);}
