@@ -1885,13 +1885,13 @@ function renderReviewList(mode){
   var rows=arr.map(function(x,i){
     return '<tr onclick="reviewOpenOne(\''+mode+'\','+i+')" style="cursor:pointer"><td onclick="event.stopPropagation()"><input class="review-list-cb" data-i="'+i+'" type="checkbox"></td><td>'+(i+1)+'</td><td>'+esc((x.q.body||'').replace(/\n/g,' ').slice(0,100))+'</td><td>'+(x.meta&&x.meta.myAns?esc(x.meta.myAns):'—')+'</td><td><b>'+esc(x.q.answer||'—')+'</b></td></tr>';
   }).join('');
-  document.getElementById('review-area').innerHTML='<div class="card"><div class="row"><button class="btn" onclick="renderReview()">← 返回</button><div class="title spacer">'+title+'（'+arr.length+'）</div></div>'
+  document.getElementById('review-list').innerHTML='<div class="card"><div class="row"><button class="btn" onclick="renderReview()">← 返回</button><div class="title spacer">'+title+'（'+arr.length+'）</div></div>'
     +'<div class="row mt" style="gap:8px;flex-wrap:wrap"><label class="btn" style="cursor:pointer"><input type="checkbox" onchange="reviewToggleAll(this)"> 全选</label><button class="btn primary" onclick="reviewStartSelected()">▶ 作答勾选题目</button><button class="btn blue" onclick="reviewCopySelected()">📋 复制勾选题目</button></div>'
     +'<div class="sub" style="margin-top:8px">点击题目直接进入该题；也可全选或部分勾选后集中作答/复制。</div><div class="tablewrap"><table><thead><tr><th>选</th><th>#</th><th>题目</th><th>我选</th><th>答案</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 function renderReview(){
   var wrongN=Object.keys(DB.wrongMap||{}).length,dkN=Object.keys(DB.dkMap||{}).length;
-  document.getElementById('review-area').innerHTML='<div class="card"><div class="title">错题 / 不会题复习</div><div class="sub" style="margin-top:6px">先点集合看列表，再点题目进入作答。</div>'
+  document.getElementById('review-list').innerHTML='<div class="card"><div class="title">错题 / 不会题复习</div><div class="sub" style="margin-top:6px">先点集合看列表，再点题目进入作答。</div>'
     +'<div class="grid" style="margin-top:14px"><button class="stat" style="cursor:pointer;text-align:left;border:1px solid #ddd" onclick="renderReviewList(\'wrong\')"><div class="k">❌ 错题集</div><div class="v">'+wrongN+'</div><div class="sub">点一下查看列表</div></button>'
     +'<button class="stat" style="cursor:pointer;text-align:left;border:1px solid #ddd" onclick="renderReviewList(\'dk\')"><div class="k">🤔 不会的题目集合</div><div class="v">'+dkN+'</div><div class="sub">点一下查看列表</div></button></div></div>'+backBtn();
 }
