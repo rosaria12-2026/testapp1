@@ -1876,26 +1876,42 @@ function reviewCopySelected(){
 function reviewStartQuestions(qs,startAt){
   if(!qs.length){showToast('没有可作答的题目');return;}
 
-  // Normal renderQuizQ() reads QZ.batch.questions + QZ.order.
-  // Build a temporary review batch ONLY in memory; do not add it to DB.batches
-  // and do not alter original batch progress/answers.
+  // Use EXACTLY the same QZ shape as the app's proven startBatchFiltered/startBatchFrom path.
+  // This batch exists only in memory and is never pushed into DB.batches.
   var tempBatch={
     id:'__review_selected__',
     name:_reviewListMode==='dk'?'不会题复习':'错题复习',
     questions:qs,
-    progress:{answers:new Array(qs.length).fill(null)}
+    progress:{
+      idx:Math.max(0,Math.min(startAt||0,qs.length-1)),
+      answers:new Array(qs.length).fill(null),
+      dk:{},
+      _committed:{}
+    },
+    _isTemp:true
   };
+  var at=tempBatch.progress.idx;
   QZ={
     batch:tempBatch,
-    order:qs.map(function(_,i){return i;}),
-    pos:Math.max(0,Math.min(startAt||0,qs.length-1)),
-    selected:null,
-    checked:false,
-    answered:false,
-    isReviewSet:true
+    qs:qs,
+    cur:at,
+    ans:tempBatch.progress.answers.slice(),
+    dk:{},
+    sel:null,
+    tMax:0,
+    tLeft:0,
+    tmr:null,
+    _autoNext:null,
+    stopped:false,
+    paused:false,
+    hideAnswer:false,
+    returnToBatchId:null
   };
+
+  document.getElementById('q-batch').textContent=tempBatch.name;
+  document.getElementById('q-total').textContent=qs.length;
   navTo('quiz');
-  renderQuizQ();
+  loadQ(at);
 }
 function reviewStartSelected(){var arr=reviewSelectedItems();if(!arr.length){showToast('请先勾选题目');return;}reviewStartQuestions(arr.map(function(x){return x.q;}),0);}
 function reviewOpenOne(mode,i){_reviewListMode=mode;var arr=reviewItems(mode);if(!arr[i])return;reviewStartQuestions(arr.map(function(x){return x.q;}),i);}
