@@ -1043,6 +1043,23 @@ function showResultPage(){
   document.getElementById('rs-bad').textContent=wrong;
   document.getElementById('rs-dk').textContent=dkCount;
   document.getElementById('rs-rate').textContent=withAns?Math.round(correct/withAns*100)+'%':'—';
+
+  // For selected Wrong/DK review sessions, offer one-click copy of only the questions missed THIS time.
+  var oldReviewCopy=document.getElementById('review-session-wrong-copy');
+  if(oldReviewCopy)oldReviewCopy.parentNode.removeChild(oldReviewCopy);
+  if(QZ.batch&&QZ.batch._isTemp){
+    var resultPage=document.getElementById('result');
+    if(resultPage){
+      var copyBar=document.createElement('div');
+      copyBar.id='review-session-wrong-copy';
+      copyBar.style.cssText='margin:10px 0;padding:10px 12px;background:#fff7e8;border:1px solid #e8c98d;border-radius:8px';
+      copyBar.innerHTML='<button class="btn blue" onclick="reviewCopySessionWrong()">📋 一键复制本次错题（'+wrong+'）</button>'
+        +'<span class="sub" style="margin-left:10px">只复制刚才这组题里本次答错的题，含选项、我的答案、正确答案。</span>';
+      var firstCard=resultPage.querySelector('.card');
+      if(firstCard)resultPage.insertBefore(copyBar,firstCard.nextSibling);
+      else resultPage.insertBefore(copyBar,resultPage.firstChild);
+    }
+  }
   // Auto-load saved answer key for this batch
   var savedKey = (QZ.batch && DB.answerKeys) ? (DB.answerKeys[QZ.batch.id]||'') : '';
   document.getElementById('answer-key').value=savedKey;
@@ -1915,14 +1932,51 @@ function reviewStartQuestions(qs,startAt){
 }
 function reviewStartSelected(){var arr=reviewSelectedItems();if(!arr.length){showToast('请先勾选题目');return;}reviewStartQuestions(arr.map(function(x){return x.q;}),0);}
 function reviewOpenOne(mode,i){_reviewListMode=mode;var arr=reviewItems(mode);if(!arr[i])return;reviewStartQuestions(arr.map(function(x){return x.q;}),i);}
+function reviewSelectRange(){
+  var s=parseInt((document.getElementById('review-range-start')||{}).value);
+  var e=parseInt((document.getElementById('review-range-end')||{}).value);
+  var boxes=[].slice.call(document.querySelectorAll('.review-list-cb'));
+  if(!boxes.length){showToast('当前列表没有题目');return;}
+  if(isNaN(s))s=1;if(isNaN(e))e=boxes.length;
+  s=Math.max(1,s);e=Math.min(boxes.length,e);
+  if(s>e){showToast('起始题号不能大于结束题号');return;}
+  boxes.forEach(function(cb,i){cb.checked=(i+1>=s&&i+1<=e);});
+  showToast('✓ 已选择第 '+s+'–'+e+' 题（'+(e-s+1)+'题）');
+}
+function reviewClearSelection(){
+  document.querySelectorAll('.review-list-cb').forEach(function(cb){cb.checked=false;});
+}
+function reviewCopySessionWrong(){
+  if(!QZ||!QZ.qs){showToast('没有本次作答记录');return;}
+  var ids=[];
+  QZ.qs.forEach(function(q,i){
+    var my=QZ.ans&&QZ.ans[i], ans=(q.answer||'').toUpperCase();
+    if(ans&&my&&my!=='skip'&&my.toUpperCase()!==ans)ids.push(i);
+  });
+  if(!ids.length){showToast('本次没有错题');return;}
+  var txt=ids.map(function(i,n){
+    var q=QZ.qs[i],my=QZ.ans[i],s=(n+1)+'. '+q.body+'\n';
+    (q.opts||[]).forEach(function(o){s+=o.letter+'. '+o.text+'\n';});
+    s+='我的答案：'+my+'\n正确答案：'+(q.answer||'未设置');
+    return s;
+  }).join('\n\n──────────\n\n');
+  navigator.clipboard.writeText(txt).then(function(){showToast('✓ 已复制本次错题 '+ids.length+' 题');}).catch(function(){
+    var ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);showToast('✓ 已复制本次错题 '+ids.length+' 题');
+  });
+}
 function renderReviewList(mode){
   _reviewListMode=mode;var arr=reviewItems(mode),title=mode==='dk'?'不会的题目集合':'错题集';
   var rows=arr.map(function(x,i){
     return '<tr onclick="reviewOpenOne(\''+mode+'\','+i+')" style="cursor:pointer"><td onclick="event.stopPropagation()"><input class="review-list-cb" data-i="'+i+'" type="checkbox"></td><td>'+(i+1)+'</td><td>'+esc((x.q.body||'').replace(/\n/g,' ').slice(0,100))+'</td><td>'+(x.meta&&x.meta.myAns?esc(x.meta.myAns):'—')+'</td><td><b>'+esc(x.q.answer||'—')+'</b></td></tr>';
   }).join('');
   document.getElementById('review-list').innerHTML='<div class="card"><div class="row"><button class="btn" onclick="renderReview()">← 返回</button><div class="title spacer">'+title+'（'+arr.length+'）</div></div>'
-    +'<div class="row mt" style="gap:8px;flex-wrap:wrap"><label class="btn" style="cursor:pointer"><input type="checkbox" onchange="reviewToggleAll(this)"> 全选</label><button class="btn primary" onclick="reviewStartSelected()">▶ 作答勾选题目</button><button class="btn blue" onclick="reviewCopySelected()">📋 复制勾选题目</button></div>'
-    +'<div class="sub" style="margin-top:8px">点击题目直接进入该题；也可全选或部分勾选后集中作答/复制。</div><div class="tablewrap"><table><thead><tr><th>选</th><th>#</th><th>题目</th><th>我选</th><th>答案</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+    +'<div class="row mt" style="gap:8px;flex-wrap:wrap;align-items:center">'
+    +'<label class="btn" style="cursor:pointer"><input type="checkbox" onchange="reviewToggleAll(this)"> 全选</label>'
+    +'<span style="font-weight:700">选择第</span><input id="review-range-start" type="number" min="1" placeholder="51" class="tiny"><span>—</span><input id="review-range-end" type="number" min="1" placeholder="80" class="tiny"><span>题</span>'
+    +'<button class="btn" onclick="reviewSelectRange()">✓ 按数字选择</button><button class="btn" onclick="reviewClearSelection()">清空选择</button>'
+    +'<button class="btn primary" onclick="reviewStartSelected()">▶ 作答勾选题目</button><button class="btn blue" onclick="reviewCopySelected()">📋 复制勾选题目</button></div>'
+    +'<div class="sub" style="margin-top:8px">例如填 51–80 → 按数字选择 → 可以直接作答这30题，也可以先一键复制这30题。点击单题仍可直接进入。</div><div class="tablewrap"><table><thead><tr><th>选</th><th>#</th><th>题目</th><th>我选</th><th>答案</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 function renderReview(){
   var wrongN=Object.keys(DB.wrongMap||{}).length,dkN=Object.keys(DB.dkMap||{}).length;
