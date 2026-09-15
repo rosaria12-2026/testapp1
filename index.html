@@ -238,12 +238,13 @@ a）虚寒。b）实寒。c）气滞。d）阳虚。e）血虚。
 </div>
 <div id="toast"></div>
 
-<script src="app.js?v=172"></script>
+<script src="app.js?v=173"></script>
 <script>
   // Init notes page when tab clicked
   document.querySelector('.tab[data-page="notes"]').addEventListener('click', function(){ renderNotes(); });
   // study and fill tab clicks handled in app.js tab handler
-  document.querySelector('.tab[data-page="review"]').addEventListener('click', function(){ renderReview(); });
+  var reviewTab=document.querySelector('.tab[data-page="review"]');
+  if(reviewTab) reviewTab.addEventListener('click', function(){ renderReview(); });
   document.querySelector('.tab[data-page="mock"]').addEventListener('click', function(){ renderMockSetup(); });
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
