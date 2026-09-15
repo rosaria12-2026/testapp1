@@ -2051,7 +2051,8 @@ function renderMockSetup(){
     +'<label style="font-size:13px;cursor:pointer"><input type="radio" name="mock-pool-mode" value="random"> 完全随机</label>'
     +'<div class="sub" style="margin-top:6px">“没有做过”按各原批次已有作答记录判断；“完全随机”不做错题/不会题加权。</div>'
     +'</div>'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span class="sub">题目数量：</span><input id="mock-count" type="number" min="10" max="500" value="125" class="tiny"><span class="sub">题（0=全部）</span></div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="sub">题目数量：</span><input id="mock-count" type="number" min="0" max="500" value="125" class="tiny"><span class="sub">题（0=全部）</span></div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap"><span class="sub">做第：</span><input id="mock-range-start" type="number" min="1" placeholder="51" class="tiny"><span>—</span><input id="mock-range-end" type="number" min="1" placeholder="80" class="tiny"><span class="sub">题（留空=从头做；例如51–80）</span></div>'
     +'<button class="btn primary" onclick="startMock()">开始模拟考试</button></div>'
     +backBtn();
 }
@@ -2075,7 +2076,11 @@ function startMock(){
   var onlyWeak=document.getElementById('mock-only-weak-cb')&&document.getElementById('mock-only-weak-cb').checked;
   var useWrong=document.getElementById('mock-wrong-cb')&&document.getElementById('mock-wrong-cb').checked;
   var useDk=document.getElementById('mock-dk-cb')&&document.getElementById('mock-dk-cb').checked;
-  var count=parseInt((document.getElementById('mock-count')||{}).value)||125;
+  var countRaw=parseInt((document.getElementById('mock-count')||{}).value);
+  var count=isNaN(countRaw)?125:countRaw;
+  var rangeStart=parseInt((document.getElementById('mock-range-start')||{}).value);
+  var rangeEnd=parseInt((document.getElementById('mock-range-end')||{}).value);
+  var hasRange=!isNaN(rangeStart)||!isNaN(rangeEnd);
   var wids=Object.keys(DB.wrongMap), dids=Object.keys(DB.dkMap), pool;
 
   if(poolMode==='unseen'){
@@ -2103,7 +2108,16 @@ function startMock(){
   }
 
   if(count>0) pool=pool.slice(0,count);
-  MK={qs:pool,ans:new Array(pool.length).fill(null),cur:0,start:Date.now(),interval:null,_resultHTML:''};
+  if(hasRange){
+    if(isNaN(rangeStart)) rangeStart=1;
+    if(isNaN(rangeEnd)) rangeEnd=pool.length;
+    rangeStart=Math.max(1,rangeStart);
+    rangeEnd=Math.min(pool.length,rangeEnd);
+    if(rangeStart>rangeEnd){alert('题号范围不正确：起始题号不能大于结束题号。');return;}
+    pool=pool.slice(rangeStart-1,rangeEnd);
+    if(!pool.length){alert('这个题号范围没有题目。');return;}
+  }
+  MK={qs:pool,ans:new Array(pool.length).fill(null),cur:0,start:Date.now(),interval:null,_resultHTML:'',rangeLabel:hasRange?(rangeStart+'-'+rangeEnd):''};
   renderMockQ();
 }
 
