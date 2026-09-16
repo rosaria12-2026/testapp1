@@ -77,6 +77,7 @@ if(!DB.kwCards) DB.kwCards={};
 if(!DB.searchHistory) DB.searchHistory={};
 if(!DB.fillProgress) DB.fillProgress={};
 if(DB.lastPos===undefined) DB.lastPos=null;
+if(!DB.reviewFixed) DB.reviewFixed={};
 // Re-fix caseText for existing batches: clear wrong case assignments beyond range
 (function fixCaseRanges(){
   DB.batches.forEach(function(batch){
@@ -969,6 +970,13 @@ function commitResults(){
     }
     if(QZ.dk[i]) DB.dkMap[q.id]={q:q,batchId:batch.id,batchName:batch.name};
     else if(q.answer&&my.toUpperCase()===(q.answer||'').toUpperCase()) delete DB.dkMap[q.id];
+    // Independent fixed-review progress: status changes, list membership/order does not.
+    if(batch._isTemp && batch._reviewMode && DB.reviewFixed && DB.reviewFixed[batch._reviewMode]){
+      var fp=DB.reviewFixed[batch._reviewMode].progress||(DB.reviewFixed[batch._reviewMode].progress={});
+      var correctNow=!!(q.answer && my && my!=='skip' && my.toUpperCase()===(q.answer||'').toUpperCase());
+      fp[q.id]={reviewed:true,correct:correctNow,myAns:my,ts:Date.now()};
+    }
+
     // Mark as committed
     if(!batch.progress._committed) batch.progress._committed={};
     batch.progress._committed[q.id]=true;
@@ -1863,14 +1871,40 @@ function exportNotesPDF(){
 // REVIEW — with back button and PDF export
 // ═══════════════════════════════════════════════════════
 var _reviewListMode='wrong';
-function reviewItems(mode){
-  var map=mode==='dk'?(DB.dkMap||{}):(DB.wrongMap||{});
-  return Object.keys(map).map(function(id){
-    var x=map[id]||{},q=x.q||null;
-    if(!q)DB.batches.some(function(b){var hit=(b.questions||[]).find(function(z){return z.id===id;});if(hit){q=hit;return true;}return false;});
-    return q?{id:id,q:q,meta:x}:null;
-  }).filter(Boolean);
+function reviewEnsureFixed(mode){
+  if(!DB.reviewFixed)DB.reviewFixed={};
+  var fixed=DB.reviewFixed[mode];
+
+  // First opening freezes the CURRENT visible list in its CURRENT order.
+  // From then on this list never shrinks/reorders when wrongMap/dkMap changes.
+  if(!fixed || !Array.isArray(fixed.items)){
+    var map=mode==='dk'?(DB.dkMap||{}):(DB.wrongMap||{});
+    var items=Object.keys(map).map(function(id){
+      var x=map[id]||{},q=x.q||null;
+      if(!q)DB.batches.some(function(b){
+        var hit=(b.questions||[]).find(function(z){return z&&z.id===id;});
+        if(hit){q=hit;return true;}return false;
+      });
+      if(!q)return null;
+      // Snapshot only what the review list needs; do not mutate original q/meta.
+      return {id:id,q:JSON.parse(JSON.stringify(q)),meta:JSON.parse(JSON.stringify(x||{}))};
+    }).filter(Boolean);
+
+    fixed=DB.reviewFixed[mode]={
+      createdAt:Date.now(),
+      items:items,
+      progress:{}
+    };
+    saveDB();
+    showToast('✓ 已固定'+(mode==='dk'?'不会题':'错题')+'清单：'+items.length+'题；以后编号不再变化',5000);
+  }
+  if(!fixed.progress)fixed.progress={};
+  return fixed;
 }
+function reviewItems(mode){
+  return reviewEnsureFixed(mode).items;
+}
+
 function reviewToggleAll(master){document.querySelectorAll('.review-list-cb').forEach(function(cb){cb.checked=!!master.checked;});}
 function reviewSelectedItems(){
   var items=reviewItems(_reviewListMode),out=[];
@@ -1905,7 +1939,9 @@ function reviewStartQuestions(qs,startAt){
       dk:{},
       _committed:{}
     },
-    _isTemp:true
+    _isTemp:true,
+    _reviewMode:_reviewListMode,
+    _reviewIds:qs.map(function(q){return q&&q.id||'';})
   };
   var at=tempBatch.progress.idx;
   QZ={
@@ -1967,19 +2003,25 @@ function reviewCopySessionWrong(){
 }
 function renderReviewList(mode){
   _reviewListMode=mode;var arr=reviewItems(mode),title=mode==='dk'?'不会的题目集合':'错题集';
+  var fixed=reviewEnsureFixed(mode),prog=fixed.progress||{};
+  var reviewedN=0;
   var rows=arr.map(function(x,i){
-    return '<tr onclick="reviewOpenOne(\''+mode+'\','+i+')" style="cursor:pointer"><td onclick="event.stopPropagation()"><input class="review-list-cb" data-i="'+i+'" type="checkbox"></td><td>'+(i+1)+'</td><td>'+esc((x.q.body||'').replace(/\n/g,' ').slice(0,100))+'</td><td>'+(x.meta&&x.meta.myAns?esc(x.meta.myAns):'—')+'</td><td><b>'+esc(x.q.answer||'—')+'</b></td></tr>';
+    var p=prog[x.id]||null;if(p&&p.reviewed)reviewedN++;
+    var status=!p||!p.reviewed?'未复习':(p.correct?'✓ 已复习·正确':'✗ 已复习·仍错');
+    var my=(p&&p.myAns&&p.myAns!=='skip')?p.myAns:(x.meta&&x.meta.myAns?x.meta.myAns:'—');
+    return '<tr onclick="reviewOpenOne(\''+mode+'\','+i+')" style="cursor:pointer"><td onclick="event.stopPropagation()"><input class="review-list-cb" data-i="'+i+'" type="checkbox"></td><td>'+(i+1)+'</td><td>'+esc((x.q.body||'').replace(/\n/g,' ').slice(0,100))+'</td><td>'+esc(status)+'</td><td>'+esc(my)+'</td><td><b>'+esc(x.q.answer||'—')+'</b></td></tr>';
   }).join('');
-  document.getElementById('review-list').innerHTML='<div class="card"><div class="row"><button class="btn" onclick="renderReview()">← 返回</button><div class="title spacer">'+title+'（'+arr.length+'）</div></div>'
+  document.getElementById('review-list').innerHTML='<div class="card"><div class="row"><button class="btn" onclick="renderReview()">← 返回</button><div class="title spacer">'+title+'（固定 '+arr.length+'题｜已复习 '+reviewedN+'｜未复习 '+(arr.length-reviewedN)+'）</div></div>'
     +'<div class="row mt" style="gap:8px;flex-wrap:wrap;align-items:center">'
     +'<label class="btn" style="cursor:pointer"><input type="checkbox" onchange="reviewToggleAll(this)"> 全选</label>'
     +'<span style="font-weight:700">选择第</span><input id="review-range-start" type="number" min="1" placeholder="51" class="tiny"><span>—</span><input id="review-range-end" type="number" min="1" placeholder="80" class="tiny"><span>题</span>'
     +'<button class="btn" onclick="reviewSelectRange()">✓ 按数字选择</button><button class="btn" onclick="reviewClearSelection()">清空选择</button>'
     +'<button class="btn primary" onclick="reviewStartSelected()">▶ 作答勾选题目</button><button class="btn blue" onclick="reviewCopySelected()">📋 复制勾选题目</button></div>'
-    +'<div class="sub" style="margin-top:8px">例如填 51–80 → 按数字选择 → 可以直接作答这30题，也可以先一键复制这30题。点击单题仍可直接进入。</div><div class="tablewrap"><table><thead><tr><th>选</th><th>#</th><th>题目</th><th>我选</th><th>答案</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+    +'<div class="sub" style="margin-top:8px">例如填 51–80 → 按数字选择 → 可以直接作答这30题，也可以先一键复制这30题。点击单题仍可直接进入。</div><div class="tablewrap"><table><thead><tr><th>选</th><th>#</th><th>题目</th><th>状态</th><th>我选</th><th>答案</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 function renderReview(){
-  var wrongN=Object.keys(DB.wrongMap||{}).length,dkN=Object.keys(DB.dkMap||{}).length;
+  var wrongN=(DB.reviewFixed&&DB.reviewFixed.wrong&&Array.isArray(DB.reviewFixed.wrong.items))?DB.reviewFixed.wrong.items.length:Object.keys(DB.wrongMap||{}).length;
+  var dkN=(DB.reviewFixed&&DB.reviewFixed.dk&&Array.isArray(DB.reviewFixed.dk.items))?DB.reviewFixed.dk.items.length:Object.keys(DB.dkMap||{}).length;
   document.getElementById('review-list').innerHTML='<div class="card"><div class="title">错题 / 不会题复习</div><div class="sub" style="margin-top:6px">先点集合看列表，再点题目进入作答。</div>'
     +'<div class="grid" style="margin-top:14px"><button class="stat" style="cursor:pointer;text-align:left;border:1px solid #ddd" onclick="renderReviewList(\'wrong\')"><div class="k">❌ 错题集</div><div class="v">'+wrongN+'</div><div class="sub">点一下查看列表</div></button>'
     +'<button class="stat" style="cursor:pointer;text-align:left;border:1px solid #ddd" onclick="renderReviewList(\'dk\')"><div class="k">🤔 不会的题目集合</div><div class="v">'+dkN+'</div><div class="sub">点一下查看列表</div></button></div></div>'+backBtn();
