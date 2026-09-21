@@ -1002,15 +1002,11 @@ function showResultPage(){
   document.getElementById('result-batch').textContent=batch.name;
   var withAns=QZ.qs.filter(function(q){return !!q.answer;}).length, correct=0, wrong=0, dkCount=0;
   var tbody=document.getElementById('result-table'); tbody.innerHTML='';
-  // Auto-fill correct answer text into qNotes for questions with answers
+  // V180: keep annotation anchored to the canonical correct answer.
   if(!DB.qNotes) DB.qNotes={};
-  QZ.qs.forEach(function(q){
-    if(q.answer && !DB.qNotes[q.id]){
-      var correctOpt = q.opts.find(function(o){return o.letter===q.answer.toUpperCase();});
-      if(correctOpt) DB.qNotes[q.id] = q.answer+'. '+correctOpt.text;
-    }
-  });
-  saveDB();
+  var _v180NoteChanged=false;
+  QZ.qs.forEach(function(q){ if(ensureCorrectAnswerQNote(q)) _v180NoteChanged=true; });
+  if(_v180NoteChanged) saveDB();
 
   QZ.qs.forEach(function(q,i){
     var my=QZ.ans[i], hasAns=!!q.answer;
@@ -1188,10 +1184,33 @@ function loadAnswerKeyForBatch(batchId){
 // ═══════════════════════════════════════════════════════
 var _mQid=null, _mIdx=null, _aiChat=[];
 
+// V180: annotation base must be the canonical correct answer.
+// Only repairs empty notes or notes that are exactly one option text; preserves genuine manual notes.
+function ensureCorrectAnswerQNote(q){
+  if(!q || !q.id || !q.answer || !q.opts) return false;
+  if(!DB.qNotes) DB.qNotes={};
+  var letter=String(q.answer).trim().toUpperCase();
+  var correctOpt=q.opts.find(function(o){return String(o.letter||'').toUpperCase()===letter;});
+  if(!correctOpt) return false;
+  var correctText=letter+'. '+correctOpt.text;
+  var old=String(DB.qNotes[q.id]||'').trim();
+  if(!old){ DB.qNotes[q.id]=correctText; return true; }
+  if(old===correctText) return false;
+  // Repair accidental auto-copy when the whole note is exactly A/B/C/D option text.
+  var isWholeOption=q.opts.some(function(o){
+    var l=String(o.letter||'').toUpperCase();
+    var t=String(o.text||'').trim();
+    return old===l+'. '+t || old===t;
+  });
+  if(isWholeOption){ DB.qNotes[q.id]=correctText; return true; }
+  return false;
+}
+
 function openModal(qid,idx){
   var q=(QZ.qs&&QZ.qs[idx])||null;
   if(!q){var e=DB.wrongMap[qid]||DB.dkMap[qid];if(e)q=e.q;}
   if(!q) return;
+  if(ensureCorrectAnswerQNote(q)) saveDB();
   _mQid=qid; _mIdx=idx; _aiChat=[];
   var my=QZ.ans?QZ.ans[idx]:null, hasAns=!!q.answer;
   var ok=hasAns&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();
@@ -1247,7 +1266,7 @@ function openModal(qid,idx){
 
   // Annotation box — syncs with result table
   html+='<div style="margin-top:12px;padding:10px 12px;background:#fffbe6;border:1px solid #f0d060;border-radius:8px">'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:12px;font-weight:700;color:#8a6000">📌 我的标注（与总表同步）</div><label style="font-size:11px;color:#888;margin-left:auto;display:flex;align-items:center;gap:4px"><input type="checkbox" id="modal-autocopy" checked> 选字自动追加</label></div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:12px;font-weight:700;color:#8a6000">📌 我的标注（与总表同步）</div><label style="font-size:11px;color:#888;margin-left:auto;display:flex;align-items:center;gap:4px"><input type="checkbox" id="modal-autocopy"> 选字追加到正确答案后</label></div>'
     +'<textarea id="modal-qnote" placeholder="例如：更正为C / 答案有疑问 / 考点备注…" '
     +'style="width:100%;min-height:60px;padding:8px;border:1px solid #f0d060;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box;background:#fffdf5"'
     +'oninput="saveModalQNote()"></textarea>'
