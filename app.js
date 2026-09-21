@@ -16,6 +16,8 @@ function makeDB() {
 // The old localStorage DB is NEVER deleted.
 var V166_IDB_NAME='PCE_LocalDB_v166', V166_STORE='state', V166_KEY='main';
 var _v166SaveTimer=null, _v166LastSaveError=null;
+// v179 — startup write barrier: NEVER let early startup saveDB() overwrite the durable IndexedDB copy.
+var _v166Bootstrapped=false, _v166PendingSave=false;
 
 function v166Open(){
   return new Promise(function(resolve,reject){
@@ -56,6 +58,14 @@ function v166WriteNow(){
   });
 }
 function saveDB(){
+  // v179: During startup, several migration/fix routines call saveDB().
+  // DO NOT write those pre-bootstrap snapshots into IndexedDB: localStorage may be stale/full,
+  // and doing so can overwrite the newer durable answer record before v166Bootstrap() reads it.
+  if(!_v166Bootstrapped){
+    _v166PendingSave=true;
+    return;
+  }
+
   // Keep the old synchronous API so the rest of the answer app does not change.
   if(_v166SaveTimer)clearTimeout(_v166SaveTimer);
   _v166SaveTimer=setTimeout(function(){_v166SaveTimer=null;v166WriteNow().catch(function(){});},80);
@@ -63,8 +73,8 @@ function saveDB(){
   // Legacy mirror only. Quota failure no longer blocks the IndexedDB save.
   try{localStorage.setItem(DBKEY,JSON.stringify(DB));}
   catch(e){
-    if(e&&e.name==='QuotaExceededError')console.warn('V166: localStorage已满；IndexedDB继续保存');
-    else console.error('V166 localStorage镜像失败',e);
+    if(e&&e.name==='QuotaExceededError')console.warn('V179: localStorage已满；IndexedDB为主存储，继续保存');
+    else console.error('V179 localStorage镜像失败',e);
   }
 }
 
@@ -5659,6 +5669,17 @@ function v166Bootstrap(){
 }
 
 v166Bootstrap().then(function(){
+  // v179: only NOW may saveDB() write to IndexedDB.
+  // This closes the startup race that could replace a newer IndexedDB copy with stale localStorage.
+  _v166Bootstrapped=true;
+  var hadPending=_v166PendingSave;
+  _v166PendingSave=false;
+
+  // Persist the final chosen/restored DB once after bootstrap.
+  // This is safe because DB is now the authoritative copy selected by v166Bootstrap().
+  if(hadPending) saveDB();
+
+  console.log('✅ V179 数据库启动保护已开启：IndexedDB先读取，之后才允许写入');
   renderHome();
   setTimeout(function(){ initApiKeyInput(); initCloudInputs(); },150);
 });
