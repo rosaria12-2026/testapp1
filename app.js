@@ -2726,11 +2726,14 @@ function cloudUpload(){
   });
 }
 
-function downloadPackedBatches(col, numPacks){
+function downloadPackedBatches(col, numPacks, packPrefix, expectedBatchCount){
+  // v179: honor the generation-specific pack prefix written by uploadInChunks().
+  // Older cloud data has no packPrefix, so keep the legacy batches_p fallback.
+  packPrefix=packPrefix||'batches_p';
   var allBatches=[];
   function fetchPack(pi){
     if(pi>=numPacks) return Promise.resolve(allBatches);
-    return col.doc('batches_p'+pi).get().then(function(doc){
+    return col.doc(packPrefix+pi).get().then(function(doc){
       if(doc&&doc.exists){
         var arr=(doc.data().batches||[]).filter(function(b){
           return b&&b.id&&Array.isArray(b.questions);
@@ -2744,7 +2747,7 @@ function downloadPackedBatches(col, numPacks){
     }).catch(function(){
       return new Promise(function(resolve){
         setTimeout(function(){
-          col.doc('batches_p'+pi).get().then(function(doc){
+          col.doc(packPrefix+pi).get().then(function(doc){
             if(doc&&doc.exists){
               var arr=(doc.data().batches||[]).filter(function(b){
                 return b&&b.id&&Array.isArray(b.questions);
@@ -2757,7 +2760,13 @@ function downloadPackedBatches(col, numPacks){
       });
     });
   }
-  return fetchPack(0);
+  return fetchPack(0).then(function(result){
+    // Never silently accept a partial cloud download.
+    if(expectedBatchCount!=null && Number(expectedBatchCount)!==result.length){
+      throw new Error('云端批次读取不完整：应有 '+expectedBatchCount+' 批，实际读到 '+result.length+' 批。已停止覆盖本地。');
+    }
+    return result;
+  });
 }
 
 function downloadInChunks(col, batchIds){
@@ -2903,7 +2912,7 @@ function cloudDownload(){
         showProgress('✓ 下载完成（无批次）',100);
         return null;
       }
-      if(numPacks>0) return downloadPackedBatches(col,numPacks,batchIdxData.packPrefix||'batches_p');
+      if(numPacks>0) return downloadPackedBatches(col,numPacks,batchIdxData.packPrefix||'batches_p',batchIds.length);
       return downloadInChunks(col,batchIds);
     });
   }).then(function(result){
