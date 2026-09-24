@@ -763,7 +763,22 @@ function loadQ(i){
     }
     hind.style.display='block';
   } else if(hind) hind.style.display='none';
-  rebuildActions(); startTimer();
+  rebuildActions();
+  // v182 — 背题模式完全手动翻题：不启动计时器，不自动跳下一题。
+  if(QZ.memorizeMode){
+    clearInterval(QZ.tmr);
+    clearTimeout(QZ._autoNext);
+    QZ.tmr=null;
+    QZ.stopped=true;
+    QZ.paused=false;
+    var timerEl=document.getElementById('timer');
+    if(timerEl){
+      timerEl.textContent='📖 手动';
+      timerEl.className='timer spacer paused';
+    }
+  } else {
+    startTimer();
+  }
   var bsBtn=document.getElementById('back-to-search-btn');
   if(bsBtn) bsBtn.style.display=(QZ.batch&&QZ.batch._isTemp)?'inline-block':'none';
   // Load annotation for this question
