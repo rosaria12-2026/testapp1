@@ -736,11 +736,23 @@ function loadQ(i){
     btn.addEventListener('click',(function(letter,b){return function(){pickOpt(letter,b);};})(o.letter,btn));
     optsEl.appendChild(btn);
   });
+  // v180b memorize mode: single-question view, reveal canonical answer immediately, read-only.
+  if(QZ.memorizeMode && q.answer){
+    var memAns=String(q.answer).toUpperCase();
+    document.querySelectorAll('#opts .opt').forEach(function(b){
+      var le=b.querySelector('.opt-letter');
+      if(le&&le.textContent.trim().toUpperCase()===memAns)b.classList.add('correct');
+    });
+  }
   // Remove old reveal button when loading new question
   var old=document.getElementById('reveal-ans-btn'); if(old) old.remove();
   // Show hide-answer indicator
   var hind=document.getElementById('hide-ans-indicator');
-  if(QZ.hideAnswer){
+  if(QZ.memorizeMode){
+    if(!hind){hind=document.createElement('div');hind.id='hide-ans-indicator';var qb0=document.getElementById('qbody');if(qb0&&qb0.parentNode)qb0.parentNode.insertBefore(hind,qb0.nextSibling);}
+    hind.style.cssText='font-size:11px;color:#2e7d52;text-align:right;padding:2px 0';
+    hind.textContent='📖 背题模式 — 正确答案已自动显示';hind.style.display='block';
+  } else if(QZ.hideAnswer){
     if(!hind){
       hind=document.createElement('div');
       hind.id='hide-ans-indicator';
@@ -818,6 +830,13 @@ function saveAnnotation(){
 
 function rebuildActions(){
   var el = document.querySelector('#quiz .actions'); if(!el) return;
+  if(QZ.memorizeMode){
+    el.innerHTML='<button class="btn small" onclick="memorizePrev()">← 上一题</button>'
+      +'<button class="btn small primary" onclick="memorizeNext()">下一题 →</button>'
+      +'<button class="btn small blue" onclick="openQuizAI()">🔍 AI解析</button>'
+      +'<button class="btn small red spacer" onclick="exitMemorizeMode()">退出背题</button>';
+    return;
+  }
   el.innerHTML = '<button class="btn small" onclick="prevQ()">← 上一题</button>'
     +'<button class="btn small" onclick="skipQ()">跳过</button>'
     +'<button class="btn small orange" id="dkbtn" onclick="toggleDK()">不会</button>'
@@ -1058,6 +1077,23 @@ function showResultPage(){
   document.getElementById('rs-dk').textContent=dkCount;
   document.getElementById('rs-rate').textContent=withAns?Math.round(correct/withAns*100)+'%':'—';
 
+  // v180b — result-page study tools: copy wrong/DK + read-only memorize mode.
+  var oldStudyTools=document.getElementById('result-study-tools');
+  if(oldStudyTools) oldStudyTools.parentNode.removeChild(oldStudyTools);
+  var resultPageForTools=document.getElementById('result');
+  if(resultPageForTools){
+    var studyTools=document.createElement('div');
+    studyTools.id='result-study-tools';
+    studyTools.style.cssText='margin:10px 0;padding:10px 12px;background:#f7f4ec;border:1px solid #ddd6c8;border-radius:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+    studyTools.innerHTML='<button class="btn blue" onclick="copyResultQuestions(\'wrong\')">📋 一键复制错题（'+wrong+'）</button>'
+      +'<button class="btn" onclick="copyResultQuestions(\'wrongdk\')">📋 错题＋不会题（'+countResultWrongDK()+'）</button>'
+      +'<button class="btn purple" onclick="startResultMemorizeMode()">📖 背题模式</button>'
+      +'<span class="sub">背题模式为单题页面，进入后每题直接显示正确答案，不改作答记录。</span>';
+    var firstCardForTools=resultPageForTools.querySelector('.card');
+    if(firstCardForTools) firstCardForTools.parentNode.insertBefore(studyTools,firstCardForTools.nextSibling);
+    else resultPageForTools.insertBefore(studyTools,resultPageForTools.firstChild);
+  }
+
   // For selected Wrong/DK review sessions, offer one-click copy of only the questions missed THIS time.
   var oldReviewCopy=document.getElementById('review-session-wrong-copy');
   if(oldReviewCopy)oldReviewCopy.parentNode.removeChild(oldReviewCopy);
@@ -1119,6 +1155,47 @@ function showResultPage(){
   },50);
   navTo('result');
 }
+
+function resultQuestionIndexes(mode){
+  var out=[];
+  if(!QZ||!QZ.qs)return out;
+  QZ.qs.forEach(function(q,i){
+    var my=QZ.ans&&QZ.ans[i], ans=(q.answer||'').toUpperCase();
+    var isWrong=!!(ans&&my&&my!=='skip'&&my.toUpperCase()!==ans);
+    var isDK=!!(QZ.dk&&QZ.dk[i]);
+    if(mode==='wrong'?isWrong:(isWrong||isDK)) out.push(i);
+  });
+  return out;
+}
+function countResultWrongDK(){return resultQuestionIndexes('wrongdk').length;}
+function copyResultQuestions(mode){
+  var ids=resultQuestionIndexes(mode);
+  if(!ids.length){showToast(mode==='wrong'?'本次没有错题':'本次没有错题或不会题');return;}
+  var txt=ids.map(function(i,n){
+    var q=QZ.qs[i],my=QZ.ans&&QZ.ans[i],s=(n+1)+'. '+q.body+'\n';
+    (q.opts||[]).forEach(function(o){s+=o.letter+'. '+o.text+'\n';});
+    s+='我的答案：'+(my&&my!=='skip'?my:'—')+'\n正确答案：'+(q.answer||'未设置');
+    if(QZ.dk&&QZ.dk[i])s+='\n标记：不会';
+    return s;
+  }).join('\n\n──────────\n\n');
+  function ok(){showToast('✓ 已复制 '+ids.length+' 题');}
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(ok).catch(function(){fallbackCopyText(txt);ok();});
+  }else{fallbackCopyText(txt);ok();}
+}
+function fallbackCopyText(txt){
+  var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+}
+function startResultMemorizeMode(){
+  if(!QZ||!QZ.qs||!QZ.qs.length){showToast('没有可背的题目');return;}
+  clearInterval(QZ.tmr);clearTimeout(QZ._autoNext);
+  QZ.memorizeMode=true;QZ.cur=0;QZ.sel=null;QZ.tMax=0;QZ.stopped=true;QZ.paused=false;
+  navTo('quiz');loadQ(0);showToast('📖 背题模式：每题自动显示正确答案');
+}
+function memorizePrev(){if(QZ.cur>0){QZ.cur--;loadQ(QZ.cur);}else showToast('已是第一题');}
+function memorizeNext(){if(QZ.cur+1<QZ.qs.length){QZ.cur++;loadQ(QZ.cur);}else showToast('已经是最后一题');}
+function exitMemorizeMode(){QZ.memorizeMode=false;showResultPage();}
 
 function compareKey(){
   var raw=document.getElementById('answer-key').value.trim(), msg=document.getElementById('key-msg');
