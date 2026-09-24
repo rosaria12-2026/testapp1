@@ -503,6 +503,7 @@ function showBatchDetail(batchId) {
     +'<div class="row" style="gap:8px;flex-wrap:wrap">'
     +'<button class="btn primary" onclick="startBatchFrom(\''+batchId+'\','+resumeIdx+')">'+(allDone?'🔄 从头重做':'▶ 继续第'+(resumeIdx+1)+'题')+'</button>'
     +'<button class="btn" onclick="startBatchFrom(\''+batchId+'\',0)">从第1题开始</button>'
+    +'<button class="btn purple" onclick="startBatchMemorize(\''+batchId+'\')">📖 背题模式</button>'
     +'</div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
     +'<button class="btn small" style="background:#fff3cd;border:1px solid #f0d060;color:#8a6000" data-bid="'+batchId+'" onclick="startBatchFiltered(this.dataset.bid,\'excludeHf\')">'+(function(){var n=batch.questions.filter(function(q){return !qMatchesHf(q);}).length;return '🔍 排除高频词（剩'+n+'题）';})()+'</button>'
@@ -857,6 +858,8 @@ function goBackToBatch(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); if(
 
 // Auto-advance 700ms after picking — but ONLY if timer not stopped
 function pickOpt(l,btn){
+  // v181: 背题模式只读，点击选项绝不写入作答记录。
+  if(QZ.memorizeMode) return;
   QZ.sel=l;
   document.querySelectorAll('#opts .opt').forEach(function(b){b.classList.remove('sel');});
   btn.classList.add('sel');
@@ -1090,8 +1093,10 @@ function showResultPage(){
       +'<button class="btn purple" onclick="startResultMemorizeMode()">📖 背题模式</button>'
       +'<span class="sub">背题模式为单题页面，进入后每题直接显示正确答案，不改作答记录。</span>';
     var firstCardForTools=resultPageForTools.querySelector('.card');
-    if(firstCardForTools) firstCardForTools.parentNode.insertBefore(studyTools,firstCardForTools.nextSibling);
-    else resultPageForTools.insertBefore(studyTools,resultPageForTools.firstChild);
+    if(firstCardForTools){
+      studyTools.style.margin='14px 0 0 0';
+      firstCardForTools.appendChild(studyTools);
+    } else resultPageForTools.insertBefore(studyTools,resultPageForTools.firstChild);
   }
 
   // For selected Wrong/DK review sessions, offer one-click copy of only the questions missed THIS time.
@@ -1187,6 +1192,19 @@ function fallbackCopyText(txt){
   var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
   document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
 }
+function startBatchMemorize(batchId){
+  var batch=null;
+  for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}}
+  if(!batch||!batch.questions||!batch.questions.length){showToast('没有可背的题目');return;}
+  var tMax=0;
+  QZ={batch:batch,qs:batch.questions,ans:(batch.progress&&batch.progress.answers?batch.progress.answers.slice():new Array(batch.questions.length).fill(null)),
+    dk:(batch.progress&&batch.progress.dk?JSON.parse(JSON.stringify(batch.progress.dk)):{}),cur:0,sel:null,tmr:null,tLeft:0,tMax:tMax,
+    paused:false,stopped:true,_autoNext:null,returnToBatchId:batchId,memorizeMode:true};
+  document.getElementById('q-batch').textContent=batch.name+' · 背题模式';
+  document.getElementById('q-total').textContent=batch.questions.length;
+  navTo('quiz');loadQ(0);showToast('📖 背题模式：每题自动显示正确答案，不记录作答');
+}
+
 function startResultMemorizeMode(){
   if(!QZ||!QZ.qs||!QZ.qs.length){showToast('没有可背的题目');return;}
   clearInterval(QZ.tmr);clearTimeout(QZ._autoNext);
