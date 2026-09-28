@@ -629,7 +629,7 @@ function showAttemptCompare(batchId){
   var batch=DB.batches.find(function(b){return b.id===batchId;}); if(!batch)return;
   var p=batch.progress||{}, first=p.firstAnswers||[], second=p.attemptNo===2?(p.answers||[]):(p.secondAnswers||[]);
   if(!first.some(Boolean)){showToast('还没有第一次作答记录');return;} if(!second.some(Boolean)){showToast('还没有第二次作答记录');return;}
-  var html='<div class="card"><div class="row"><button class="btn" onclick="showBatchDetail(\''+batchId+'\')">← 返回批次</button><div class="title spacer">第一次 vs 第二次</div></div><div class="sub">'+esc(batch.name)+'</div></div>'
+  var html='<div class="card"><div class="row"><button class="btn" onclick="showBatchDetail(\''+batchId+'\')">← 返回批次</button><div class="title spacer">📊 第一次 vs 第二次答案逐题对比</div></div><div class="sub">'+esc(batch.name)+'</div></div>'
     +'<div class="card" style="padding:0;overflow:hidden"><div class="tablewrap" style="margin:0"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f8f7f3"><th>题号</th><th style="text-align:left">题目</th><th>第一次</th><th>第二次</th><th>正确</th><th>变化</th></tr></thead><tbody>';
   batch.questions.forEach(function(q,i){
     var a=first[i],b=second[i],ca=q.answer?String(q.answer).toUpperCase():'',a1=a&&a!=='skip'?String(a).toUpperCase():'—',b1=b&&b!=='skip'?String(b).toUpperCase():'—';
@@ -787,6 +787,7 @@ function startBatchFrom(batchId, fromIdx){
 }
 
 function loadQ(i){
+  v186KillTimer(); // v186: kill prior question timer
   clearInterval(QZ.tmr); clearTimeout(QZ._autoNext);
   QZ.stopped=false; QZ.paused=false;
   var q = QZ.qs[i];
@@ -836,7 +837,10 @@ function loadQ(i){
   if(QZ.memorizeMode){
     clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); QZ.tmr=null; QZ.stopped=true; QZ.paused=false;
     var timerEl=document.getElementById('timer');
-    if(timerEl){timerEl.textContent='📖 手动';timerEl.className='timer spacer paused';}
+    if(timerEl){
+      timerEl.style.minWidth='118px';timerEl.style.width='118px';timerEl.style.textAlign='center';timerEl.style.flex='0 0 118px';
+      timerEl.textContent='📖 手动';timerEl.className='timer spacer paused';
+    }
   } else { startTimer(); }
   var bsBtn=document.getElementById('back-to-search-btn');
   if(bsBtn) bsBtn.style.display=(QZ.batch&&QZ.batch._isTemp)?'inline-block':'none';
@@ -955,7 +959,8 @@ function pickOpt(l,btn){
     return; // don't auto-advance
   }
   if(!QZ.stopped){
-    QZ._autoNext = setTimeout(function(){
+    if(QZ._autoNext){clearTimeout(QZ._autoNext);QZ._autoNext=null;}
+  QZ._autoNext = setTimeout(function(){
       if(QZ.sel===l){ clearInterval(QZ.tmr); advanceQ(); }
     },700);
   }
@@ -994,8 +999,15 @@ function autoSave(i,ans){
 // ═══════════════════════════════════════════════════════
 // TIMER — click once to pause, click again to stop (no auto-jump)
 // ═══════════════════════════════════════════════════════
+// v186 — single-instance timer lifecycle
+function v186KillTimer(){
+  if(QZ.tmr){ clearInterval(QZ.tmr); QZ.tmr=null; }
+  if(QZ._autoNext){ clearTimeout(QZ._autoNext); QZ._autoNext=null; }
+}
 function startTimer(){
-  var el = document.getElementById('timer');
+  var el = document.getElementById('timer'); if(!el) return;
+  v186KillTimer();
+  el.style.minWidth='118px'; el.style.width='118px'; el.style.textAlign='center'; el.style.flex='0 0 118px';
   if(QZ.tMax===0){ el.textContent='∞'; el.className='timer spacer'; return; }
   QZ.tLeft=QZ.tMax; QZ.stopped=false; QZ.paused=false; updTimer();
   QZ.tmr = setInterval(function(){
@@ -1093,6 +1105,7 @@ function commitResults(){
 // RESULT PAGE
 // ═══════════════════════════════════════════════════════
 function showResultPage(){
+  v186KillTimer(); // v186: result page has no live quiz timer
   var batch=QZ.batch;
   document.getElementById('result-batch').textContent=batch.name;
   var withAns=QZ.qs.filter(function(q){return !!q.answer;}).length, correct=0, wrong=0, dkCount=0;
@@ -1161,8 +1174,19 @@ function showResultPage(){
     var studyTools=document.createElement('div');
     studyTools.id='result-study-tools';
     studyTools.style.cssText='margin:10px 0;padding:10px 12px;background:#f7f4ec;border:1px solid #ddd6c8;border-radius:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+    var compareBtn='';
+    var compareBatchId=QZ.returnToBatchId || (QZ.batch&&QZ.batch.id) || '';
+    var compareBatch=null;
+    if(compareBatchId){
+      for(var cb=0;cb<DB.batches.length;cb++){if(DB.batches[cb].id===compareBatchId){compareBatch=DB.batches[cb];break;}}
+    }
+    if(compareBatch && compareBatch.progress && compareBatch.progress.firstAnswers &&
+       compareBatch.progress.firstAnswers.some(function(a){return a!=null&&a!=='';})){
+      compareBtn='<button class="btn" style="background:#f3efff;border:1px solid #bca7ed;color:#5b3d95;font-weight:700" onclick="showAttemptCompare(\''+compareBatchId+'\')">⇄ 第一次 vs 第二次答案</button>';
+    }
     studyTools.innerHTML='<button class="btn blue" onclick="copyResultQuestions(\'wrong\')">📋 一键复制错题（'+wrong+'）</button>'
       +'<button class="btn" onclick="copyResultQuestions(\'wrongdk\')">📋 错题＋不会题（'+countResultWrongDK()+'）</button>'
+      +compareBtn
       +'<button class="btn purple" onclick="startResultMemorizeMode()">📖 背题模式</button>'
       +'<span class="sub">背题模式为单题页面，进入后每题直接显示正确答案，不改作答记录。</span>';
     var firstCardForTools=resultPageForTools.querySelector('.card');
@@ -1195,9 +1219,9 @@ function showResultPage(){
   } else {
     document.getElementById('key-msg').textContent='';
   }
-  // Add back-to-batch button — only once, remove old one first
+  // v184: build result completion banner synchronously — no delayed insertion/layout jump.
   var batchId = QZ.returnToBatchId;
-  setTimeout(function(){
+  (function(){
     // Remove any previous banners (prevents duplicates)
     var old = document.getElementById('result-done-banner');
     if(old) old.parentNode.removeChild(old);
@@ -1228,8 +1252,18 @@ function showResultPage(){
     var firstCard = r.querySelector('.card');
     if(firstCard) firstCard.parentNode.insertBefore(btn, firstCard.nextSibling);
     else r.insertBefore(btn, r.firstChild);
-  },50);
-  navTo('result');
+  })();
+
+  // v184: entering result for the first time may go to top; re-rendering an already
+  // visible result page (annotation edits, answer-key checks, etc.) preserves scroll.
+  var resultWasActive=document.getElementById('result')&&document.getElementById('result').classList.contains('active');
+  var keepResultY=resultWasActive?window.scrollY:0;
+  if(resultWasActive){
+    // Do not call navTo/showPage: showPage always scrolls to top.
+    requestAnimationFrame(function(){ window.scrollTo(0,keepResultY); });
+  } else {
+    navTo('result');
+  }
 }
 
 function resultQuestionIndexes(mode){
