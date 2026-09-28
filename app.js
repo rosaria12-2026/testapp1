@@ -497,13 +497,15 @@ function showBatchDetail(batchId) {
     +'<button class="btn" onclick="navBack()">← 返回</button>'
     +'<div class="title spacer" style="margin-left:8px">'+esc(batch.name)+'</div>'
     +'<button class="btn small" onclick="renameBatch(\''+batchId+'\')">✏️ 改名</button>'
+    +'<button class="btn small blue" onclick="openReimportBatch(\''+batchId+'\')">🔄 重新导入题目</button>'
     +'<button class="btn small red" onclick="deleteBatch(\''+batchId+'\')">🗑 删除批次</button>'
     +'</div>'
     +'<div class="sub" style="margin:6px 0">共 '+batch.questions.length+' 题 · 已答 '+done+' ('+prog+'%) · 点任意行从该题开始</div>'
     +'<div class="row" style="gap:8px;flex-wrap:wrap">'
     +'<button class="btn primary" onclick="startBatchFrom(\''+batchId+'\','+resumeIdx+')">'+(allDone?'🔄 从头重做':'▶ 继续第'+(resumeIdx+1)+'题')+'</button>'
     +'<button class="btn" onclick="startBatchFrom(\''+batchId+'\',0)">从第1题开始</button>'
-    +'<button class="btn purple" onclick="startBatchMemorize(\''+batchId+'\')">📖 背题模式</button>'
+    +'<button class="btn" style="background:#eef6ff;border:1px solid #9fc7ee;color:#245b8f" onclick="startSecondAttempt(\''+batchId+'\')">② 第二次做</button>'
+    +'<button class="btn" style="background:#f3efff;border:1px solid #c5b5ef;color:#62439a" onclick="showAttemptCompare(\''+batchId+'\')">⇄ 对比两次答案</button>'
     +'</div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
     +'<button class="btn small" style="background:#fff3cd;border:1px solid #f0d060;color:#8a6000" data-bid="'+batchId+'" onclick="startBatchFiltered(this.dataset.bid,\'excludeHf\')">'+(function(){var n=batch.questions.filter(function(q){return !qMatchesHf(q);}).length;return '🔍 排除高频词（剩'+n+'题）';})()+'</button>'
@@ -570,6 +572,72 @@ function showBatchDetail(batchId) {
   if(!dp){ dp=document.createElement('section'); dp.id='batch-detail'; dp.className='page'; document.querySelector('main').appendChild(dp); }
   dp.innerHTML = html;
   navTo('batch-detail');
+}
+
+
+// ═══════════════════════════════════════════════════════
+// v183 — 重新导入同一批次：更新题目/选项/标准答案，保留作答历史
+// ═══════════════════════════════════════════════════════
+function openReimportBatch(batchId){
+  var batch=DB.batches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  var old=document.getElementById('reimport-batch-modal'); if(old)old.remove();
+  var wrap=document.createElement('div'); wrap.id='reimport-batch-modal';
+  wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:5vh 12px;overflow:auto';
+  wrap.innerHTML='<div style="background:#fff;width:min(820px,96vw);border-radius:12px;padding:16px">'
+    +'<div style="font-size:18px;font-weight:700;margin-bottom:6px">🔄 重新导入：'+esc(batch.name)+'</div>'
+    +'<div style="font-size:13px;line-height:1.55;color:#555;margin-bottom:10px">粘贴修正后的整批题目。只更新题目、选项和标准答案；<b>原来的作答历史不会删除</b>。系统优先按题号匹配。</div>'
+    +'<textarea id="reimport-batch-raw" placeholder="粘贴修正后的完整题目……" style="width:100%;height:48vh;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"></textarea>'
+    +'<div id="reimport-batch-msg" style="font-size:12px;color:#777;margin-top:7px"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn" onclick="document.getElementById(\'reimport-batch-modal\').remove()">取消</button>'
+    +'<button class="btn primary" data-bid="'+batchId+'" onclick="applyReimportBatch(this.dataset.bid)">确认重新导入</button></div></div>';
+  document.body.appendChild(wrap);
+}
+function applyReimportBatch(batchId){
+  var batch=DB.batches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  var raw=(document.getElementById('reimport-batch-raw')||{}).value||''; raw=raw.trim();
+  var msg=document.getElementById('reimport-batch-msg');
+  if(!raw){if(msg)msg.textContent='请先粘贴修正后的题目';return;}
+  var fresh=parseQ(raw); if(!fresh.length){if(msg)msg.textContent='没有识别到题目，请检查格式';return;}
+  var oldQs=batch.questions||[], p=batch.progress||{}, oldAns=(p.answers||[]).slice(), oldDk=p.dk||{};
+  // 永久保存第一次答案快照；以后重新导入不覆盖它
+  if(!p.firstAnswers) p.firstAnswers=oldAns.slice();
+  var oldByNum={}; oldQs.forEach(function(q,i){if(q&&q.num!=null&&oldByNum[String(q.num)]==null)oldByNum[String(q.num)]={q:q,i:i};});
+  var newAns=new Array(fresh.length).fill(null), newFirst=new Array(fresh.length).fill(null), newDk={}, matched=0;
+  fresh.forEach(function(nq,ni){
+    var hit=nq.num!=null?oldByNum[String(nq.num)]:null;
+    if(!hit&&nq.num==null&&oldQs[ni])hit={q:oldQs[ni],i:ni};
+    if(!hit)return; matched++;
+    if(hit.q.id)nq.id=hit.q.id; // 保持批次内题目身份，笔记/星号等仍能关联
+    if(oldAns[hit.i]!=null)newAns[ni]=oldAns[hit.i];
+    var fa=(p.firstAnswers||[])[hit.i]; newFirst[ni]=fa!=null?fa:(oldAns[hit.i]!=null?oldAns[hit.i]:null);
+    if(oldDk[hit.i])newDk[ni]=true;
+  });
+  if(!confirm('识别 '+fresh.length+' 题，按题号匹配原题 '+matched+' 题。\n\n将更新题目/选项/标准答案，并保留匹配题目的历史答案。继续吗？'))return;
+  batch.questions=fresh;
+  batch.progress={idx:Math.min(p.idx||0,Math.max(0,fresh.length-1)),answers:newAns,dk:newDk,firstAnswers:newFirst,secondAnswers:p.secondAnswers||null,attemptNo:p.attemptNo||1};
+  saveDB(); var m=document.getElementById('reimport-batch-modal');if(m)m.remove(); showBatchDetail(batchId); showToast('✓ 题目已更新；历史答案保留',4000);
+}
+function startSecondAttempt(batchId){
+  var batch=DB.batches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  var p=batch.progress||{}, cur=(p.answers||[]).slice();
+  if(!p.firstAnswers)p.firstAnswers=cur.slice();
+  if(p.attemptNo===2&&cur.some(function(a){return a&&a!=='skip';}))p.secondAnswers=cur.slice();
+  p.answers=new Array(batch.questions.length).fill(null); p.dk={}; p.idx=0; p.attemptNo=2; batch.progress=p;
+  saveDB(); startBatchFrom(batchId,0);
+}
+function showAttemptCompare(batchId){
+  var batch=DB.batches.find(function(b){return b.id===batchId;}); if(!batch)return;
+  var p=batch.progress||{}, first=p.firstAnswers||[], second=p.attemptNo===2?(p.answers||[]):(p.secondAnswers||[]);
+  if(!first.some(Boolean)){showToast('还没有第一次作答记录');return;} if(!second.some(Boolean)){showToast('还没有第二次作答记录');return;}
+  var html='<div class="card"><div class="row"><button class="btn" onclick="showBatchDetail(\''+batchId+'\')">← 返回批次</button><div class="title spacer">第一次 vs 第二次</div></div><div class="sub">'+esc(batch.name)+'</div></div>'
+    +'<div class="card" style="padding:0;overflow:hidden"><div class="tablewrap" style="margin:0"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f8f7f3"><th>题号</th><th style="text-align:left">题目</th><th>第一次</th><th>第二次</th><th>正确</th><th>变化</th></tr></thead><tbody>';
+  batch.questions.forEach(function(q,i){
+    var a=first[i],b=second[i],ca=q.answer?String(q.answer).toUpperCase():'',a1=a&&a!=='skip'?String(a).toUpperCase():'—',b1=b&&b!=='skip'?String(b).toUpperCase():'—';
+    var aok=!!ca&&a1===ca,bok=!!ca&&b1===ca,chg=(a1==='—'||b1==='—')?'—':(!aok&&bok?'↑ 改对':(aok&&!bok?'↓ 改错':(a1===b1?'＝ 相同':'↔ 改选'))),bg=!aok&&bok?'#f0fff4':(aok&&!bok?'#fff5f5':'');
+    html+='<tr style="border-top:1px solid #eee;background:'+bg+'"><td style="padding:7px;text-align:center">'+(q.num||i+1)+'</td><td style="padding:7px;font-size:13px">'+esc(q.body)+'</td><td style="padding:7px;text-align:center">'+a1+'</td><td style="padding:7px;text-align:center">'+b1+'</td><td style="padding:7px;text-align:center;font-weight:700">'+(ca||'—')+'</td><td style="padding:7px;text-align:center">'+chg+'</td></tr>';
+  });
+  html+='</tbody></table></div></div>';
+  var dp=document.getElementById('attempt-compare');if(!dp){dp=document.createElement('section');dp.id='attempt-compare';dp.className='page';document.querySelector('main').appendChild(dp);}dp.innerHTML=html;navTo('attempt-compare');
 }
 
 function renameBatch(batchId){
@@ -764,21 +832,12 @@ function loadQ(i){
     hind.style.display='block';
   } else if(hind) hind.style.display='none';
   rebuildActions();
-  // v182 — 背题模式完全手动翻题：不启动计时器，不自动跳下一题。
+  // v183: memorize mode is manual-only; never start timer or auto-advance.
   if(QZ.memorizeMode){
-    clearInterval(QZ.tmr);
-    clearTimeout(QZ._autoNext);
-    QZ.tmr=null;
-    QZ.stopped=true;
-    QZ.paused=false;
+    clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); QZ.tmr=null; QZ.stopped=true; QZ.paused=false;
     var timerEl=document.getElementById('timer');
-    if(timerEl){
-      timerEl.textContent='📖 手动';
-      timerEl.className='timer spacer paused';
-    }
-  } else {
-    startTimer();
-  }
+    if(timerEl){timerEl.textContent='📖 手动';timerEl.className='timer spacer paused';}
+  } else { startTimer(); }
   var bsBtn=document.getElementById('back-to-search-btn');
   if(bsBtn) bsBtn.style.display=(QZ.batch&&QZ.batch._isTemp)?'inline-block':'none';
   // Load annotation for this question
@@ -873,8 +932,7 @@ function goBackToBatch(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); if(
 
 // Auto-advance 700ms after picking — but ONLY if timer not stopped
 function pickOpt(l,btn){
-  // v181: 背题模式只读，点击选项绝不写入作答记录。
-  if(QZ.memorizeMode) return;
+  if(QZ.memorizeMode) return; // v183: 背题模式只读，不写作答记录
   QZ.sel=l;
   document.querySelectorAll('#opts .opt').forEach(function(b){b.classList.remove('sel');});
   btn.classList.add('sel');
@@ -1108,10 +1166,8 @@ function showResultPage(){
       +'<button class="btn purple" onclick="startResultMemorizeMode()">📖 背题模式</button>'
       +'<span class="sub">背题模式为单题页面，进入后每题直接显示正确答案，不改作答记录。</span>';
     var firstCardForTools=resultPageForTools.querySelector('.card');
-    if(firstCardForTools){
-      studyTools.style.margin='14px 0 0 0';
-      firstCardForTools.appendChild(studyTools);
-    } else resultPageForTools.insertBefore(studyTools,resultPageForTools.firstChild);
+    if(firstCardForTools) firstCardForTools.parentNode.insertBefore(studyTools,firstCardForTools.nextSibling);
+    else resultPageForTools.insertBefore(studyTools,resultPageForTools.firstChild);
   }
 
   // For selected Wrong/DK review sessions, offer one-click copy of only the questions missed THIS time.
@@ -1207,19 +1263,6 @@ function fallbackCopyText(txt){
   var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
   document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
 }
-function startBatchMemorize(batchId){
-  var batch=null;
-  for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}}
-  if(!batch||!batch.questions||!batch.questions.length){showToast('没有可背的题目');return;}
-  var tMax=0;
-  QZ={batch:batch,qs:batch.questions,ans:(batch.progress&&batch.progress.answers?batch.progress.answers.slice():new Array(batch.questions.length).fill(null)),
-    dk:(batch.progress&&batch.progress.dk?JSON.parse(JSON.stringify(batch.progress.dk)):{}),cur:0,sel:null,tmr:null,tLeft:0,tMax:tMax,
-    paused:false,stopped:true,_autoNext:null,returnToBatchId:batchId,memorizeMode:true};
-  document.getElementById('q-batch').textContent=batch.name+' · 背题模式';
-  document.getElementById('q-total').textContent=batch.questions.length;
-  navTo('quiz');loadQ(0);showToast('📖 背题模式：每题自动显示正确答案，不记录作答');
-}
-
 function startResultMemorizeMode(){
   if(!QZ||!QZ.qs||!QZ.qs.length){showToast('没有可背的题目');return;}
   clearInterval(QZ.tmr);clearTimeout(QZ._autoNext);
