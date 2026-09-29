@@ -1281,8 +1281,14 @@ function countResultWrongDK(){return resultQuestionIndexes('wrongdk').length;}
 function copyResultQuestions(mode){
   var ids=resultQuestionIndexes(mode);
   if(!ids.length){showToast(mode==='wrong'?'本次没有错题':'本次没有错题或不会题');return;}
-  var txt=ids.map(function(i,n){
-    var q=QZ.qs[i],my=QZ.ans&&QZ.ans[i],s=(n+1)+'. '+q.body+'\n';
+  var txt=ids.map(function(i){
+    var q=QZ.qs[i],my=QZ.ans&&QZ.ans[i];
+    // v187: preserve the question's ORIGINAL imported number, not its position in the copied list.
+    var originalNum=(q.num!==null&&q.num!==undefined&&q.num!=='')?q.num:(i+1);
+    var s='';
+    // v187: shared/case questions must carry their background so every copied item is self-contained.
+    if(q.caseText) s+='【共用题背景】\n'+q.caseText+'\n\n';
+    s+=originalNum+'. '+q.body+'\n';
     (q.opts||[]).forEach(function(o){s+=o.letter+'. '+o.text+'\n';});
     s+='我的答案：'+(my&&my!=='skip'?my:'—')+'\n正确答案：'+(q.answer||'未设置');
     if(QZ.dk&&QZ.dk[i])s+='\n标记：不会';
