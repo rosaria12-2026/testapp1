@@ -462,6 +462,7 @@ function startBatchFiltered(batchId, mode){
     questions:qs,
     progress:{idx:0,answers:new Array(qs.length).fill(null),dk:{},_committed:{}}
   };
+  v186KillTimer();
   QZ={batch:filteredBatch,qs:qs,cur:0,ans:new Array(qs.length).fill(null),
     dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false};
   QZ.returnToBatchId=batchId;
@@ -774,6 +775,8 @@ function gotoQuestion(batchId){
 }
 
 function startBatchFrom(batchId, fromIdx){
+  // v188: invalidate the OLD batch timer before QZ is replaced.
+  v186KillTimer();
   var batch=null; for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}} if(!batch)return;
   var tMax = parseInt(document.getElementById('limit').value)||60;
   var p = batch.progress, prevAns = p.answers[fromIdx];
@@ -1000,48 +1003,94 @@ function autoSave(i,ans){
 // TIMER — click once to pause, click again to stop (no auto-jump)
 // ═══════════════════════════════════════════════════════
 // v186 — single-instance timer lifecycle
+// v188 — timer generation guard.
+// The old bug happened because QZ can be replaced when starting another batch.
+// An older interval then loses its handle but still reads/writes the NEW global QZ.
+// This generation token makes every stale interval self-destruct before touching QZ.
+var V188_TIMER_GEN=0;
+
 function v186KillTimer(){
-  if(QZ.tmr){ clearInterval(QZ.tmr); QZ.tmr=null; }
-  if(QZ._autoNext){ clearTimeout(QZ._autoNext); QZ._autoNext=null; }
+  V188_TIMER_GEN++;
+  if(QZ && QZ.tmr){ clearInterval(QZ.tmr); QZ.tmr=null; }
+  if(QZ && QZ._autoNext){ clearTimeout(QZ._autoNext); QZ._autoNext=null; }
 }
-function startTimer(){
-  var el = document.getElementById('timer'); if(!el) return;
+
+function v188RunTimer(resetTime){
+  var el=document.getElementById('timer'); if(!el)return;
   v186KillTimer();
-  el.style.minWidth='118px'; el.style.width='118px'; el.style.textAlign='center'; el.style.flex='0 0 118px';
-  if(QZ.tMax===0){ el.textContent='∞'; el.className='timer spacer'; return; }
-  QZ.tLeft=QZ.tMax; QZ.stopped=false; QZ.paused=false; updTimer();
-  QZ.tmr = setInterval(function(){
-    if(QZ.paused||QZ.stopped) return;
-    QZ.tLeft--; updTimer();
-    if(QZ.tLeft<=0){ clearInterval(QZ.tmr); if(!QZ.stopped){ autoSave(QZ.cur,QZ.sel||'skip'); advanceQ(); } }
+  var myGen=V188_TIMER_GEN;
+  if(resetTime!==false) QZ.tLeft=QZ.tMax;
+  QZ.stopped=false; QZ.paused=false;
+  updTimer();
+
+  var myInterval=setInterval(function(){
+    // CRITICAL: stale timers must die BEFORE reading/writing the current QZ.
+    if(myGen!==V188_TIMER_GEN){
+      clearInterval(myInterval);
+      return;
+    }
+    if(QZ.paused||QZ.stopped)return;
+    QZ.tLeft--;
+    updTimer();
+    if(QZ.tLeft<=0){
+      clearInterval(myInterval);
+      if(QZ.tmr===myInterval)QZ.tmr=null;
+      // Invalidate this generation before navigation creates the next timer.
+      V188_TIMER_GEN++;
+      if(!QZ.stopped){
+        autoSave(QZ.cur,QZ.sel||'skip');
+        advanceQ();
+      }
+    }
   },1000);
+  QZ.tmr=myInterval;
 }
-function updTimer(){
-  var el = document.getElementById('timer'); if(!el) return;
-  if(QZ.stopped){ el.textContent='⏹ 点击重启'; el.className='timer spacer paused'; return; }
-  var pct=QZ.tLeft/QZ.tMax;
-  el.textContent = QZ.paused?('⏸ '+QZ.tLeft+' 再点停止'):QZ.tLeft;
-  el.className = 'timer spacer'+(QZ.paused?' paused':pct>.5?' green':pct>.2?' orange':' red');
-}
-document.getElementById('timer').addEventListener('click',function(){
-  if(QZ.tMax===0) return;
-  if(QZ.stopped){
-    QZ.stopped=false; QZ.paused=false; QZ.tLeft=QZ.tMax; updTimer();
-    clearInterval(QZ.tmr);
-    QZ.tmr=setInterval(function(){ if(QZ.paused||QZ.stopped)return; QZ.tLeft--;updTimer(); if(QZ.tLeft<=0){clearInterval(QZ.tmr);if(!QZ.stopped){autoSave(QZ.cur,QZ.sel||'skip');advanceQ();}} },1000);
-    showToast('计时重新开始'); return;
+
+function startTimer(){
+  var el=document.getElementById('timer'); if(!el)return;
+  el.style.minWidth='118px';el.style.width='118px';el.style.textAlign='center';el.style.flex='0 0 118px';
+  if(QZ.tMax===0){
+    v186KillTimer();
+    el.textContent='∞';el.className='timer spacer';
+    return;
   }
-  if(!QZ.paused){ QZ.paused=true; updTimer(); showToast('⏸ 已暂停，再点彻底停止（不自动跳题）'); }
-  else { QZ.stopped=true; QZ.paused=false; clearTimeout(QZ._autoNext); clearInterval(QZ.tmr); updTimer(); showToast('⏹ 计时已停止，不会自动跳题'); }
+  v188RunTimer(true);
+}
+
+function updTimer(){
+  var el=document.getElementById('timer');if(!el)return;
+  if(QZ.stopped){el.textContent='⏹ 点击重启';el.className='timer spacer paused';return;}
+  var pct=QZ.tMax?QZ.tLeft/QZ.tMax:1;
+  el.textContent=QZ.paused?('⏸ '+QZ.tLeft+' 再点停止'):QZ.tLeft;
+  el.className='timer spacer'+(QZ.paused?' paused':pct>.5?' green':pct>.2?' orange':' red');
+}
+
+document.getElementById('timer').addEventListener('click',function(){
+  if(QZ.tMax===0)return;
+  if(QZ.stopped){
+    v188RunTimer(true);
+    showToast('计时重新开始');
+    return;
+  }
+  if(!QZ.paused){
+    QZ.paused=true;updTimer();
+    showToast('⏸ 已暂停，再点彻底停止（不自动跳题）');
+  }else{
+    QZ.stopped=true;QZ.paused=false;
+    v186KillTimer();
+    QZ.stopped=true; // kill helper only invalidates timers; keep UI state stopped
+    updTimer();
+    showToast('⏹ 计时已停止，不会自动跳题');
+  }
 });
 
-function nextQ(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); autoSave(QZ.cur,QZ.sel||'skip'); advanceQ(); }
-function skipQ(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); autoSave(QZ.cur,'skip'); QZ.sel=null; advanceQ(); }
-function prevQ(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); if(QZ.sel) autoSave(QZ.cur,QZ.sel); if(QZ.cur>0){QZ.cur--;loadQ(QZ.cur);}else showToast('已是第一题'); }
+function nextQ(){ v186KillTimer(); autoSave(QZ.cur,QZ.sel||'skip'); advanceQ(); }
+function skipQ(){ v186KillTimer(); autoSave(QZ.cur,'skip'); QZ.sel=null; advanceQ(); }
+function prevQ(){ v186KillTimer(); if(QZ.sel) autoSave(QZ.cur,QZ.sel); if(QZ.cur>0){QZ.cur--;loadQ(QZ.cur);}else showToast('已是第一题'); }
 function toggleDK(){ QZ.dk[QZ.cur]=!QZ.dk[QZ.cur]; var db=document.getElementById('dkbtn'); if(db) db.classList.toggle('on',!!QZ.dk[QZ.cur]); autoSave(QZ.cur,QZ.sel||QZ.ans[QZ.cur]||'skip'); showToast(QZ.dk[QZ.cur]?'已标记「不会」':'已取消标记'); }
 function advanceQ(){ if(QZ.cur+1>=QZ.qs.length){finishQuiz();return;} QZ.cur++; loadQ(QZ.cur); }
 function finishQuiz(){
-  clearInterval(QZ.tmr); clearTimeout(QZ._autoNext);
+  v186KillTimer();
   for(var i=0;i<QZ.ans.length;i++){if(!QZ.ans[i])QZ.ans[i]='skip';}
   autoSave(QZ.cur,QZ.ans[QZ.cur]); commitResults();
   // Show result then offer to go back to batch
