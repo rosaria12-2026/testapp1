@@ -241,14 +241,23 @@ function v190IsMulti(q){return v190NormAnswer(q&&q.answer).length>1;}
 function v190AnswerEqual(a,b){return v190NormAnswer(a)===v190NormAnswer(b);}
 function v190AnswerHas(ans,letter){return v190NormAnswer(ans).indexOf(String(letter||'').toUpperCase())>=0;}
 
+// v191 parser self-test (read-only; does not touch DB)
+function v191ParserSelfTest(){
+  var sample=['1. 测试八选项','A. 甲','B. 乙','C. 丙','D. 丁','E. 戊','F. 己','G. 庚','H. 辛','答案：B,D,F,H',
+              '2. 测试六选项','A：一','B：二','C：三','D：四','E：五','F：六','答案：AF'].join('\n');
+  var q=parseQ(sample);
+  return q.length===2 && q[0].opts.length===8 && q[0].opts[7].letter==='H'
+    && v190AnswerEqual(q[0].answer,'BDFH') && q[1].opts.length===6 && v190AnswerEqual(q[1].answer,'AF');
+}
+
 function parseQ(raw) {
   raw = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-65248);})
     .replace(/）/g,')').replace(/（/g,'(').replace(/。/g,'.').replace(/　/g,' ');
   var lines = raw.split('\n').map(function(l){return l.trim();});
   var qRe   = /^[(\[]?\s*(\d{1,4})\s*[).、]\s*(.*)/;
-  var optRe = /^([A-Ha-h])\s*[).、：:]\s*(.+)/;
-  var inRe  = /([A-Ha-h])\s*[).]\s*(.+?)(?=\s{2,}[A-Ha-h]\s*[).]|$)/g;
+  var optRe = /^([A-Ha-h])\s*(?:[).、：:]|[-–—])\s*(.+)/;
+  var inRe  = /(?:^|\s{2,})([A-Ha-h])\s*(?:[).、：:]|[-–—])\s*(.+?)(?=\s{2,}[A-Ha-h]\s*(?:[).、：:]|[-–—])|$)/g;
   var ansRe = /[\u3010\[]?[\u7b54\u6848Aa][\u6848nswer]*[\uff1a:]\s*([A-Ha-h](?:\s*[,，、/|+\s]\s*[A-Ha-h])*)[\u3011\]]?/i;
   // Case keywords
   var caseKw = /根据以下|根据下列|以下病例|基于以下|以下案例|以下情况|病案|following case|following scenario/i;
@@ -1952,7 +1961,7 @@ function renderNotes(){
       html+='<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;margin-bottom:8px;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(note.content)+'</div>';
       if(note.opts&&note.opts.length){
         html+='<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px">';
-        note.opts.forEach(function(o){ var cls=(o.letter===(note.answer||''))?'background:#e8f5ed;color:#2e7d52;font-weight:600':''; html+='<div style="font-size:12px;padding:3px 8px;border-radius:4px;'+cls+'">'+o.letter+'. '+esc(o.text)+(o.letter===note.answer?' ✓':'')+'</div>'; });
+        note.opts.forEach(function(o){ var cls=(v190AnswerHas(note.answer,o.letter))?'background:#e8f5ed;color:#2e7d52;font-weight:600':''; html+='<div style="font-size:12px;padding:3px 8px;border-radius:4px;'+cls+'">'+o.letter+'. '+esc(o.text)+(v190AnswerHas(note.answer,o.letter)?' ✓':'')+'</div>'; });
         html+='</div>';
       }
       // AI解析区域 — 显示完整内容，可滚动，有「重新解析」按钮
@@ -2112,7 +2121,7 @@ function exportNotesPDF(){
     body+='<div class="card"><p><span class="tag" style="background:#e8e4f8">'+typeLabel+'</span><b>'+esc(note.title)+'</b></p>';
     if(note.type==='question'){
       body+='<div class="q">'+esc(note.content)+'</div>';
-      if(note.opts) note.opts.forEach(function(o){body+='<div class="opt '+(o.letter===(note.answer||'')?'oc':'')+'">'+o.letter+'. '+esc(o.text)+(o.letter===note.answer?' ✓':'')+'</div>';});
+      if(note.opts) note.opts.forEach(function(o){body+='<div class="opt '+(v190AnswerHas(note.answer,o.letter)?'oc':'')+'">'+o.letter+'. '+esc(o.text)+(v190AnswerHas(note.answer,o.letter)?' ✓':'')+'</div>';});
       if(note.analysis) body+='<div class="ai"><b>AI解析：</b>'+esc(note.analysis)+'</div>';
     } else { body+='<div class="q">'+esc(note.content)+'</div>'; }
     body+='</div>';
@@ -2295,7 +2304,7 @@ function rvItemHTML(entry,type){
     +(q.caseText?'<div style="background:#fffbe6;border:1px solid #f0d060;border-radius:5px;padding:7px;margin-bottom:7px;font-size:12px;white-space:pre-wrap">📋 '+esc(q.caseText)+'</div>':'')
     +'<div style="font-size:14px;line-height:1.8;white-space:pre-wrap;margin-bottom:10px">'+esc(q.body)+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">'
-    +q.opts.map(function(o){var cls=(o.letter===(q.answer||''))?'background:#e8f5ed;color:#2e7d52;font-weight:600':(o.letter===myAns?'background:#fdeaea;color:#b83232':'');return '<div style="font-size:13px;padding:5px 8px;border-radius:4px;'+cls+'">'+o.letter+'. '+esc(o.text)+(o.letter===q.answer?' ✓':'')+(o.letter===myAns&&o.letter!==q.answer?' ← 我选':'')+'</div>';}).join('')
+    +q.opts.map(function(o){var cls=(v190AnswerHas(q.answer,o.letter))?'background:#e8f5ed;color:#2e7d52;font-weight:600':(v190AnswerHas(myAns,o.letter)?'background:#fdeaea;color:#b83232':'');return '<div style="font-size:13px;padding:5px 8px;border-radius:4px;'+cls+'">'+o.letter+'. '+esc(o.text)+(v190AnswerHas(q.answer,o.letter)?' ✓':'')+(v190AnswerHas(myAns,o.letter)&&!v190AnswerHas(q.answer,o.letter)?' ← 我选':'')+'</div>';}).join('')
     +'</div><div style="display:flex;gap:6px"><button class="btn small blue" onclick="rvAnalyze(\''+q.id+'\')">🔍 AI解析</button><button class="btn small" onclick="rvSimilar(\''+q.id+'\')">✨ 同类题</button></div>'
     +'<div id="rv-ai-'+q.id+'"></div>'
     +'</div></div>';
@@ -2365,7 +2374,7 @@ function generateReviewPDF(entries){
     out+='<div class="qn">#'+(q.num||'?')+' | '+esc(e.batchName||'')+(isW?' | ✗ 错误':' | ❓ 不会')+'</div>';
     if(q.caseText) out+='<div style="background:#fffbe6;border:1px solid #f0d060;padding:6px;border-radius:4px;margin-bottom:6px;font-size:9.5pt;white-space:pre-wrap">📋 '+esc(q.caseText)+'</div>';
     out+='<div class="qt">'+esc(q.body)+'</div>';
-    q.opts.forEach(function(o){ var cls=(o.letter===(q.answer||''))?'oc':(o.letter===my?'ow':''); out+='<span class="opt '+cls+'">'+o.letter+'. '+esc(o.text)+(o.letter===q.answer?' ✓':'')+(o.letter===my&&o.letter!==q.answer?' ←我选':'')+'</span>'; });
+    q.opts.forEach(function(o){ var cls=(v190AnswerHas(q.answer,o.letter))?'oc':(o.letter===my?'ow':''); out+='<span class="opt '+cls+'">'+o.letter+'. '+esc(o.text)+(v190AnswerHas(q.answer,o.letter)?' ✓':'')+(o.letter===my&&!v190AnswerHas(q.answer,o.letter)?' ←我选':'')+'</span>'; });
     if(an) out+='<div class="ai"><b>🤖 AI解析</b><br>'+esc(an)+'</div>';
     else out+='<div style="padding:6px;border:1px dashed #ddd;border-radius:4px;font-size:9.5pt;color:#aaa;margin-top:6px">（暂无AI解析）</div>';
     out+='</div>'; body+=out;
