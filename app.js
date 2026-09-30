@@ -230,15 +230,26 @@ function showToast(msg, dur) {
 // ═══════════════════════════════════════════════════════
 // PARSER
 // ═══════════════════════════════════════════════════════
+// v190 — supports A-H options and multiple correct answers.
+function v190NormAnswer(v){
+  var a=String(v||'').toUpperCase().match(/[A-H]/g)||[], seen={};
+  a=a.filter(function(x){if(seen[x])return false;seen[x]=1;return true;});
+  a.sort();
+  return a.join('');
+}
+function v190IsMulti(q){return v190NormAnswer(q&&q.answer).length>1;}
+function v190AnswerEqual(a,b){return v190NormAnswer(a)===v190NormAnswer(b);}
+function v190AnswerHas(ans,letter){return v190NormAnswer(ans).indexOf(String(letter||'').toUpperCase())>=0;}
+
 function parseQ(raw) {
   raw = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-65248);})
     .replace(/）/g,')').replace(/（/g,'(').replace(/。/g,'.').replace(/　/g,' ');
   var lines = raw.split('\n').map(function(l){return l.trim();});
   var qRe   = /^[(\[]?\s*(\d{1,4})\s*[).、]\s*(.*)/;
-  var optRe = /^([A-Ea-e])\s*[).、：:]\s*(.+)/;
-  var inRe  = /([A-Ea-e])\s*[).]\s*(.+?)(?=\s{2,}[A-Ea-e]\s*[).]|$)/g;
-  var ansRe = /[\u3010\[]?[\u7b54\u6848Aa][\u6848nswer]*[\uff1a:]\s*([A-Ea-e])[\u3011\]]?/i;
+  var optRe = /^([A-Ha-h])\s*[).、：:]\s*(.+)/;
+  var inRe  = /([A-Ha-h])\s*[).]\s*(.+?)(?=\s{2,}[A-Ha-h]\s*[).]|$)/g;
+  var ansRe = /[\u3010\[]?[\u7b54\u6848Aa][\u6848nswer]*[\uff1a:]\s*([A-Ha-h](?:\s*[,，、/|+\s]\s*[A-Ha-h])*)[\u3011\]]?/i;
   // Case keywords
   var caseKw = /根据以下|根据下列|以下病例|基于以下|以下案例|以下情况|病案|following case|following scenario/i;
   // Range line: "208-215 基于以下病案：" — number range + case keyword
@@ -301,7 +312,7 @@ function parseQ(raw) {
     // Skip range headers and pure case keyword lines (already extracted above)
     if(l.match(rangeRe)){ while(i2<rawLines.length&&rawLines[i2]&&!rawLines[i2].match(qRe)&&!rawLines[i2].match(rangeRe)) i2++; continue; }
     if(caseKw.test(l)&&!l.match(qRe)){ while(i2<rawLines.length&&rawLines[i2]&&!rawLines[i2].match(qRe)&&!rawLines[i2].match(rangeRe)) i2++; continue; }
-    var am=l.match(ansRe); if(am&&curQ){curQ.answer=am[1].toUpperCase();continue;}
+    var am=l.match(ansRe); if(am&&curQ){curQ.answer=v190NormAnswer(am[1]);continue;}
     var qm=l.match(qRe);
     if(qm){
       var qnum=parseInt(qm[1]), qbody=qm[2].trim();
@@ -318,8 +329,8 @@ function parseQ(raw) {
     }
     if(!curQ) continue;
     // Format: "A：xxx B：xxx C：xxx" with Chinese colon — check FIRST
-    if(/[A-Ea-e]\s*[：:][^A-Ea-e]{1,30}[A-Ea-e]\s*[：:]/.test(l)){
-      var cnOptRe=/([A-Ea-e])\s*[：:]\s*(.+?)(?=\s*[A-Ea-e]\s*[：:]|$)/g;
+    if(/[A-Ha-h]\s*[：:][^A-Ha-h]{1,30}[A-Ha-h]\s*[：:]/.test(l)){
+      var cnOptRe=/([A-Ha-h])\s*[：:]\s*(.+?)(?=\s*[A-Ha-h]\s*[：:]|$)/g;
       var found2=[],m3; cnOptRe.lastIndex=0;
       while((m3=cnOptRe.exec(l))!==null){
         var txt=m3[2].trim(); if(txt) found2.push({letter:m3[1].toUpperCase(),text:txt});
@@ -327,7 +338,7 @@ function parseQ(raw) {
       if(found2.length>=2){curQ.opts.push.apply(curQ.opts,found2);continue;}
     }
     var om=l.match(optRe); if(om){curQ.opts.push({letter:om[1].toUpperCase(),text:om[2].trim()});continue;}
-    if(/[A-Ea-e]\s*[).]/.test(l)){
+    if(/[A-Ha-h]\s*[).]/.test(l)){
       var found=[],m2; inRe.lastIndex=0;
       while((m2=inRe.exec(l))!==null) found.push({letter:m2[1].toUpperCase(),text:m2[2].trim()});
       if(found.length>=2){curQ.opts.push.apply(curQ.opts,found);continue;}
@@ -540,7 +551,7 @@ function showBatchDetail(batchId) {
 
   batch.questions.forEach(function(q,i){
     var my=p.answers[i], hasAns=!!q.answer;
-    var ok=hasAns&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();
+    var ok=hasAns&&my&&my!=='skip'&&v190AnswerEqual(my,q.answer);
     var bad=hasAns&&my&&my!=='skip'&&!ok;
     var dk=!!(p.dk&&p.dk[i]);
     var isStar=!!DB.starMap[q.id];
@@ -632,7 +643,7 @@ function showAttemptCompare(batchId){
   var html='<div class="card"><div class="row"><button class="btn" onclick="showBatchDetail(\''+batchId+'\')">← 返回批次</button><div class="title spacer">📊 第一次 vs 第二次答案逐题对比</div></div><div class="sub">'+esc(batch.name)+'</div></div>'
     +'<div class="card" style="padding:0;overflow:hidden"><div class="tablewrap" style="margin:0"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f8f7f3"><th>题号</th><th style="text-align:left">题目</th><th>第一次</th><th>第二次</th><th>正确</th><th>变化</th></tr></thead><tbody>';
   batch.questions.forEach(function(q,i){
-    var a=first[i],b=second[i],ca=q.answer?String(q.answer).toUpperCase():'',a1=a&&a!=='skip'?String(a).toUpperCase():'—',b1=b&&b!=='skip'?String(b).toUpperCase():'—';
+    var a=first[i],b=second[i],ca=q.answer?v190NormAnswer(q.answer):'',a1=a&&a!=='skip'?v190NormAnswer(a):'—',b1=b&&b!=='skip'?v190NormAnswer(b):'—';
     var aok=!!ca&&a1===ca,bok=!!ca&&b1===ca,chg=(a1==='—'||b1==='—')?'—':(!aok&&bok?'↑ 改对':(aok&&!bok?'↓ 改错':(a1===b1?'＝ 相同':'↔ 改选'))),bg=!aok&&bok?'#f0fff4':(aok&&!bok?'#fff5f5':'');
     html+='<tr style="border-top:1px solid #eee;background:'+bg+'"><td style="padding:7px;text-align:center">'+(q.num||i+1)+'</td><td style="padding:7px;font-size:13px">'+esc(q.body)+'</td><td style="padding:7px;text-align:center">'+a1+'</td><td style="padding:7px;text-align:center">'+b1+'</td><td style="padding:7px;text-align:center;font-weight:700">'+(ca||'—')+'</td><td style="padding:7px;text-align:center">'+chg+'</td></tr>';
   });
@@ -803,7 +814,7 @@ function loadQ(i){
   q.opts.forEach(function(o){
     var btn = document.createElement('button'); btn.className='opt';
     btn.innerHTML='<span class="opt-letter">'+o.letter+'</span><span>'+esc(o.text)+'</span>';
-    if(QZ.sel&&QZ.sel===o.letter) btn.classList.add('sel');
+    if(QZ.sel&&v190AnswerHas(QZ.sel,o.letter)) btn.classList.add('sel');
     btn.addEventListener('click',(function(letter,b){return function(){pickOpt(letter,b);};})(o.letter,btn));
     optsEl.appendChild(btn);
   });
@@ -812,7 +823,7 @@ function loadQ(i){
     var memAns=String(q.answer).toUpperCase();
     document.querySelectorAll('#opts .opt').forEach(function(b){
       var le=b.querySelector('.opt-letter');
-      if(le&&le.textContent.trim().toUpperCase()===memAns)b.classList.add('correct');
+      if(le&&v190AnswerHas(memAns,le.textContent.trim()))b.classList.add('correct');
     });
   }
   // Remove old reveal button when loading new question
@@ -834,6 +845,15 @@ function loadQ(i){
     hind.style.display='block';
   } else if(hind) hind.style.display='none';
   rebuildActions();
+  if(!QZ.memorizeMode && v190IsMulti(q)){
+    var act=document.querySelector('#quiz .actions');
+    if(act){
+      var hint=document.createElement('div');
+      hint.style.cssText='width:100%;font-size:12px;color:#7a5a00;background:#fff6d8;border-radius:7px;padding:6px 8px;box-sizing:border-box';
+      hint.textContent='☑ 多选题：可选择 A–H 中多个答案；选完后点「确认/下一题」';
+      act.insertBefore(hint,act.firstChild);
+    }
+  }
   // v183: memorize mode is manual-only; never start timer or auto-advance.
   if(QZ.memorizeMode){
     clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); QZ.tmr=null; QZ.stopped=true; QZ.paused=false;
@@ -937,33 +957,42 @@ function goBackToBatch(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); if(
 
 // Auto-advance 700ms after picking — but ONLY if timer not stopped
 function pickOpt(l,btn){
-  if(QZ.memorizeMode) return; // v183: 背题模式只读，不写作答记录
+  if(QZ.memorizeMode) return;
+  var q=QZ.qs[QZ.cur];
+
+  if(v190IsMulti(q)){
+    var cur=v190NormAnswer(QZ.sel||QZ.ans[QZ.cur]||'');
+    var arr=cur.split('').filter(Boolean), at=arr.indexOf(l);
+    if(at>=0)arr.splice(at,1); else arr.push(l);
+    QZ.sel=v190NormAnswer(arr.join(''));
+    document.querySelectorAll('#opts .opt').forEach(function(b){
+      var le=b.querySelector('.opt-letter');
+      b.classList.toggle('sel',!!(le&&v190AnswerHas(QZ.sel,le.textContent.trim())));
+    });
+    autoSave(QZ.cur,QZ.sel||null);
+    clearTimeout(QZ._autoNext);
+    // Multi-select questions always wait for the user to press Confirm/Next.
+    return;
+  }
+
   QZ.sel=l;
   document.querySelectorAll('#opts .opt').forEach(function(b){b.classList.remove('sel');});
   btn.classList.add('sel');
   autoSave(QZ.cur,l);
   clearTimeout(QZ._autoNext);
   if(QZ.hideAnswer){
-    // Show reveal button, don't auto-advance
     var revBtn=document.getElementById('reveal-ans-btn');
     if(!revBtn){
-      revBtn=document.createElement('button');
-      revBtn.id='reveal-ans-btn';
-      revBtn.className='btn';
+      revBtn=document.createElement('button');revBtn.id='reveal-ans-btn';revBtn.className='btn';
       revBtn.style.cssText='background:#e8623a;color:#fff;margin-top:8px;width:100%';
-      revBtn.textContent='👁 揭示正确答案';
-      revBtn.onclick=revealAnswer;
-      var actEl=document.querySelector('#quiz .actions');
-      if(actEl) actEl.parentNode.insertBefore(revBtn,actEl);
+      revBtn.textContent='👁 揭示正确答案';revBtn.onclick=revealAnswer;
+      var actEl=document.querySelector('#quiz .actions');if(actEl)actEl.parentNode.insertBefore(revBtn,actEl);
     }
-    revBtn.style.display='block';
-    return; // don't auto-advance
+    revBtn.style.display='block';return;
   }
   if(!QZ.stopped){
     if(QZ._autoNext){clearTimeout(QZ._autoNext);QZ._autoNext=null;}
-  QZ._autoNext = setTimeout(function(){
-      if(QZ.sel===l){ clearInterval(QZ.tmr); advanceQ(); }
-    },700);
+    QZ._autoNext=setTimeout(function(){if(QZ.sel===l){v186KillTimer();advanceQ();}},700);
   }
 }
 
@@ -974,8 +1003,8 @@ function revealAnswer(){
     var letter=b.querySelector('.opt-letter');
     if(!letter) return;
     var l=letter.textContent.trim();
-    if(l===ans) b.classList.add('correct');
-    else if(l===QZ.sel) b.classList.add('wrong');
+    if(v190AnswerHas(ans,l)) b.classList.add('correct');
+    else if(v190AnswerHas(QZ.sel,l)) b.classList.add('wrong');
   });
   var revBtn=document.getElementById('reveal-ans-btn');
   if(revBtn){
@@ -1078,22 +1107,22 @@ function commitResults(){
     if(isNew){
       DB.stats.done=(DB.stats.done||0)+1;
       if(q.answer){
-        var ok=my.toUpperCase()===q.answer.toUpperCase();
+        var ok=v190AnswerEqual(my,q.answer);
         if(ok) DB.stats.correct=(DB.stats.correct||0)+1;
       }
     }
     // Always update wrong/dk maps regardless
     if(q.answer){
-      var ok2=my.toUpperCase()===(q.answer||'').toUpperCase();
+      var ok2=v190AnswerEqual(my,q.answer);
       if(ok2){delete DB.wrongMap[q.id];}
       else DB.wrongMap[q.id]={q:q,batchId:batch.id,batchName:batch.name,myAns:my};
     }
     if(QZ.dk[i]) DB.dkMap[q.id]={q:q,batchId:batch.id,batchName:batch.name};
-    else if(q.answer&&my.toUpperCase()===(q.answer||'').toUpperCase()) delete DB.dkMap[q.id];
+    else if(q.answer&&v190AnswerEqual(my,q.answer)) delete DB.dkMap[q.id];
     // Independent fixed-review progress: status changes, list membership/order does not.
     if(batch._isTemp && batch._reviewMode && DB.reviewFixed && DB.reviewFixed[batch._reviewMode]){
       var fp=DB.reviewFixed[batch._reviewMode].progress||(DB.reviewFixed[batch._reviewMode].progress={});
-      var correctNow=!!(q.answer && my && my!=='skip' && my.toUpperCase()===(q.answer||'').toUpperCase());
+      var correctNow=!!(q.answer && my && my!=='skip' && v190AnswerEqual(my,q.answer));
       fp[q.id]={reviewed:true,correct:correctNow,myAns:my,ts:Date.now()};
     }
 
@@ -1121,7 +1150,7 @@ function showResultPage(){
 
   QZ.qs.forEach(function(q,i){
     var my=QZ.ans[i], hasAns=!!q.answer;
-    var ok=hasAns&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();
+    var ok=hasAns&&my&&my!=='skip'&&v190AnswerEqual(my,q.answer);
     var dk=!!QZ.dk[i];
     if(ok)correct++; if(hasAns&&my&&my!=='skip'&&!ok)wrong++; if(dk)dkCount++;
     var firstAns = (QZ.batch&&QZ.batch.progress&&QZ.batch.progress.firstAnswers) ? QZ.batch.progress.firstAnswers[i] : null;
@@ -1324,14 +1353,14 @@ function compareKey(){
   var keyByPos={};  // position -> letter, for pure letter string fallback
 
   // Format 1: pure letter string e.g. "ACBDE..."
-  if(/^\s*[A-Ea-e]+\s*$/.test(raw.replace(/\s/g,''))){
+  if(/^\s*[A-Ha-h]+\s*$/.test(raw.replace(/\s/g,''))){
     raw.replace(/\s/g,'').split('').forEach(function(c,i){keyByPos[i]=c.toUpperCase();});
   } else {
     // Format 2: "141. d  142. c  143. e" — tab/space/newline separated
     // Match all (number, letter) pairs anywhere in the text
-    var pairRe=/(\d{1,4})\s*[.、]?\s*([A-Ea-e])(?=[^A-Za-z]|$)/gi, m;
+    var pairRe=/(\d{1,4})\s*[.、]?\s*([A-Ha-h](?:\s*[,，、/|+]\s*[A-Ha-h])*)/gi, m;
     while((m=pairRe.exec(raw))!==null){
-      keyByNum[parseInt(m[1])]=m[2].toUpperCase();
+      keyByNum[parseInt(m[1])]=v190NormAnswer(m[2]);
     }
   }
 
@@ -1350,9 +1379,9 @@ function compareKey(){
       // Match by position
       key = keyByPos[i]; if(!key) return;
     }
-    q.answer=key; updated++;
+    q.answer=v190NormAnswer(key); updated++;
     var my=QZ.ans[i];
-    if(my&&my!=='skip'&&my.toUpperCase()===key) correct++;
+    if(my&&my!=='skip'&&v190AnswerEqual(my,key)) correct++;
   });
 
   // Save answer key for this batch so it auto-loads next time
@@ -1383,7 +1412,7 @@ var _mQid=null, _mIdx=null, _aiChat=[];
 // V180: annotation base must be the canonical correct answer.
 // Only repairs empty notes or notes that are exactly one option text; preserves genuine manual notes.
 function ensureCorrectAnswerQNote(q){
-  if(!q || !q.id || !q.answer || !q.opts) return false;
+  if(!q || !q.id || !q.answer || !q.opts || v190IsMulti(q)) return false;
   if(!DB.qNotes) DB.qNotes={};
   var letter=String(q.answer).trim().toUpperCase();
   var correctOpt=q.opts.find(function(o){return String(o.letter||'').toUpperCase()===letter;});
@@ -1409,7 +1438,7 @@ function openModal(qid,idx){
   if(ensureCorrectAnswerQNote(q)) saveDB();
   _mQid=qid; _mIdx=idx; _aiChat=[];
   var my=QZ.ans?QZ.ans[idx]:null, hasAns=!!q.answer;
-  var ok=hasAns&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();
+  var ok=hasAns&&my&&my!=='skip'&&v190AnswerEqual(my,q.answer);
   document.getElementById('m-title').textContent='第 '+(q.num||idx+1)+' 题'+(DB.starMap[q.id]?' ⭐':'');
   var content=document.getElementById('m-content');
 
@@ -1433,7 +1462,7 @@ function openModal(qid,idx){
   // Options (also selectable text)
   html+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
   q.opts.forEach(function(o){
-    var isCorrect=o.letter===(q.answer||''), isMy=my&&o.letter===my&&!isCorrect;
+    var isCorrect=v190AnswerHas(q.answer,o.letter), isMy=my&&v190AnswerHas(my,o.letter)&&!isCorrect;
     var bg=isCorrect?'background:#e8f5ed;border-color:#2e7d52':isMy?'background:#fdeaea;border-color:#b83232':'';
     html+='<div style="padding:9px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;'+bg+';user-select:text">'
       +o.letter+'. '+esc(o.text)+(isCorrect?' <b style="color:#2e7d52">✓ 正确</b>':'')+(isMy?' <b style="color:#b83232">← 我选</b>':'')+'</div>';
@@ -1619,7 +1648,7 @@ function openModalFromBatch(qid, batchId, idx){
   // Temporarily set QZ context so AI analysis works
   _mQid=qid; _mIdx=idx; _aiChat=[];
   var my=p.answers[idx], hasAns=!!q.answer;
-  var ok=hasAns&&my&&my!=='skip'&&my.toUpperCase()===q.answer.toUpperCase();
+  var ok=hasAns&&my&&my!=='skip'&&v190AnswerEqual(my,q.answer);
   document.getElementById('m-title').textContent='第 '+(q.num||idx+1)+' 题'+(DB.starMap[q.id]?' ⭐':'');
   var content=document.getElementById('m-content');
   var html='';
@@ -1627,7 +1656,7 @@ function openModalFromBatch(qid, batchId, idx){
   html+='<div style="font-size:15px;line-height:1.9;margin-bottom:12px;white-space:pre-wrap;user-select:text;cursor:text;padding:8px;background:#f8f7f3;border-radius:6px">'+esc(q.body)+'</div>';
   html+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
   q.opts.forEach(function(o){
-    var isCorrect=o.letter===(q.answer||''), isMy=my&&o.letter===my&&!isCorrect;
+    var isCorrect=v190AnswerHas(q.answer,o.letter), isMy=my&&v190AnswerHas(my,o.letter)&&!isCorrect;
     var bg=isCorrect?'background:#e8f5ed;border-color:#2e7d52':isMy?'background:#fdeaea;border-color:#b83232':'';
     html+='<div style="padding:9px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;'+bg+';user-select:text">'+o.letter+'. '+esc(o.text)+(isCorrect?' <b style="color:#2e7d52">✓ 正确</b>':'')+(isMy?' <b style="color:#b83232">← 我选</b>':'')+'</div>';
   });
@@ -3222,7 +3251,7 @@ function editQNote(qid){
 function shuffle(a){return a.slice().sort(function(){return Math.random()-.5;});}
 function downloadCSV(){
   var csv='题号,题目,我选,正确答案,结果\n';
-  QZ.qs.forEach(function(q,i){ var my=QZ.ans[i]||'—',ans=q.answer||'—'; var res=q.answer&&my!=='—'?(my.toUpperCase()===q.answer.toUpperCase()?'正确':'错误'):'—'; csv+=(q.num||i+1)+',"'+q.body.replace(/"/g,'""').replace(/\n/g,' ')+'",'+my+','+ans+','+res+'\n'; });
+  QZ.qs.forEach(function(q,i){ var my=QZ.ans[i]||'—',ans=q.answer||'—'; var res=q.answer&&my!=='—'?(v190AnswerEqual(my,q.answer)?'正确':'错误'):'—'; csv+=(q.num||i+1)+',"'+q.body.replace(/"/g,'""').replace(/\n/g,' ')+'",'+my+','+ans+','+res+'\n'; });
   var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='答题结果.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
