@@ -462,7 +462,6 @@ function startBatchFiltered(batchId, mode){
     questions:qs,
     progress:{idx:0,answers:new Array(qs.length).fill(null),dk:{},_committed:{}}
   };
-  v186KillTimer();
   QZ={batch:filteredBatch,qs:qs,cur:0,ans:new Array(qs.length).fill(null),
     dk:{},sel:null,tMax:0,tmr:null,_autoNext:null,stopped:false,paused:false,hideAnswer:false};
   QZ.returnToBatchId=batchId;
@@ -775,7 +774,6 @@ function gotoQuestion(batchId){
 }
 
 function startBatchFrom(batchId, fromIdx){
-  // v188: invalidate the OLD batch timer before QZ is replaced.
   v186KillTimer();
   var batch=null; for(var i=0;i<DB.batches.length;i++){if(DB.batches[i].id===batchId){batch=DB.batches[i];break;}} if(!batch)return;
   var tMax = parseInt(document.getElementById('limit').value)||60;
@@ -1003,94 +1001,20 @@ function autoSave(i,ans){
 // TIMER — click once to pause, click again to stop (no auto-jump)
 // ═══════════════════════════════════════════════════════
 // v186 — single-instance timer lifecycle
-// v188 — timer generation guard.
-// The old bug happened because QZ can be replaced when starting another batch.
-// An older interval then loses its handle but still reads/writes the NEW global QZ.
-// This generation token makes every stale interval self-destruct before touching QZ.
 var V188_TIMER_GEN=0;
+function v186KillTimer(){V188_TIMER_GEN++;if(QZ&&QZ.tmr){clearInterval(QZ.tmr);QZ.tmr=null;}if(QZ&&QZ._autoNext){clearTimeout(QZ._autoNext);QZ._autoNext=null;}}
+function v188RunTimer(){var el=document.getElementById('timer');if(!el)return;v186KillTimer();var g=V188_TIMER_GEN;QZ.tLeft=QZ.tMax;QZ.stopped=false;QZ.paused=false;updTimer();var it=setInterval(function(){if(g!==V188_TIMER_GEN){clearInterval(it);return;}if(QZ.paused||QZ.stopped)return;QZ.tLeft--;updTimer();if(QZ.tLeft<=0){clearInterval(it);if(QZ.tmr===it)QZ.tmr=null;V188_TIMER_GEN++;if(!QZ.stopped){autoSave(QZ.cur,QZ.sel||'skip');advanceQ();}}},1000);QZ.tmr=it;}
+function startTimer(){var el=document.getElementById('timer');if(!el)return;el.style.minWidth='118px';el.style.width='118px';el.style.textAlign='center';el.style.flex='0 0 118px';if(QZ.tMax===0){v186KillTimer();el.textContent='∞';el.className='timer spacer';return;}v188RunTimer();}
+function updTimer(){var el=document.getElementById('timer');if(!el)return;if(QZ.stopped){el.textContent='⏹ 点击重启';el.className='timer spacer paused';return;}var pct=QZ.tMax?QZ.tLeft/QZ.tMax:1;el.textContent=QZ.paused?('⏸ '+QZ.tLeft+' 再点停止'):QZ.tLeft;el.className='timer spacer'+(QZ.paused?' paused':pct>.5?' green':pct>.2?' orange':' red');}
+document.getElementById('timer').addEventListener('click',function(){if(QZ.tMax===0)return;if(QZ.stopped){v188RunTimer();showToast('计时重新开始');return;}if(!QZ.paused){QZ.paused=true;updTimer();showToast('⏸ 已暂停，再点彻底停止（不自动跳题）');}else{QZ.stopped=true;QZ.paused=false;v186KillTimer();QZ.stopped=true;updTimer();showToast('⏹ 计时已停止，不会自动跳题');}});
 
-function v186KillTimer(){
-  V188_TIMER_GEN++;
-  if(QZ && QZ.tmr){ clearInterval(QZ.tmr); QZ.tmr=null; }
-  if(QZ && QZ._autoNext){ clearTimeout(QZ._autoNext); QZ._autoNext=null; }
-}
-
-function v188RunTimer(resetTime){
-  var el=document.getElementById('timer'); if(!el)return;
-  v186KillTimer();
-  var myGen=V188_TIMER_GEN;
-  if(resetTime!==false) QZ.tLeft=QZ.tMax;
-  QZ.stopped=false; QZ.paused=false;
-  updTimer();
-
-  var myInterval=setInterval(function(){
-    // CRITICAL: stale timers must die BEFORE reading/writing the current QZ.
-    if(myGen!==V188_TIMER_GEN){
-      clearInterval(myInterval);
-      return;
-    }
-    if(QZ.paused||QZ.stopped)return;
-    QZ.tLeft--;
-    updTimer();
-    if(QZ.tLeft<=0){
-      clearInterval(myInterval);
-      if(QZ.tmr===myInterval)QZ.tmr=null;
-      // Invalidate this generation before navigation creates the next timer.
-      V188_TIMER_GEN++;
-      if(!QZ.stopped){
-        autoSave(QZ.cur,QZ.sel||'skip');
-        advanceQ();
-      }
-    }
-  },1000);
-  QZ.tmr=myInterval;
-}
-
-function startTimer(){
-  var el=document.getElementById('timer'); if(!el)return;
-  el.style.minWidth='118px';el.style.width='118px';el.style.textAlign='center';el.style.flex='0 0 118px';
-  if(QZ.tMax===0){
-    v186KillTimer();
-    el.textContent='∞';el.className='timer spacer';
-    return;
-  }
-  v188RunTimer(true);
-}
-
-function updTimer(){
-  var el=document.getElementById('timer');if(!el)return;
-  if(QZ.stopped){el.textContent='⏹ 点击重启';el.className='timer spacer paused';return;}
-  var pct=QZ.tMax?QZ.tLeft/QZ.tMax:1;
-  el.textContent=QZ.paused?('⏸ '+QZ.tLeft+' 再点停止'):QZ.tLeft;
-  el.className='timer spacer'+(QZ.paused?' paused':pct>.5?' green':pct>.2?' orange':' red');
-}
-
-document.getElementById('timer').addEventListener('click',function(){
-  if(QZ.tMax===0)return;
-  if(QZ.stopped){
-    v188RunTimer(true);
-    showToast('计时重新开始');
-    return;
-  }
-  if(!QZ.paused){
-    QZ.paused=true;updTimer();
-    showToast('⏸ 已暂停，再点彻底停止（不自动跳题）');
-  }else{
-    QZ.stopped=true;QZ.paused=false;
-    v186KillTimer();
-    QZ.stopped=true; // kill helper only invalidates timers; keep UI state stopped
-    updTimer();
-    showToast('⏹ 计时已停止，不会自动跳题');
-  }
-});
-
-function nextQ(){ v186KillTimer(); autoSave(QZ.cur,QZ.sel||'skip'); advanceQ(); }
-function skipQ(){ v186KillTimer(); autoSave(QZ.cur,'skip'); QZ.sel=null; advanceQ(); }
-function prevQ(){ v186KillTimer(); if(QZ.sel) autoSave(QZ.cur,QZ.sel); if(QZ.cur>0){QZ.cur--;loadQ(QZ.cur);}else showToast('已是第一题'); }
+function nextQ(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); autoSave(QZ.cur,QZ.sel||'skip'); advanceQ(); }
+function skipQ(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); autoSave(QZ.cur,'skip'); QZ.sel=null; advanceQ(); }
+function prevQ(){ clearInterval(QZ.tmr); clearTimeout(QZ._autoNext); if(QZ.sel) autoSave(QZ.cur,QZ.sel); if(QZ.cur>0){QZ.cur--;loadQ(QZ.cur);}else showToast('已是第一题'); }
 function toggleDK(){ QZ.dk[QZ.cur]=!QZ.dk[QZ.cur]; var db=document.getElementById('dkbtn'); if(db) db.classList.toggle('on',!!QZ.dk[QZ.cur]); autoSave(QZ.cur,QZ.sel||QZ.ans[QZ.cur]||'skip'); showToast(QZ.dk[QZ.cur]?'已标记「不会」':'已取消标记'); }
 function advanceQ(){ if(QZ.cur+1>=QZ.qs.length){finishQuiz();return;} QZ.cur++; loadQ(QZ.cur); }
 function finishQuiz(){
-  v186KillTimer();
+  clearInterval(QZ.tmr); clearTimeout(QZ._autoNext);
   for(var i=0;i<QZ.ans.length;i++){if(!QZ.ans[i])QZ.ans[i]='skip';}
   autoSave(QZ.cur,QZ.ans[QZ.cur]); commitResults();
   // Show result then offer to go back to batch
@@ -2686,7 +2610,17 @@ function syncHfQids(){
   });
 }
 
+// v189 — 首页全题库搜题（独立于高频词）
+function v189EnsureHomeSearch(){var home=document.getElementById('home');if(!home||document.getElementById('all-bank-search-card'))return;var card=document.createElement('div');card.id='all-bank-search-card';card.className='card';card.style.cssText='border:1.5px solid #9fc7ee;background:#f7fbff';card.innerHTML='<div style="font-size:17px;font-weight:800;margin-bottom:8px">🔎 全题库搜题</div><div style="display:flex;gap:7px"><input id="all-bank-search-input" type="search" placeholder="输入题目关键词，如：梅核气、KI7、Kussmaul…" style="flex:1;min-width:0;padding:10px;border:1.5px solid #b8cce0;border-radius:8px;font-size:15px"><button class="btn primary" onclick="v189SearchAllQuestions()">搜题</button></div><div style="font-size:11px;color:#777;margin-top:6px">搜索全部批次的题干、选项和共用题背景；不会加入高频词。</div>';var list=document.getElementById('batch-list');if(list&&list.parentNode)list.parentNode.insertBefore(card,list);else home.insertBefore(card,home.firstChild);card.querySelector('input').addEventListener('keydown',function(e){if(e.key==='Enter')v189SearchAllQuestions();});}
+function v189Norm(x){return String(x||'').toLowerCase().replace(/\s+/g,' ').trim();}
+function v189Find(raw){var kw=v189Norm(raw),hits=[];(DB.batches||[]).forEach(function(b){(b.questions||[]).forEach(function(q,i){var txt=[q.body,q.caseText,(q.opts||[]).map(function(o){return o.letter+' '+o.text;}).join(' ')].join(' ');if(v189Norm(txt).indexOf(kw)>=0)hits.push({batch:b,q:q,idx:i});});});return hits;}
+function v189SearchAllQuestions(){var x=document.getElementById('all-bank-search-input'),raw=x?x.value.trim():'';if(!raw){showToast('请输入要搜索的关键词');return;}v189RenderSearchResults(raw,v189Find(raw));}
+function v189SearchAgain(){var x=document.getElementById('all-bank-search-results-input'),raw=x?x.value.trim():'';if(!raw){showToast('请输入要搜索的关键词');return;}v189RenderSearchResults(raw,v189Find(raw));}
+function v189RenderSearchResults(raw,hits){var pg=document.getElementById('all-bank-search-results');if(!pg){pg=document.createElement('section');pg.id='all-bank-search-results';pg.className='page';document.querySelector('main').appendChild(pg);}var bs={};hits.forEach(function(h){bs[h.batch.id]=1;});var html='<div class="card"><div class="row"><button class="btn" onclick="navBack()">← 返回</button><div class="title spacer">🔎 全题库搜题</div></div><div style="display:flex;gap:7px;margin-top:10px"><input id="all-bank-search-results-input" type="search" value="'+esc(raw)+'" style="flex:1;min-width:0;padding:9px;border:1.5px solid #bbb;border-radius:8px;font-size:15px"><button class="btn primary" onclick="v189SearchAgain()">再搜</button></div><div class="sub" style="margin-top:7px">找到 <b>'+hits.length+'</b> 道 · 来自 '+Object.keys(bs).length+' 个批次</div></div>';if(!hits.length)html+='<div class="card" style="text-align:center;color:#777;padding:30px">没有找到「'+esc(raw)+'」</div>';hits.forEach(function(h){var q=h.q,my=(h.batch.progress&&h.batch.progress.answers||[])[h.idx];html+='<div class="card" style="padding:12px 14px;cursor:pointer" data-bid="'+esc(h.batch.id)+'" data-idx="'+h.idx+'" onclick="v189OpenHit(this.dataset.bid,parseInt(this.dataset.idx))"><div style="font-size:11px;color:#3973a8;font-weight:700;margin-bottom:5px">📚 '+esc(h.batch.name)+'</div><div style="font-size:14px;line-height:1.55"><b>'+(q.num!=null?q.num:h.idx+1)+'.</b> '+esc(String(q.body||'').replace(/\s+/g,' '))+'</div><div style="font-size:11px;color:#888;margin-top:6px">正确答案：<b>'+(q.answer||'—')+'</b>'+(my?' · 我选：<b>'+esc(my)+'</b>':'')+' · 点击进入原批次此题</div></div>';});pg.innerHTML=html;var inp=pg.querySelector('#all-bank-search-results-input');if(inp)inp.addEventListener('keydown',function(e){if(e.key==='Enter')v189SearchAgain();});navTo('all-bank-search-results');}
+function v189OpenHit(batchId,idx){startBatchFrom(batchId,idx);}
+
 function renderHome(){
+  v189EnsureHomeSearch();
   syncHfQids();
   var total=0; DB.batches.forEach(function(b){total+=b.questions.length;});
   document.getElementById('st-total').textContent=total;
